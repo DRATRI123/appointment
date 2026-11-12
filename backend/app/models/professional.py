@@ -10,6 +10,7 @@ from app.models.base import Base, PKMixin, PublicIdMixin, SoftDeleteMixin, Tenan
 
 class Professional(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "professionals"
+    __table_args__ = (UniqueConstraint("organization_id", "slug"),)
 
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     display_name: Mapped[str] = mapped_column(String(160), nullable=False)

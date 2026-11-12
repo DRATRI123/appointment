@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, KeyRound, ScrollText, Settings, UsersRound } from "lucide-react";
+import { ArrowRight, Briefcase, Building2, KeyRound, ScrollText, Settings, Stethoscope, UsersRound } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { organizationsService } from "@/services/organizations";
 import { PageHeader } from "@/components/layout/page-header";
@@ -11,6 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const next = [
+  { href: "/admin/branches", icon: Building2, title: "Add branches", body: "Locations with their own hours, contact details and UPI accounts." },
+  { href: "/admin/services", icon: Briefcase, title: "Create services", body: "Consultations and treatments with prices, durations and advance rules." },
+  { href: "/admin/professionals", icon: Stethoscope, title: "Add professionals", body: "Doctors and therapists with per-branch fees and service assignments." },
   { href: "/admin/staff", icon: UsersRound, title: "Invite your team", body: "Receptionists, doctors and accountants sign in with their mobile number." },
   { href: "/admin/roles", icon: KeyRound, title: "Review permissions", body: "System roles cover most clinics; create custom roles when needed." },
   { href: "/admin/settings", icon: Settings, title: "Booking & payment rules", body: "Advance payment, cancellation windows, reminders and branding." },
@@ -23,7 +26,11 @@ export default function AdminOverview() {
   const org = currentMembership?.organization;
   return (
     <div className="mx-auto max-w-6xl">
-      <PageHeader title={org?.name ?? "Overview"} description={`You are signed in as ${currentMembership?.role_name ?? "staff"}.`} />
+      <PageHeader
+        title={org?.name ?? "Overview"}
+        description={`You are signed in as ${currentMembership?.role_name ?? "staff"}.`}
+        actions={org ? <Button asChild variant="outline"><Link href={`/o/${org.slug}`} target="_blank">View public page <ArrowRight /></Link></Button> : null}
+      />
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Staff members" value={members.data?.length ?? "—"} />
         <Stat label="Status" value={<Badge variant={org?.status === "active" ? "success" : "warning"}>{org?.status}</Badge>} />

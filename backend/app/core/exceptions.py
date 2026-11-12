@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
@@ -85,7 +86,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _validation(request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            content=_payload("Validation failed", "validation_failed", exc.errors(), request),
+            content=_payload("Validation failed", "validation_failed", jsonable_encoder(exc.errors()), request),
         )
 
     @app.exception_handler(IntegrityError)

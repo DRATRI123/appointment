@@ -37,10 +37,10 @@ const groups = [
   {
     title: "Catalogue",
     items: [
-      { href: "/admin/professionals", label: "Professionals", icon: Stethoscope, phase: 3 },
-      { href: "/admin/services", label: "Services", icon: Briefcase, phase: 3 },
-      { href: "/admin/categories", label: "Categories", icon: LayoutList, phase: 3 },
-      { href: "/admin/branches", label: "Branches", icon: Building2, phase: 3 },
+      { href: "/admin/professionals", label: "Professionals", icon: Stethoscope },
+      { href: "/admin/services", label: "Services", icon: Briefcase },
+      { href: "/admin/categories", label: "Categories", icon: LayoutList },
+      { href: "/admin/branches", label: "Branches", icon: Building2 },
       { href: "/admin/customers", label: "Customers", icon: Users, phase: 5 },
       { href: "/admin/booking-forms", label: "Booking forms", icon: FileSpreadsheet, phase: 5 },
     ],

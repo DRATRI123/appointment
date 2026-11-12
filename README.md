@@ -29,8 +29,9 @@ appointment is confirmed.
 |---|---|---|
 | 1 | Architecture, project setup, database schema (56 tables), migrations, environment | ✅ done |
 | 2 | Authentication (OTP, email/password, Google), users, organizations, staff, RBAC, audit logs, platform admin | ✅ done |
-| 3 | Branches, professionals, services | next |
-| 4–14 | See roadmap in `documentation/architecture.md` | planned |
+| 3 | Branches, professionals, service categories, services, packages, image uploads, public catalogue pages | ✅ done |
+| 4 | Scheduling engine, availability, holds, appointment booking | next |
+| 5–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -141,6 +142,8 @@ One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perfo
 * **Email + password**: use **Get started** to register, then create your organization. You become
   its owner and land in the admin dashboard.
 * **Platform console**: sign in with the super admin created above and open `/super-admin`.
+* **Public booking page**: every organization gets `/o/<slug>` listing branches, services and
+  professionals. The slug is shown under Organization settings → Profile.
 * **Google sign-in**: set `GOOGLE_CLIENT_ID` in `backend/.env`; the frontend button is wired in the
   Phase 2 API (`POST /api/v1/auth/google`) and needs the Google Identity Services script on the
   login page, which ships with the public booking site.

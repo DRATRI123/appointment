@@ -25,9 +25,11 @@ Base URL: `/api/v1`. Interactive docs: `/docs` (Swagger UI) and `/redoc`; OpenAP
 | `/users/me` | 2 | implemented |
 | `/organizations` (+ settings, domains, members, roles, permissions, audit-logs) | 2 | implemented |
 | `/platform` (super admin: stats, organizations, users, audit-logs) | 2 | implemented |
-| `/branches` | 3 | planned |
-| `/professionals` | 3 | planned |
-| `/service-categories`, `/services` | 3 | planned |
+| `/branches` | 3 | implemented |
+| `/professionals` | 3 | implemented |
+| `/service-categories`, `/services`, `/service-packages` | 3 | implemented |
+| `/uploads/images`, `/media/*` | 3 | implemented |
+| `/public/organizations/{slug}/…` | 3 | implemented |
 | `/schedules`, `/availability` | 4 | planned |
 | `/appointments` | 4 | planned |
 | `/customers` | 5 | planned |
@@ -98,3 +100,25 @@ may access any organization; each such access is written to the audit log as `pl
 `GET /platform/stats`, `GET /platform/organizations`, `GET /platform/organizations/{id}`,
 `POST /platform/organizations/{id}/status`, `GET /platform/users`, `POST /platform/users/{id}/status`,
 `GET /platform/audit-logs`.
+
+## Phase 3 endpoints
+
+All catalogue routes are tenant routes: send `X-Organization-Id` (the frontend does this
+automatically for the active organization). Soft-deleted rows never appear.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET / POST | `/branches` | `branches:read` / `branches:write` | First branch becomes default; `business_hours` is `{mon: [["09:00","13:00"],…]}`; code unique per organization |
+| GET / PATCH / DELETE | `/branches/{id}` | read / write | Last branch cannot be deleted; default moves automatically |
+| GET / POST | `/service-categories` | `services:read` / `services:write` | Returns `service_count`; optional `parent_id` |
+| PATCH / DELETE | `/service-categories/{id}` | `services:write` | Deleting uncategorises services |
+| GET / POST | `/services` | `services:read` / `services:write` | Filters: `category_id`, `branch_id` (honours availability overrides), `kind`, `search`; validates payment mode (partial advance needs amount or percent, free means zero price, discount ≤ price) |
+| GET / PATCH / DELETE | `/services/{id}` | read / write | `pricing` replaces all per-branch overrides; `professional_ids` replaces organization-wide assignments; follow-up linkage with self-reference guard |
+| GET / POST / PATCH / DELETE | `/service-packages[/{id}]` | `services:read` / `services:write` | Items are `{service_id, quantity}`; duplicates rejected |
+| GET / POST | `/professionals` | `professionals:read` / `professionals:write` | Filters: `branch_id`, `service_id`, `search`; `branches` carry per-branch fee/duration/buffer/room; `services` carry optional branch and fee override |
+| GET / PATCH / DELETE | `/professionals/{id}` | read / write | `user_id` links a staff account (must already be a member); slug unique per organization |
+| POST | `/uploads/images` | any catalogue write permission | multipart `file`; PNG/JPEG/WebP sniffed by content, max `MAX_UPLOAD_SIZE_MB`; returns `/media/...` URL |
+| GET | `/public/organizations/{slug}` | public | Organization, active branches, active categories and public settings (branding, booking, cancellation, legal, general) |
+| GET | `/public/organizations/{slug}/branches` | public | Active branches |
+| GET | `/public/organizations/{slug}/services[/{id}]` | public | Active, online-bookable services; filters `branch_id`, `category_id` |
+| GET | `/public/organizations/{slug}/professionals[/{id}]` | public | Active, online-bookable professionals with contact details stripped; filters `branch_id`, `service_id` |

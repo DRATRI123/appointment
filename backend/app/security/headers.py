@@ -40,6 +40,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
                 "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
             )
+        elif request.url.path.startswith("/media/"):
+            headers.setdefault("Content-Security-Policy", "default-src 'none'; img-src 'self'; frame-ancestors 'none'")
+            headers.setdefault("Cache-Control", "public, max-age=86400")
         else:
             headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
         if settings.cookie_secure:

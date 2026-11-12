@@ -11,7 +11,7 @@ from app.models.organization import Organization
 
 class Branch(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "branches"
-    __table_args__ = (UniqueConstraint("organization_id", "code"),)
+    __table_args__ = (UniqueConstraint("organization_id", "code"), UniqueConstraint("organization_id", "slug"))
 
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     code: Mapped[str] = mapped_column(String(32), nullable=False)
