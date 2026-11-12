@@ -1,3 +1,5 @@
+"use client";
+
 import {
   BarChart3,
   Bell,
@@ -22,6 +24,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { RequireAuth } from "@/components/auth/require-auth";
 
 const groups = [
   {
@@ -68,8 +71,8 @@ const groups = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <DashboardShell title="Organization admin" roleLabel="Organization admin" groups={groups}>
-      {children}
-    </DashboardShell>
+    <RequireAuth requireMembership>
+      <DashboardShell title="Organization admin" roleLabel="Organization admin" groups={groups}>{children}</DashboardShell>
+    </RequireAuth>
   );
 }

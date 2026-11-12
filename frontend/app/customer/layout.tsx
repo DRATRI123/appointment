@@ -1,5 +1,8 @@
-import { CalendarDays, CreditCard, History, Home, Users } from "lucide-react";
+"use client";
+
+import { CalendarDays, CreditCard, History, Home, UserCog, Users } from "lucide-react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { RequireAuth } from "@/components/auth/require-auth";
 
 const groups = [
   {
@@ -9,14 +12,15 @@ const groups = [
       { href: "/customer/history", label: "History", icon: History, phase: 4 },
       { href: "/customer/payments", label: "Payments", icon: CreditCard, phase: 6 },
       { href: "/customer/family", label: "Family members", icon: Users, phase: 5 },
+      { href: "/customer/profile", label: "Profile & security", icon: UserCog },
     ],
   },
 ];
 
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <DashboardShell title="My appointments" roleLabel="Customer" groups={groups}>
-      {children}
-    </DashboardShell>
+    <RequireAuth >
+      <DashboardShell title="My appointments" roleLabel="Customer" groups={groups} showOrgSwitcher={false}>{children}</DashboardShell>
+    </RequireAuth>
   );
 }

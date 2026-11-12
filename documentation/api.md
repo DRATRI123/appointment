@@ -21,8 +21,10 @@ Base URL: `/api/v1`. Interactive docs: `/docs` (Swagger UI) and `/redoc`; OpenAP
 |---|---|---|
 | `/health`, `/health/ready` | 1 | implemented |
 | `/meta` | 1 | implemented (version, environment) |
-| `/auth` | 2 | planned |
-| `/organizations` | 2 | planned |
+| `/auth` | 2 | implemented |
+| `/users/me` | 2 | implemented |
+| `/organizations` (+ settings, domains, members, roles, permissions, audit-logs) | 2 | implemented |
+| `/platform` (super admin: stats, organizations, users, audit-logs) | 2 | implemented |
 | `/branches` | 3 | planned |
 | `/professionals` | 3 | planned |
 | `/service-categories`, `/services` | 3 | planned |
@@ -39,3 +41,60 @@ Base URL: `/api/v1`. Interactive docs: `/docs` (Swagger UI) and `/redoc`; OpenAP
 | `/platform` | 10 | planned |
 
 This file is updated at the end of every phase with the concrete endpoints delivered.
+
+## Phase 2 endpoints
+
+### Authentication `/auth`
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/auth/otp/request` | Send a 6-digit code to a mobile (SMS) or email. 60 s resend cooldown, 5/min per IP. In development/test with the console provider the response includes `debug_code`. |
+| POST | `/auth/otp/verify` | Verify the code; creates the account on first sign-in. Sets `access_token`, `refresh_token` (HttpOnly) and `csrf_token` cookies and returns the tokens for API clients. |
+| POST | `/auth/register` | Email + password registration (Argon2id, policy: 8+ chars, letters and digits). |
+| POST | `/auth/login` | Email + password login. 5 failures lock the account for 15 minutes. |
+| POST | `/auth/google` | Sign in with a Google ID token (verified against Google JWKS, `GOOGLE_CLIENT_ID` audience). |
+| POST | `/auth/refresh` | Rotate the refresh token (cookie or body). Reuse of a rotated token revokes the whole session family. |
+| POST | `/auth/logout` | Revoke the current session and clear cookies. |
+| GET | `/auth/sessions` | List signed-in devices. |
+| DELETE | `/auth/sessions/{id}` | Revoke one device. |
+| POST | `/auth/sessions/revoke-all` | Sign out everywhere. |
+| POST | `/auth/password/change` | Change or set a password. |
+| POST | `/auth/password/forgot` | Request a reset token (30 minutes, single use; response never reveals whether the email exists). |
+| POST | `/auth/password/reset` | Reset with token; revokes all sessions. |
+| POST | `/auth/email/verify/request`, `/auth/email/verify/confirm` | Email verification. |
+
+Cookie-authenticated unsafe requests must send `X-CSRF-Token` equal to the `csrf_token` cookie.
+Bearer-authenticated requests are exempt.
+
+### Users
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/users/me` | Current user, memberships (organization, role, branch, permissions) and platform-admin flag. |
+| PATCH | `/users/me` | Update profile. |
+
+### Organizations (tenant routes, `organization_id` = public id)
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/organizations` | any user (own memberships) |
+| POST | `/organizations` | any user; creator becomes `org_owner`, default settings are seeded |
+| GET | `/organizations/by-slug/{slug}` | public (active organizations only) |
+| GET / PATCH | `/organizations/{id}` | `organization:read` / `organization:write` |
+| GET | `/organizations/{id}/settings` | `organization:read` (all namespaces merged with defaults) |
+| GET / PUT | `/organizations/{id}/settings/{namespace}` | namespaces: booking, cancellation, payment, notification, branding, legal, general |
+| GET / POST / DELETE | `/organizations/{id}/domains[/{domain_id}]` | `organization:read` / `organization:write` |
+| GET / POST | `/organizations/{id}/members` | `staff:read` / `staff:write` (invite by mobile or email; membership is `invited` until first sign-in) |
+| PATCH / DELETE | `/organizations/{id}/members/{membership_id}` | `staff:write`; owner role only assignable by owners; last owner protected |
+| GET | `/organizations/{id}/roles`, `/permissions` | `staff:read` |
+| POST / PATCH / DELETE | `/organizations/{id}/roles[/{role_id}]` | `roles:write`; cannot grant permissions you do not hold; platform permissions never grantable |
+| GET | `/organizations/{id}/audit-logs?page=&page_size=&action=&entity_type=` | `audit_logs:read` |
+
+Multi-organization users send `X-Organization-Id` on routes without the path parameter. Platform admins
+may access any organization; each such access is written to the audit log as `platform.impersonate`.
+
+### Platform (super admin only)
+
+`GET /platform/stats`, `GET /platform/organizations`, `GET /platform/organizations/{id}`,
+`POST /platform/organizations/{id}/status`, `GET /platform/users`, `POST /platform/users/{id}/status`,
+`GET /platform/audit-logs`.

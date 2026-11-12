@@ -1,5 +1,8 @@
+"use client";
+
 import { CalendarDays, ClipboardList, Home, Plane, Users } from "lucide-react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { RequireAuth } from "@/components/auth/require-auth";
 
 const groups = [
   {
@@ -15,8 +18,8 @@ const groups = [
 
 export default function ProfessionalLayout({ children }: { children: React.ReactNode }) {
   return (
-    <DashboardShell title="Professional dashboard" roleLabel="Doctor / Professional" groups={groups}>
-      {children}
-    </DashboardShell>
+    <RequireAuth requireMembership>
+      <DashboardShell title="Professional dashboard" roleLabel="Doctor / Professional" groups={groups}>{children}</DashboardShell>
+    </RequireAuth>
   );
 }

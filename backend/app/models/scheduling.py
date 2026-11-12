@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Stri
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.enums import LeaveType
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, TenantMixin, TimestampMixin
 
 
@@ -73,8 +74,8 @@ class ProfessionalLeave(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Bas
     )
     branch_id: Mapped[int | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
     leave_type: Mapped[str] = mapped_column(String(16), default=LeaveType.LEAVE, nullable=False)
-    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    start_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    end_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
     approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     status: Mapped[str] = mapped_column(String(16), default="approved", nullable=False)
@@ -97,8 +98,8 @@ class AppointmentSlot(PKMixin, TenantMixin, TimestampMixin, Base):
         ForeignKey("professionals.id", ondelete="CASCADE"), nullable=False
     )
     branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"), nullable=False)
-    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    start_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    end_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     capacity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     booked_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     held_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

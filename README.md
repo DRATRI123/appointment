@@ -28,8 +28,9 @@ appointment is confirmed.
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Architecture, project setup, database schema (56 tables), migrations, environment | ✅ done |
-| 2 | Authentication (OTP, email/password, Google), users, organizations, RBAC | next |
-| 3–14 | See roadmap in `documentation/architecture.md` | planned |
+| 2 | Authentication (OTP, email/password, Google), users, organizations, staff, RBAC, audit logs, platform admin | ✅ done |
+| 3 | Branches, professionals, services | next |
+| 4–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -82,6 +83,12 @@ alembic upgrade head
 python ..\scripts\seed.py
 ```
 
+Create the platform super admin (prompts for a password):
+
+```powershell
+python ..\scripts\create_platform_admin.py --email you@example.com --name "Your Name"
+```
+
 Start the API:
 
 ```powershell
@@ -126,6 +133,17 @@ npm run test:e2e
 ```
 
 One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perform steps 2 and 3.
+
+## First sign-in
+
+* **Mobile OTP**: on the login page enter any mobile number. With the default `OTP_PROVIDER=console`
+  the code is printed in the backend terminal and shown on the page in development.
+* **Email + password**: use **Get started** to register, then create your organization. You become
+  its owner and land in the admin dashboard.
+* **Platform console**: sign in with the super admin created above and open `/super-admin`.
+* **Google sign-in**: set `GOOGLE_CLIENT_ID` in `backend/.env`; the frontend button is wired in the
+  Phase 2 API (`POST /api/v1/auth/google`) and needs the Google Identity Services script on the
+  login page, which ships with the public booking site.
 
 ## Run with Docker (PostgreSQL + Redis)
 

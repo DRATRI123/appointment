@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Te
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import MembershipStatus, UserStatus
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, SoftDeleteMixin, TimestampMixin
 
 
@@ -20,12 +21,12 @@ class User(PKMixin, PublicIdMixin, TimestampMixin, SoftDeleteMixin, Base):
     avatar_url: Mapped[str | None] = mapped_column(String(512))
     status: Mapped[str] = mapped_column(String(32), default=UserStatus.ACTIVE, nullable=False)
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    mobile_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    email_verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    mobile_verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    locked_until: Mapped[datetime | None] = mapped_column(UTCDateTime)
     preferences: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
 
     sessions: Mapped[list["UserSession"]] = relationship(
@@ -51,9 +52,9 @@ class UserSession(PKMixin, PublicIdMixin, TimestampMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(String(512))
     ip_address: Mapped[str | None] = mapped_column(String(64))
     device_label: Mapped[str | None] = mapped_column(String(120))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     revoked_reason: Mapped[str | None] = mapped_column(String(64))
 
     user: Mapped[User] = relationship(back_populates="sessions")
@@ -70,9 +71,9 @@ class OTPVerification(PKMixin, TimestampMixin, Base):
     code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_attempts: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    consumed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     ip_address: Mapped[str | None] = mapped_column(String(64))
     provider: Mapped[str | None] = mapped_column(String(32))
     provider_message_id: Mapped[str | None] = mapped_column(String(128))
@@ -132,8 +133,10 @@ class OrganizationMembership(PKMixin, PublicIdMixin, TimestampMixin, Base):
     branch_id: Mapped[int | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(String(16), default=MembershipStatus.ACTIVE, nullable=False)
     invited_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    invited_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    accepted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     user: Mapped[User] = relationship(back_populates="memberships", foreign_keys=[user_id])
     role: Mapped[Role] = relationship()
+    organization: Mapped["Organization"] = relationship(foreign_keys=[organization_id])  # noqa: F821
+    branch: Mapped["Branch | None"] = relationship(foreign_keys=[branch_id])  # noqa: F821

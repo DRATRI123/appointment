@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { Logo } from "./logo";
+import { HeaderAuthButtons } from "./header-auth-buttons";
 
 const nav = [
   { href: "/#features", label: "Features" },
@@ -20,14 +20,7 @@ export function SiteHeader() {
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">Sign in</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/admin">Admin</Link>
-          </Button>
-        </div>
+        <HeaderAuthButtons />
       </div>
     </header>
   );

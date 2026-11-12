@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Te
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import NotificationStatus
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, TimestampMixin
 
 
@@ -54,9 +55,9 @@ class Notification(PKMixin, PublicIdMixin, TimestampMixin, Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String(16), default=NotificationStatus.PENDING, nullable=False)
-    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scheduled_for: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    sent_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    read_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text)
     dedupe_key: Mapped[str | None] = mapped_column(String(128), unique=True)
@@ -77,6 +78,6 @@ class NotificationLog(PKMixin, Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     response: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
     error: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
     notification: Mapped[Notification] = relationship(back_populates="logs")

@@ -20,6 +20,14 @@
 | Account lockout | Progressive delays after failed logins; account suspension flag honoured on every request |
 | Session management | List and revoke devices; `user_sessions` stores user agent, IP, last seen |
 
+### Implemented in Phase 2
+
+`app/security/passwords.py` (Argon2id), `tokens.py` (JWT + hashed opaque refresh tokens),
+`otp.py` (HMAC-hashed codes, provider adapters), `google.py` (JWKS verification),
+`identifiers.py` (E.164 / email normalisation), `app/api/deps.py` (bearer/cookie extraction, CSRF
+double-submit, session revocation check, tenant resolution, permission guards),
+`app/services/auth_service.py` (lockout, rotation, reuse detection, reset and verification flows).
+
 ## Authorization
 
 * **RBAC**: permissions are string codes (`module:action`). Roles are system-seeded

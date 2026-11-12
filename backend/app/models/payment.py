@@ -25,6 +25,7 @@ from app.core.enums import (
     PaymentStatus,
     RefundStatus,
 )
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, SoftDeleteMixin, TenantMixin, TimestampMixin
 
 
@@ -73,11 +74,11 @@ class Payment(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     verified_amount_paise: Mapped[int | None] = mapped_column(Integer)
     upi_uri: Mapped[str | None] = mapped_column(Text)  # the exact URI encoded in the QR
     qr_image_path: Mapped[str | None] = mapped_column(String(512))
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    submitted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     verified_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejected_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     recorded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     notes: Mapped[str | None] = mapped_column(Text)
@@ -106,7 +107,7 @@ class PaymentSubmission(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Bas
     transaction_reference: Mapped[str | None] = mapped_column(String(128))
     payer_upi_id: Mapped[str | None] = mapped_column(String(120))
     payer_name: Mapped[str | None] = mapped_column(String(120))
-    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paid_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     claimed_amount_paise: Mapped[int | None] = mapped_column(Integer)
     screenshot_path: Mapped[str | None] = mapped_column(String(512))
     screenshot_mime: Mapped[str | None] = mapped_column(String(64))
@@ -136,7 +137,7 @@ class PaymentVerificationLog(PKMixin, TenantMixin, Base):
     reason: Mapped[str | None] = mapped_column(Text)
     bank_credit_confirmed: Mapped[bool | None] = mapped_column(Boolean)
     details: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
     payment: Mapped[Payment] = relationship(back_populates="verification_logs")
 
@@ -160,9 +161,9 @@ class PaymentRefund(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     refund_method: Mapped[str | None] = mapped_column(String(24))  # upi, bank_transfer, cash
     refund_reference: Mapped[str | None] = mapped_column(String(128))  # UTR / bank ref
     refund_proof_path: Mapped[str | None] = mapped_column(String(512))
-    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    approved_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    processed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     notes: Mapped[str | None] = mapped_column(Text)
 
 
@@ -212,7 +213,7 @@ class BankTransaction(PKMixin, TenantMixin, TimestampMixin, Base):
     matched_payment_id: Mapped[int | None] = mapped_column(ForeignKey("payments.id", ondelete="SET NULL"))
     match_confidence: Mapped[int | None] = mapped_column(Integer)  # 0-100
     matched_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    matched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    matched_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     raw: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
 
     import_: Mapped[BankStatementImport] = relationship(back_populates="transactions")

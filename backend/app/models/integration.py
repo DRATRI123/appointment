@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Te
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import IntegrationStatus, WebhookDeliveryStatus
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, TenantMixin, TimestampMixin
 
 
@@ -26,8 +27,8 @@ class Integration(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     credentials_encrypted: Mapped[str | None] = mapped_column(Text)  # OAuth tokens / api keys
     external_account_id: Mapped[str | None] = mapped_column(String(255))
     connected_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    connected_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     last_error: Mapped[str | None] = mapped_column(Text)
 
     logs: Mapped[list["IntegrationLog"]] = relationship(
@@ -45,9 +46,9 @@ class APIKey(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     key_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     scopes: Mapped[list[Any] | None] = mapped_column(nullable=True)  # permission codes
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_used_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     rate_limit: Mapped[str | None] = mapped_column(String(32))
     allowed_ips: Mapped[list[Any] | None] = mapped_column(nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -64,7 +65,7 @@ class WebhookEndpoint(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base)
     api_version: Mapped[str] = mapped_column(String(8), default="v1", nullable=False)
     headers: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
     failure_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disabled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
     deliveries: Mapped[list["WebhookEvent"]] = relationship(
@@ -86,8 +87,8 @@ class WebhookEvent(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     payload: Mapped[dict[str, Any]] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(String(16), default=WebhookDeliveryStatus.PENDING, nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     response_status: Mapped[int | None] = mapped_column(Integer)
     response_body: Mapped[str | None] = mapped_column(Text)
     last_error: Mapped[str | None] = mapped_column(Text)
@@ -108,6 +109,6 @@ class IntegrationLog(PKMixin, Base):
     response: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
     error: Mapped[str | None] = mapped_column(Text)
     duration_ms: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
     integration: Mapped[Integration] = relationship(back_populates="logs")

@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, Uni
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import OrganizationStatus, SubscriptionStatus
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, SoftDeleteMixin, TimestampMixin
 
 if TYPE_CHECKING:
@@ -70,7 +71,7 @@ class OrganizationDomain(PKMixin, TimestampMixin, Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     verification_token: Mapped[str | None] = mapped_column(String(128))
-    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verified_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     organization: Mapped[Organization] = relationship(back_populates="domains")
 
@@ -87,8 +88,8 @@ class OrganizationSubscription(PKMixin, PublicIdMixin, TimestampMixin, Base):
     price_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     billing_cycle: Mapped[str] = mapped_column(String(16), default="monthly", nullable=False)
     limits: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
-    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    starts_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    ends_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    trial_ends_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     notes: Mapped[str | None] = mapped_column(Text)

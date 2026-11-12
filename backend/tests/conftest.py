@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 from app.core.database import get_db  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import Base  # noqa: E402
+from app.services.seed import seed_all  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -42,6 +43,7 @@ def db(engine) -> Generator[Session, None, None]:
     connection = engine.connect()
     transaction = connection.begin()
     session = sessionmaker(bind=connection, expire_on_commit=False)()
+    seed_all(session)
     try:
         yield session
     finally:

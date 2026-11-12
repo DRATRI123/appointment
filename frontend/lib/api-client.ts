@@ -34,14 +34,37 @@ export interface RequestOptions extends Omit<RequestInit, "method" | "body"> {
   searchParams?: Record<string, string | number | boolean | undefined | null>;
 }
 
+let defaultOrganizationId: string | undefined;
+/** Set once by the auth provider so every request carries the active organization. */
+export function setDefaultOrganizationId(id: string | undefined) {
+  defaultOrganizationId = id;
+}
+
+let refreshPromise: Promise<boolean> | null = null;
+async function tryRefresh(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${apiBase}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "X-CSRF-Token": readCookie("csrf_token") ?? "" },
+    })
+      .then((r) => r.ok)
+      .catch(() => false)
+      .finally(() => {
+        setTimeout(() => (refreshPromise = null), 0);
+      });
+  }
+  return refreshPromise;
+}
+
 function readCookie(name: string): string | undefined {
   if (typeof document === "undefined") return undefined;
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, organizationId, searchParams, headers, ...rest } = options;
+export async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
+  const { method = "GET", body, organizationId = defaultOrganizationId, searchParams, headers, ...rest } = options;
   const origin =
     typeof window !== "undefined" ? window.location.origin : process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000";
   const url = new URL(`${apiBase}${path.startsWith("/") ? path : `/${path}`}`, origin);
@@ -74,7 +97,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const text = await response.text();
   const json = text ? safeJson(text) : null;
   if (!response.ok) {
-    throw new ApiError(response.status, json as ApiErrorBody | null, response.statusText);
+    const error = new ApiError(response.status, json as ApiErrorBody | null, response.statusText);
+    const isAuthRoute = path.startsWith("/auth/");
+    if (response.status === 401 && !isAuthRoute && !_retried && error.code === "token_expired") {
+      if (await tryRefresh()) return apiRequest<T>(path, options, true);
+    }
+    throw error;
   }
   return json as T;
 }

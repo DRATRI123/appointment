@@ -1,5 +1,8 @@
+"use client";
+
 import { Activity, Building2, CreditCard, Gauge, Home, ScrollText, Settings2, Users } from "lucide-react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { RequireAuth } from "@/components/auth/require-auth";
 
 const groups = [
   {
@@ -18,8 +21,8 @@ const groups = [
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
   return (
-    <DashboardShell title="Platform administration" roleLabel="Platform super admin" groups={groups}>
-      {children}
-    </DashboardShell>
+    <RequireAuth requirePlatformAdmin>
+      <DashboardShell title="Platform administration" roleLabel="Platform super admin" groups={groups} showOrgSwitcher={false}>{children}</DashboardShell>
+    </RequireAuth>
   );
 }

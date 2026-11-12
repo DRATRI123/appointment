@@ -7,6 +7,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Te
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import ACTIVE_APPOINTMENT_STATUSES, AppointmentSource, AppointmentStatus, HoldStatus
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, TenantMixin, TimestampMixin
 
 _ACTIVE_STATUS_SQL = ", ".join(f"'{s}'" for s in ACTIVE_APPOINTMENT_STATUSES)
@@ -52,8 +53,8 @@ class Appointment(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     recurrence_group_id: Mapped[str | None] = mapped_column(String(36), index=True)
     group_booking_id: Mapped[str | None] = mapped_column(String(36), index=True)
 
-    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    start_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    end_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     slot_sequence: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     consultation_mode: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -81,12 +82,12 @@ class Appointment(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     meeting_link: Mapped[str | None] = mapped_column(String(512))
     meeting_provider: Mapped[str | None] = mapped_column(String(32))
     external_calendar_event_id: Mapped[str | None] = mapped_column(String(255))
-    payment_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_due_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    checked_in_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", nullable=True)
 
     status_history: Mapped[list["AppointmentStatusHistory"]] = relationship(
@@ -104,7 +105,7 @@ class AppointmentStatusHistory(PKMixin, Base):
     to_status: Mapped[str] = mapped_column(String(32), nullable=False)
     changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     reason: Mapped[str | None] = mapped_column(Text)
-    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", nullable=True)
 
     appointment: Mapped[Appointment] = relationship(back_populates="status_history")
@@ -116,15 +117,15 @@ class AppointmentReschedule(PKMixin, TenantMixin, Base):
     appointment_id: Mapped[int] = mapped_column(
         ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    old_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    old_end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    new_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    new_end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    old_start_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    old_end_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    new_start_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    new_end_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     old_professional_id: Mapped[int | None] = mapped_column(ForeignKey("professionals.id", ondelete="SET NULL"))
     new_professional_id: Mapped[int | None] = mapped_column(ForeignKey("professionals.id", ondelete="SET NULL"))
     rescheduled_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     reason: Mapped[str | None] = mapped_column(Text)
-    rescheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    rescheduled_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
 
 class AppointmentCancellation(PKMixin, TenantMixin, Base):
@@ -138,7 +139,7 @@ class AppointmentCancellation(PKMixin, TenantMixin, Base):
     reason: Mapped[str | None] = mapped_column(Text)
     policy_snapshot: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
     refund_eligible_paise: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    cancelled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cancelled_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
 
 class BookingHold(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
@@ -166,12 +167,12 @@ class BookingHold(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     service_id: Mapped[int] = mapped_column(ForeignKey("services.id", ondelete="CASCADE"), nullable=False)
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"))
     session_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    start_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    end_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     slot_sequence: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default=HoldStatus.ACTIVE, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    released_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
 
 class Waitlist(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
@@ -182,8 +183,8 @@ class Waitlist(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     branch_id: Mapped[int | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
     professional_id: Mapped[int | None] = mapped_column(ForeignKey("professionals.id", ondelete="CASCADE"))
     service_id: Mapped[int | None] = mapped_column(ForeignKey("services.id", ondelete="CASCADE"))
-    preferred_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    preferred_date: Mapped[datetime | None] = mapped_column(UTCDateTime)
     preferred_window: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="waiting", nullable=False)
-    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notified_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     notes: Mapped[str | None] = mapped_column(Text)

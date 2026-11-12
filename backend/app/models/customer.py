@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, SoftDeleteMixin, TenantMixin, TimestampMixin
 
 
@@ -40,8 +41,8 @@ class Customer(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMi
     saved_professional_ids: Mapped[list[Any] | None] = mapped_column(nullable=True)
     saved_branch_ids: Mapped[list[Any] | None] = mapped_column(nullable=True)
     source: Mapped[str | None] = mapped_column(String(32))
-    registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_visit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registered_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_visit_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", nullable=True)
 
     dependents: Mapped[list["CustomerDependent"]] = relationship(

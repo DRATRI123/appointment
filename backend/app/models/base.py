@@ -4,10 +4,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, MetaData, String, func
+from sqlalchemy import JSON, ForeignKey, Integer, MetaData, String, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
 from app.core.ids import new_public_id
+from app.core.types import UTCDateTime
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -38,15 +39,15 @@ class PublicIdMixin:
 
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        UTCDateTime, server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        UTCDateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 
 class SoftDeleteMixin:
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     @property
     def is_deleted(self) -> bool:

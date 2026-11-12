@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, TimestampMixin
 
 
@@ -33,7 +34,7 @@ class AuditLog(PKMixin, PublicIdMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(String(512))
     request_id: Mapped[str | None] = mapped_column(String(64))
     purpose: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
 
 class SystemSetting(PKMixin, TimestampMixin, Base):
