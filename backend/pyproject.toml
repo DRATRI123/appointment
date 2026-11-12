@@ -1,0 +1,19 @@
+[project]
+name = "appointment-platform-backend"
+version = "0.1.0"
+description = "Multi-tenant appointment booking platform backend (FastAPI)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N"]
+ignore = ["B008", "N805"]
