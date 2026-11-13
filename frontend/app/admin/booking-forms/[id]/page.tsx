@@ -64,7 +64,7 @@ function Builder({ initial, canWrite, onChanged, onDeleted }: { initial: NonNull
     <div className="mx-auto max-w-7xl">
       <Link href="/admin/booking-forms" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Booking forms</Link>
       <PageHeader title={initial.name} description={`Version ${initial.version} · ${initial.is_published ? "published" : "draft"}${initial.is_published ? " · saving field changes creates a new draft version" : ""}`} actions={canWrite ? <div className="flex gap-2"><Button variant="ghost" className="text-destructive" onClick={() => { if (confirm("Delete this form?")) remove.mutate(); }}>Delete</Button><Button variant="outline" onClick={() => save.mutate()} disabled={!dirty || save.isPending} data-testid="save-form">Save</Button>{!initial.is_published ? <Button onClick={() => publish.mutate()} disabled={dirty || publish.isPending || fields.length === 0} data-testid="publish-form">Publish</Button> : null}</div> : null} />
-      <div className="grid gap-6 lg:grid-cols-[300px_1fr_360px]">
+      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)_360px] [&>*]:min-w-0">
         <Card>
           <CardHeader><CardTitle className="text-base">Fields</CardTitle><CardDescription>Click to edit, use arrows to reorder.</CardDescription></CardHeader>
           <CardContent className="space-y-1">
@@ -112,7 +112,7 @@ function Builder({ initial, canWrite, onChanged, onDeleted }: { initial: NonNull
             </Card>
           ) : null}
         </div>
-        <Card className="h-fit lg:sticky lg:top-24">
+        <Card className="h-fit lg:col-span-2 2xl:col-span-1 2xl:sticky 2xl:top-24">
           <CardHeader><CardTitle className="text-base">Preview</CardTitle><CardDescription>Exactly what customers see at booking.</CardDescription></CardHeader>
           <CardContent>{meta.instructions ? <p className="mb-3 text-sm text-muted-foreground">{meta.instructions}</p> : null}<DynamicForm fields={fields} answers={preview} onChange={setPreview} /></CardContent>
         </Card>
