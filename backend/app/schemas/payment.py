@@ -6,6 +6,8 @@ from typing import Any
 from pydantic import Field, field_validator, model_validator
 
 from app.schemas.common import APIModel
+from app.schemas.reconciliation import BankEvidence
+from app.schemas.refund import RefundSummary
 
 
 # ------------------------------------------------------------- UPI accounts
@@ -190,6 +192,8 @@ class PaymentDetail(PaymentRead):
     submissions: list[SubmissionRead] = Field(default_factory=list)
     logs: list[VerificationLogRead] = Field(default_factory=list)
     notes: str | None = None
+    bank_evidence: list[BankEvidence] = Field(default_factory=list)
+    refund: RefundSummary | None = None
 
 
 class PaymentCreate(APIModel):

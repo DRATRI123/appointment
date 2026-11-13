@@ -291,6 +291,47 @@ re-validates. Invalid codes return 422 `coupon_invalid`.
 
 `initiated → awaiting_payment → submitted → under_review → verified`; `rejected` (customer may resubmit),
 `expired` (appointment expired), `cancelled` (appointment cancelled or replaced by cash). Requests already
-submitted stay open on cancellation so staff can still verify and refund (Phase 7). Every change writes
+submitted stay open on cancellation so staff can still verify and then refund them. Every change writes
 `payment_verification_logs` and `audit_logs`. A UTR can back only one payment per organization; a repeat
 attempt returns 409 `duplicate_utr` and is flagged on both payments.
+
+## Phase 7: refunds and bank reconciliation
+
+### Refunds
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/refunds?status&search&from_at&to_at` | `refunds:request` or `refunds:approve` | Search matches refund/payment reference, refund UTR, customer name or mobile |
+| GET | `/refunds/stats` | same | Requested, approved, processed this month and amounts |
+| GET | `/refunds/for-payment/{payment_id}` | same | Verified, refunded, in-progress and refundable amounts plus a policy-based suggestion |
+| POST | `/refunds` | `refunds:request` | `{payment_id, amount_paise?, reason, destination?, refund_method?}`; only verified payments; amount defaults to the refundable balance; destination defaults to the payer UPI ID (submission, then matched bank line) |
+| POST | `/refunds/{id}/approve` | `refunds:approve` | Maker-checker when `refund_requires_second_approver` is on (403 `second_approver_required`) |
+| POST | `/refunds/{id}/reject` | `refunds:approve` | `{reason}` |
+| POST | `/refunds/{id}/cancel` | requester or approver | Withdraw a requested/approved refund |
+| POST | `/refunds/{id}/process` | `refunds:approve` | `{refund_method: upi|bank_transfer|cash, refund_reference (required for upi/bank), destination?, processed_at?, money_sent_confirmed: true, notes (required for cash)}`; records a transfer staff already made; duplicate references 409 |
+| POST/GET | `/refunds/{id}/proof` | approve / view | Private PNG/JPEG/WebP/PDF; viewing is audit-logged |
+| GET | `/customer/refunds` | signed-in customer | Status, amount and, once processed, the transfer reference. No internal notes or staff names |
+
+Cancelling a paid appointment inside the free-cancellation window opens a refund **request** for the
+eligible amount (`cancellation.auto_request_refund`, default on). The payment moves to
+`refund_requested` while a refund is open, `refund_processed` when fully refunded, otherwise back to
+`verified`. Processing reduces the appointment's `paid_amount_paise`.
+
+### Bank reconciliation (`reconciliation:manage`)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/reconciliation/presets` | Column mappings for HDFC, ICICI, SBI, Axis, Kotak and a generic layout |
+| POST | `/reconciliation/preview` | multipart `file`, `delimiter`; first rows and the detected preset |
+| GET/POST | `/reconciliation/imports` | POST multipart `file` (CSV), `parser_code` (preset or `custom`), `mapping` (JSON, overrides the preset), `upi_account_id?`. Only credits are stored; rows already imported (same fingerprint) are skipped and counted; unreadable rows are reported by line |
+| DELETE | `/reconciliation/imports/{id}` | Refused while any line is matched |
+| GET | `/reconciliation/transactions?status&import_id&search&from_date&to_date` | `status` is a comma list of `unmatched,suggested,matched,ignored`; search covers UTR, narration and amount |
+| GET | `/reconciliation/transactions/{id}/candidates` | Scored payments with reasons: UTR equals the customer's submission (70), payment reference in the narration (60, tolerant of truncation), appointment reference (50), same amount within 3 days (30–40), payer UPI ID matches (+10) |
+| POST | `/reconciliation/transactions/{id}/match` | `{payment_id, notes?}`; one bank credit per payment; amount differences need a note; writes `bank_matched` to the payment log; does **not** verify |
+| POST | `/reconciliation/transactions/{id}/unmatch` · `/ignore` · `/restore` | Dismiss a suggestion or undo a match; ignore needs a reason |
+| POST | `/reconciliation/suggest` | Re-run suggestions (e.g. after new UTR submissions) |
+| GET | `/reconciliation/stats` · `/report` · `/report.csv` | Unmatched credits, and verified UPI/bank payments with no matched credit |
+
+`GET /payments/{id}` now includes `bank_evidence` (statement lines carrying the submitted UTR or matched to
+the payment) and `refund` (the refund summary) so the verifier sees the bank line next to the customer's claim.
+

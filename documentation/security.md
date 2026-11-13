@@ -74,7 +74,15 @@ double-submit, session revocation check, tenant resolution, permission guards),
   logged.
 * No automatic success: QR scans, screenshots, UTR entry and deep-link returns never change a
   payment to VERIFIED.
-* Refunds are status-tracked with proof; never reported complete without staff confirmation.
+* Refunds: `requested → approved → processed` (or `rejected` / `cancelled`). The platform never moves
+  money. `processed` requires `refunds:approve`, an explicit "money sent" confirmation and the refund
+  UTR/bank reference (or a cash note); a reference can be recorded once per organization. Until then
+  customers see "requested" or "approved, not yet sent", never "refunded". Optional maker-checker
+  (`cancellation.refund_requires_second_approver`) stops a requester approving their own refund.
+  Refund amounts can never exceed the verified amount minus refunds already open or sent.
+* Bank reconciliation: statements are stored privately; matching a bank credit to a payment is recorded
+  as evidence (`bank_matched` in the payment log) and never verifies the payment. Exported reports
+  neutralise spreadsheet formulas (`=`, `+`, `-`, `@` prefixes).
 
 ## Healthcare privacy
 

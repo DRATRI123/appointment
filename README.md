@@ -33,7 +33,7 @@ appointment is confirmed.
 | 4 | Schedules, exceptions, holidays, leave; availability engine; slot holds; booking wizard; appointment lifecycle, reschedule, recurring, waitlist; calendar | ✅ done |
 | 5 | Customer management, family members, encrypted notes, private documents with retention, CSV export, no-code booking form builder with versions, templates, conditional fields and server-side validation | ✅ done |
 | 6 | Own UPI QR payments: UPI accounts, dynamic QR, app deep links, UTR and screenshot submission, verification queue with audit trail, cash and bank transfers, balance payments, coupons | ✅ done |
-| 7 | Refund management and bank statement reconciliation | next |
+| 7 | Refunds (request → approve → record the transfer you sent, with proof and maker-checker option) and bank statement reconciliation (CSV import with bank presets or custom column mapping, UTR/reference/amount matching suggestions, unmatched report with CSV export) | ✅ done |
 | 8–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout

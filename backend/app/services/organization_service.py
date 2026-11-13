@@ -34,6 +34,8 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "reschedule_before_hours": 4,
         "max_reschedules": 2,
         "refund_policy": "manual_review",
+        "auto_request_refund": True,  # open a refund *request* for eligible paid amounts when an appointment is cancelled
+        "refund_requires_second_approver": False,  # maker-checker: the approver must differ from the requester
     },
     "payment": {
         "require_advance": True,

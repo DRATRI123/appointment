@@ -7,7 +7,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -84,10 +83,10 @@ class Payment(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", nullable=True)
 
-    submissions: Mapped[list["PaymentSubmission"]] = relationship(
+    submissions: Mapped[list[PaymentSubmission]] = relationship(
         back_populates="payment", cascade="all, delete-orphan"
     )
-    verification_logs: Mapped[list["PaymentVerificationLog"]] = relationship(
+    verification_logs: Mapped[list[PaymentVerificationLog]] = relationship(
         back_populates="payment", cascade="all, delete-orphan"
     )
 
@@ -159,11 +158,13 @@ class PaymentRefund(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     processed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     rejection_reason: Mapped[str | None] = mapped_column(Text)
     refund_method: Mapped[str | None] = mapped_column(String(24))  # upi, bank_transfer, cash
+    destination: Mapped[str | None] = mapped_column(String(255))  # customer's UPI ID / bank account (masked) the money goes to
     refund_reference: Mapped[str | None] = mapped_column(String(128))  # UTR / bank ref
     refund_proof_path: Mapped[str | None] = mapped_column(String(512))
     requested_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     approved_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     processed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    rejected_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     notes: Mapped[str | None] = mapped_column(Text)
 
 
@@ -181,9 +182,12 @@ class BankStatementImport(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, B
     statement_to: Mapped[date | None] = mapped_column(Date)
     total_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     matched_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    duplicate_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    skipped: Mapped[list[Any] | None] = mapped_column(nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text)
 
-    transactions: Mapped[list["BankTransaction"]] = relationship(
+    transactions: Mapped[list[BankTransaction]] = relationship(
         back_populates="import_", cascade="all, delete-orphan"
     )
 
@@ -214,6 +218,7 @@ class BankTransaction(PKMixin, TenantMixin, TimestampMixin, Base):
     match_confidence: Mapped[int | None] = mapped_column(Integer)  # 0-100
     matched_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     matched_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    notes: Mapped[str | None] = mapped_column(Text)
     raw: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
 
     import_: Mapped[BankStatementImport] = relationship(back_populates="transactions")

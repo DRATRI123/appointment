@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, Landmark } from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, Landmark } from "lucide-react";
+import Link from "next/link";
 import { useAuth } from "@/components/auth/auth-provider";
 import { paymentsService } from "@/services/payments";
 import { PaymentStatusBadge } from "@/components/payments/payment-status-badge";
 import { PrivateImage } from "@/components/payments/private-image";
 import { UpiCheckout } from "@/components/payments/upi-checkout";
+import { PaymentRefunds } from "@/components/refunds/payment-refunds";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -19,9 +21,9 @@ import { Field } from "@/components/forms/field";
 import { MoneyInput } from "@/components/forms/money-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/errors";
-import { formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { formatPaise } from "@/lib/utils";
-import { METHOD_LABEL } from "@/types/payment";
+import { METHOD_LABEL, type PaymentDetail } from "@/types/payment";
 
 export function PaymentSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const { hasPermission, currentOrganizationId } = useAuth();
@@ -83,6 +85,7 @@ export function PaymentSheet({ id, onClose }: { id: string; onClose: () => void 
               <div className="space-y-4 rounded-xl border border-primary/30 p-4" data-testid="verify-panel">
                 <p className="flex items-center gap-2 font-medium"><Landmark className="size-4" /> Verify against the bank</p>
                 {p.status === "submitted" ? <Button size="sm" variant="outline" onClick={() => review.mutate()} disabled={review.isPending}>I&apos;m checking this one</Button> : null}
+                <BankEvidenceBlock payment={p} />
                 <label className="flex items-start gap-2"><Checkbox checked={credit} onCheckedChange={(v) => setCredit(v === true)} data-testid="bank-credit" /> <span>I confirmed this UTR and amount in the bank account or statement.</span></label>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Amount credited" htmlFor="v_amount"><MoneyInput id="v_amount" valuePaise={verifiedAmount} onChange={(v) => setAmount(v ?? 0)} /></Field>
@@ -97,6 +100,8 @@ export function PaymentSheet({ id, onClose }: { id: string; onClose: () => void 
                 </div>
               </div>
             ) : null}
+
+            {p.refund ? <PaymentRefunds summary={p.refund} /> : null}
 
             {p.method === "upi_qr" && ["awaiting_payment", "rejected"].includes(p.status) ? (
               <div className="space-y-3">
@@ -115,5 +120,34 @@ export function PaymentSheet({ id, onClose }: { id: string; onClose: () => void 
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+function BankEvidenceBlock({ payment }: { payment: PaymentDetail }) {
+  const { hasPermission } = useAuth();
+  if (!payment.bank_evidence.length) {
+    return (
+      <p className="flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground" data-testid="bank-evidence-none">
+        <FileSpreadsheet className="mt-0.5 size-4 shrink-0" />
+        <span>No imported bank statement line carries this UTR yet. Check your bank app, or {hasPermission("reconciliation:manage") ? <Link href="/admin/reconciliation" className="underline">import today&apos;s statement</Link> : "ask an accountant to import today's statement"}.</span>
+      </p>
+    );
+  }
+  return (
+    <ul className="space-y-1.5" data-testid="bank-evidence">
+      {payment.bank_evidence.map((e) => {
+        const amountOk = e.amount_paise === payment.amount_paise;
+        const usedElsewhere = !!e.matched_payment_reference;
+        return (
+          <li key={e.transaction_id} className={`rounded-lg border p-3 text-xs ${usedElsewhere || !amountOk ? "border-destructive/40 bg-destructive/5" : "border-emerald-500/40 bg-emerald-500/5"}`}>
+            <p className="font-medium">Bank statement: {formatPaise(e.amount_paise)} credited on {formatDate(e.transaction_date, "UTC")}{e.utr ? <> · UTR <span className="font-mono">{e.utr}</span></> : null}</p>
+            <p className="text-muted-foreground">{e.description}</p>
+            {usedElsewhere ? <p className="font-medium text-destructive">Already matched to {e.matched_payment_reference}</p> : null}
+            {!amountOk ? <p className="font-medium text-destructive">Amount differs from the {formatPaise(payment.amount_paise)} due</p> : null}
+            {e.matched_to_this_payment ? <p className="text-emerald-700 dark:text-emerald-400">Matched to this payment in reconciliation</p> : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

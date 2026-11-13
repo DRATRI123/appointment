@@ -270,3 +270,23 @@ def my_payments(db: DB, user: CurrentUser) -> list[dict]:
         read["organization_name"], read["organization_slug"] = org.name, org.slug
         out.append(read)
     return out
+
+
+@customer_router.get("/refunds", summary="Refunds of the signed-in customer (read-only)")
+def my_refunds(db: DB, user: CurrentUser) -> list[dict]:
+    from app.models import Payment, PaymentRefund
+
+    rows = db.scalars(select(PaymentRefund).join(Payment, Payment.id == PaymentRefund.payment_id).join(Customer, Customer.id == Payment.customer_id)
+                      .where(Customer.user_id == user.id).order_by(PaymentRefund.created_at.desc())).all()
+    out = []
+    for r in rows:
+        org = db.get(Organization, r.organization_id)
+        p = db.get(Payment, r.payment_id)
+        appt = db.get(Appointment, r.appointment_id) if r.appointment_id else None
+        # Customers see the outcome, not internal notes or staff names.
+        out.append({"id": r.public_id, "reference": r.reference, "status": r.status, "amount_paise": r.amount_paise, "payment_reference": p.reference,
+                    "appointment_reference": appt.reference if appt else None, "refund_method": r.refund_method if r.status == "processed" else None,
+                    "refund_reference": r.refund_reference if r.status == "processed" else None, "rejection_reason": r.rejection_reason,
+                    "requested_at": r.requested_at, "processed_at": r.processed_at, "organization_name": org.name})
+    return out
+

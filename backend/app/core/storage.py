@@ -22,7 +22,7 @@ IMAGE_SIGNATURES: dict[str, tuple[bytes, ...]] = {
     "image/gif": (b"GIF87a", b"GIF89a"),
 }
 PDF_SIGNATURE = b"%PDF-"
-EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "application/pdf": "pdf"}
+EXTENSIONS = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif", "application/pdf": "pdf", "text/csv": "csv"}
 
 
 def sniff_mime(head: bytes) -> str | None:

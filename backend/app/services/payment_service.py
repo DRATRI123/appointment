@@ -27,9 +27,31 @@ from app.core.exceptions import ConflictError, DuplicateUTR, NotFoundError, Perm
 from app.core.ids import new_reference
 from app.core.storage import get_storage, validate_upload
 from app.core.time import utcnow
-from app.models import Appointment, Branch, Customer, Organization, Payment, PaymentSubmission, PaymentVerificationLog, Service, UPIAccount, User
+from app.models import (
+    Appointment,
+    Branch,
+    Customer,
+    Organization,
+    Payment,
+    PaymentSubmission,
+    PaymentVerificationLog,
+    Service,
+    UPIAccount,
+    User,
+)
 from app.payments.upi import normalize_utr, qr_data_url
-from app.schemas.payment import Checkout, CheckoutUPI, PaymentCreate, PaymentDetail, PaymentRead, PaymentStats, RejectRequest, SubmissionRead, VerificationLogRead, VerifyRequest
+from app.schemas.payment import (
+    Checkout,
+    CheckoutUPI,
+    PaymentCreate,
+    PaymentDetail,
+    PaymentRead,
+    PaymentStats,
+    RejectRequest,
+    SubmissionRead,
+    VerificationLogRead,
+    VerifyRequest,
+)
 from app.services.audit_service import RequestMeta, record_audit
 from app.services.organization_service import OrganizationService
 from app.services.upi_account_service import UPIAccountService
@@ -270,7 +292,7 @@ class PaymentService:
 
     def close_open(self, appt: Appointment, to: str, reason: str) -> int:
         """Called when an appointment is cancelled or expires. Requests that were never paid are closed;
-        payments already submitted stay for staff to verify (and refund in Phase 7) so money is never lost."""
+        payments already submitted stay for staff to verify and then refund, so money is never lost."""
         n = 0
         for p in self.for_appointment(appt):
             if p.status in OPEN_STATUSES:
@@ -341,7 +363,12 @@ class PaymentService:
         )
 
     def to_detail(self, p: Payment) -> PaymentDetail:
-        return PaymentDetail(**self.to_read(p).model_dump(), submissions=self.submissions(p), logs=self.logs(p), notes=p.notes)
+        from app.services.reconciliation_service import ReconciliationService
+        from app.services.refund_service import REFUNDABLE_PAYMENT_STATUSES, RefundService
+
+        refund = RefundService(self.db, self.org, self.actor, self.meta).summary(p) if p.status in REFUNDABLE_PAYMENT_STATUSES else None
+        return PaymentDetail(**self.to_read(p).model_dump(), submissions=self.submissions(p), logs=self.logs(p), notes=p.notes,
+                             bank_evidence=ReconciliationService(self.db, self.org, self.actor, self.meta).evidence_for(p), refund=refund)
 
     # -------------------------------------------------------------- lists
     def list(self, *, status: str | None, method: str | None, from_at: datetime | None, to_at: datetime | None, search: str | None,

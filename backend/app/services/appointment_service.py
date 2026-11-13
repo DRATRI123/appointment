@@ -10,8 +10,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
-from app.core.enums import ACTIVE_APPOINTMENT_STATUSES, AppointmentSource, AppointmentStatus, HoldStatus
-from app.core.exceptions import ConflictError, NotFoundError, PermissionDenied, SlotUnavailable, ValidationFailed
+from app.core.enums import AppointmentSource, AppointmentStatus, HoldStatus
+from app.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDenied,
+    SlotUnavailable,
+    ValidationFailed,
+)
 from app.core.ids import new_reference
 from app.core.time import utcnow
 from app.models import (
@@ -29,7 +35,13 @@ from app.models import (
     User,
     Waitlist,
 )
-from app.schemas.appointment import AppointmentCreate, HoldCreate, RecurringCreate, RescheduleRequest, WaitlistCreate
+from app.schemas.appointment import (
+    AppointmentCreate,
+    HoldCreate,
+    RecurringCreate,
+    RescheduleRequest,
+    WaitlistCreate,
+)
 from app.services.audit_service import RequestMeta, record_audit
 from app.services.availability_service import AvailabilityService, appointment_length, branch_tz
 from app.services.catalog_service import CatalogService
@@ -346,6 +358,10 @@ class AppointmentService:
             cancelled_by_role="customer" if by_customer else ("staff" if self.actor else "system"), reason=reason, policy_snapshot=rules,
             refund_eligible_paise=refund_eligible, cancelled_at=now,
         ))
+        self.db.flush()
+        from app.services.refund_service import RefundService
+
+        RefundService(self.db, self.org, self.actor, self.meta).auto_request_for_cancellation(appt, refund_eligible, reason)
 
     def reschedule(self, appt: Appointment, payload: RescheduleRequest, *, by_customer: bool = False, session_key: str | None = None) -> Appointment:
         if appt.status not in (AppointmentStatus.PENDING_PAYMENT, AppointmentStatus.PENDING_VERIFICATION, AppointmentStatus.CONFIRMED):

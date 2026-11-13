@@ -1,3 +1,6 @@
+import type { BankEvidence } from "@/types/reconciliation";
+import type { RefundSummary } from "@/types/refund";
+
 export type PaymentStatus =
   | "initiated" | "awaiting_payment" | "submitted" | "under_review" | "verified" | "rejected" | "expired" | "cancelled" | "refund_requested" | "refund_processed";
 
@@ -86,6 +89,8 @@ export interface PaymentDetail extends Payment {
   submissions: Submission[];
   logs: VerificationLog[];
   notes: string | null;
+  bank_evidence: BankEvidence[];
+  refund: RefundSummary | null;
 }
 
 export interface PaymentStats {

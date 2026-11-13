@@ -31,11 +31,11 @@ export function HeaderUser({ showOrgSwitcher = true }: { showOrgSwitcher?: boole
   const staffMemberships = memberships.filter((m) => m.role_code !== "customer");
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 shrink items-center gap-2">
       {showOrgSwitcher && staffMemberships.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="max-w-56 justify-between gap-2">
+            <Button variant="outline" size="sm" className="max-w-32 min-w-0 justify-between gap-2 sm:max-w-56">
               <Building2 className="size-4 text-muted-foreground" />
               <span className="truncate">{currentMembership?.organization.name}</span>
               <ChevronsUpDown className="size-3.5 text-muted-foreground" />
@@ -57,7 +57,7 @@ export function HeaderUser({ showOrgSwitcher = true }: { showOrgSwitcher?: boole
       ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="grid size-9 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary" aria-label="Account menu">
+          <button className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary" aria-label="Account menu">
             {initials(user.full_name) || <UserRound className="size-4" />}
           </button>
         </DropdownMenuTrigger>

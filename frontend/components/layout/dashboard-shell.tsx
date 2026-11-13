@@ -31,12 +31,12 @@ export function DashboardShell({
         <SidebarNav groups={groups} />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b px-4 md:px-8">
-          <div className="flex items-center gap-3">
+        <header className="flex h-16 items-center justify-between gap-3 border-b px-4 md:px-8">
+          <div className="flex min-w-0 items-center gap-3">
             <span className="lg:hidden">
               <Logo />
             </span>
-            <h1 className="text-base font-semibold md:text-lg">{title}</h1>
+            <h1 className="hidden truncate text-base font-semibold sm:block md:text-lg">{title}</h1>
           </div>
           <HeaderUser showOrgSwitcher={showOrgSwitcher} />
         </header>

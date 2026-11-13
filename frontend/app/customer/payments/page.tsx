@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { CreditCard } from "lucide-react";
 import { paymentsService } from "@/services/payments";
+import { refundsService } from "@/services/refunds";
+import { RefundStatusBadge } from "@/components/refunds/refund-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,9 +14,11 @@ import { PaymentStatusBadge } from "@/components/payments/payment-status-badge";
 import { formatDateTime } from "@/lib/format";
 import { formatPaise } from "@/lib/utils";
 import { METHOD_LABEL } from "@/types/payment";
+import { REFUND_METHOD_LABEL } from "@/types/refund";
 
 export default function CustomerPaymentsPage() {
   const payments = useQuery({ queryKey: ["my-payments"], queryFn: paymentsService.mine });
+  const refunds = useQuery({ queryKey: ["my-refunds"], queryFn: refundsService.mine });
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title="Payments" description="Every payment you made or still owe, with the clinic's verification status." />
@@ -35,6 +39,27 @@ export default function CustomerPaymentsPage() {
           ))}
         </div>
       )}
+      {refunds.data?.length ? (
+        <section className="mt-8 space-y-2">
+          <h2 className="text-lg font-semibold">Refunds</h2>
+          <p className="text-sm text-muted-foreground">The clinic sends refunds from their own bank or UPI app. A refund shows as refunded once they record the transfer reference.</p>
+          {refunds.data.map((r) => (
+            <Card key={r.id} className="py-4" data-testid="my-refund">
+              <CardContent className="flex flex-wrap items-center gap-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{formatPaise(r.amount_paise)} · {r.organization_name}</p>
+                  <p className="text-sm text-muted-foreground">For payment <span className="font-mono text-xs">{r.payment_reference}</span></p>
+                  <p className="text-xs text-muted-foreground">
+                    {r.status === "processed" ? `Sent ${formatDateTime(r.processed_at)}${r.refund_method ? ` via ${REFUND_METHOD_LABEL[r.refund_method]}` : ""}${r.refund_reference ? ` · reference ${r.refund_reference}` : ""}` : `Requested ${formatDateTime(r.requested_at)}`}
+                    {r.rejection_reason ? ` · ${r.rejection_reason}` : ""}
+                  </p>
+                </div>
+                <RefundStatusBadge status={r.status} />
+              </CardContent>
+            </Card>
+          ))}
+        </section>
+      ) : null}
     </div>
   );
 }

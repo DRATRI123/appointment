@@ -1,6 +1,23 @@
 from fastapi import APIRouter
 
-from app.api.v1 import appointments, auth, booking_forms, catalog, customers, health, meta, organizations, payments, platform, public, scheduling, uploads, users
+from app.api.v1 import (
+    appointments,
+    auth,
+    booking_forms,
+    catalog,
+    customers,
+    health,
+    meta,
+    organizations,
+    payments,
+    platform,
+    public,
+    reconciliation,
+    refunds,
+    scheduling,
+    uploads,
+    users,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -19,6 +36,8 @@ api_router.include_router(payments.upi_router)
 api_router.include_router(payments.payments_router)
 api_router.include_router(payments.admin_router)
 api_router.include_router(payments.coupons_router)
+api_router.include_router(refunds.router)
+api_router.include_router(reconciliation.router)
 api_router.include_router(uploads.router)
 api_router.include_router(public.router)
 api_router.include_router(platform.router)

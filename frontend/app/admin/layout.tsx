@@ -57,8 +57,8 @@ const groups = [
       { href: "/admin/upi-accounts", label: "UPI accounts", icon: QrCode },
       { href: "/admin/payments/verification", label: "Verification", icon: ShieldCheck },
       { href: "/admin/coupons", label: "Coupons", icon: TicketPercent },
-      { href: "/admin/reconciliation", label: "Bank reconciliation", icon: Landmark, phase: 7 },
-      { href: "/admin/refunds", label: "Refunds", icon: RotateCcw, phase: 7 },
+      { href: "/admin/reconciliation", label: "Bank reconciliation", icon: Landmark },
+      { href: "/admin/refunds", label: "Refunds", icon: RotateCcw },
     ],
   },
   {
