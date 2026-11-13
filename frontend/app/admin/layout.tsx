@@ -13,6 +13,8 @@ import {
   KeyRound,
   Landmark,
   LayoutList,
+  ListPlus,
+  Clock,
   Plug,
   QrCode,
   RotateCcw,
@@ -30,14 +32,16 @@ const groups = [
   {
     items: [
       { href: "/admin", label: "Overview", icon: Home },
-      { href: "/admin/calendar", label: "Calendar", icon: CalendarDays, phase: 4 },
-      { href: "/admin/appointments", label: "Appointments", icon: ClipboardList, phase: 4 },
+      { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
+      { href: "/admin/appointments", label: "Appointments", icon: ClipboardList },
+      { href: "/admin/waitlist", label: "Waitlist", icon: ListPlus },
     ],
   },
   {
     title: "Catalogue",
     items: [
       { href: "/admin/professionals", label: "Professionals", icon: Stethoscope },
+      { href: "/admin/schedules", label: "Schedules", icon: Clock },
       { href: "/admin/services", label: "Services", icon: Briefcase },
       { href: "/admin/categories", label: "Categories", icon: LayoutList },
       { href: "/admin/branches", label: "Branches", icon: Building2 },

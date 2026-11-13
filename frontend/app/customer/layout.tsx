@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, CreditCard, History, Home, UserCog, Users } from "lucide-react";
+import { CalendarDays, CreditCard, Home, UserCog, Users } from "lucide-react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { RequireAuth } from "@/components/auth/require-auth";
 
@@ -8,8 +8,7 @@ const groups = [
   {
     items: [
       { href: "/customer", label: "Overview", icon: Home },
-      { href: "/customer/appointments", label: "Appointments", icon: CalendarDays, phase: 4 },
-      { href: "/customer/history", label: "History", icon: History, phase: 4 },
+      { href: "/customer/appointments", label: "Appointments", icon: CalendarDays },
       { href: "/customer/payments", label: "Payments", icon: CreditCard, phase: 6 },
       { href: "/customer/family", label: "Family members", icon: Users, phase: 5 },
       { href: "/customer/profile", label: "Profile & security", icon: UserCog },

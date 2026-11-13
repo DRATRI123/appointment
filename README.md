@@ -30,8 +30,9 @@ appointment is confirmed.
 | 1 | Architecture, project setup, database schema (56 tables), migrations, environment | ✅ done |
 | 2 | Authentication (OTP, email/password, Google), users, organizations, staff, RBAC, audit logs, platform admin | ✅ done |
 | 3 | Branches, professionals, service categories, services, packages, image uploads, public catalogue pages | ✅ done |
-| 4 | Scheduling engine, availability, holds, appointment booking | next |
-| 5–14 | See roadmap in `documentation/architecture.md` | planned |
+| 4 | Schedules, exceptions, holidays, leave; availability engine; slot holds; booking wizard; appointment lifecycle, reschedule, recurring, waitlist; calendar | ✅ done |
+| 5 | Customers, dependents, documents, booking form builder | next |
+| 6–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -133,6 +134,10 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
+The end-to-end suite registers several accounts in quick succession, so start the backend it talks to
+with rate limiting off (`RATE_LIMIT_ENABLED=false` in `backend/.env`, or set it for that terminal
+session). Keep rate limiting on everywhere else.
+
 One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perform steps 2 and 3.
 
 ## First sign-in
@@ -147,6 +152,19 @@ One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perfo
 * **Google sign-in**: set `GOOGLE_CLIENT_ID` in `backend/.env`; the frontend button is wired in the
   Phase 2 API (`POST /api/v1/auth/google`) and needs the Google Identity Services script on the
   login page, which ships with the public booking site.
+
+## Background jobs
+
+Expired slot holds and unpaid appointments are cleaned up by the worker. Run it alongside the API:
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python -m app.workers.runner --interval 60
+```
+
+(`--once` runs a single pass.) The API also expires stale holds whenever availability is computed, so
+development works without the worker.
 
 ## Run with Docker (PostgreSQL + Redis)
 

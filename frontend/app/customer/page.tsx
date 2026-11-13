@@ -11,11 +11,14 @@ export default function CustomerHome() {
   return (
     <div className="space-y-8">
       <PageHeader title={`Hello, ${user?.full_name ?? ""}`} description="Your bookings and payments will appear here." actions={<Button asChild variant="outline"><Link href="/customer/profile">Profile &amp; security</Link></Button>} />
+      <div className="flex flex-wrap gap-3">
+        <Button asChild><Link href="/customer/appointments">My appointments</Link></Button>
+      </div>
       <PhasePlaceholder
-        title="Appointments"
-        description="Upcoming and past appointments, payment receipts and family profiles."
+        title="Coming next"
+        description="Payment receipts, family profiles and saved professionals."
         phase={5}
-        items={["Upcoming appointments", "Appointment history", "Payment receipts", "Family member profiles", "Saved professionals and branches"]}
+        items={["Payment receipts", "Family member profiles", "Saved professionals and branches", "Documents"]}
       />
     </div>
   );

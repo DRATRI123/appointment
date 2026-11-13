@@ -8,10 +8,10 @@ const groups = [
   {
     items: [
       { href: "/professional", label: "Today", icon: Home },
-      { href: "/professional/calendar", label: "Calendar", icon: CalendarDays, phase: 4 },
+      { href: "/professional/calendar", label: "Calendar", icon: CalendarDays },
       { href: "/professional/patients", label: "Patients", icon: Users, phase: 5 },
       { href: "/professional/notes", label: "Notes", icon: ClipboardList, phase: 5 },
-      { href: "/professional/leave", label: "Leave", icon: Plane, phase: 4 },
+      { href: "/admin/schedules", label: "Schedule & leave", icon: Plane },
     ],
   },
 ];

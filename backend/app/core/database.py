@@ -33,6 +33,8 @@ def build_engine(settings: Settings | None = None) -> Engine:
 def _configure_sqlite(engine: Engine) -> None:
     @event.listens_for(engine, "connect")
     def _set_pragmas(dbapi_connection, _record) -> None:  # pragma: no cover - driver hook
+        # Let SQLAlchemy control transactions so BEGIN IMMEDIATE below is the only BEGIN issued.
+        dbapi_connection.isolation_level = None
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA journal_mode=WAL")

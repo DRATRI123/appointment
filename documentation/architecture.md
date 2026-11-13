@@ -206,6 +206,13 @@ Double-booking prevention stack:
 Rules that are never bypassed: a screenshot or UTR never confirms a payment; QR is a request not a
 receipt; amounts are never trusted from the client; every status change is logged with actor.
 
+### SQLite write serialisation
+
+In development every session begins with `BEGIN IMMEDIATE`, so one writer at a time holds the database
+and slot reservation cannot race. Reads inside a request also run under that lock, which is fine for a
+single clinic on one machine but is the main reason PostgreSQL is required before multi-instance or
+high-traffic deployment (Phase 14).
+
 ## 8. Background jobs
 
 Phase 1 ships an in-process scheduler abstraction (`app/workers`) with a synchronous runner; later

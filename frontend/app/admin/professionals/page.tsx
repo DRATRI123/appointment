@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Stethoscope } from "lucide-react";
@@ -62,7 +63,7 @@ export default function ProfessionalsPage() {
                     <Badge variant={p.is_active ? "success" : "destructive"}>{p.is_active ? "active" : "inactive"}</Badge>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">{p.branches.length} branch{p.branches.length === 1 ? "" : "es"} · {p.services.length} service{p.services.length === 1 ? "" : "s"}{p.default_fee_paise !== null ? ` · from ${formatPaise(p.default_fee_paise)}` : ""}</p>
-                  {canWrite ? <div className="mt-3 flex gap-1"><Button size="sm" variant="outline" onClick={() => setEditing(p)}>Edit</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`Remove ${p.display_name}?`)) remove.mutate(p.id); }}>Remove</Button></div> : null}
+                  {canWrite ? <div className="mt-3 flex gap-1"><Button size="sm" variant="outline" onClick={() => setEditing(p)}>Edit</Button><Button asChild size="sm" variant="ghost"><Link href={`/admin/schedules?professional=${p.id}`}>Schedule</Link></Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`Remove ${p.display_name}?`)) remove.mutate(p.id); }}>Remove</Button></div> : null}
                 </div>
               </CardContent>
             </Card>

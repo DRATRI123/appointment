@@ -25,7 +25,10 @@ export default function OrganizationHome() {
 
   return (
     <div className="space-y-12">
-      {tagline ? <p className="max-w-3xl text-lg text-muted-foreground">{tagline}</p> : null}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        {tagline ? <p className="max-w-3xl text-lg text-muted-foreground">{tagline}</p> : <span />}
+        <Button asChild size="lg" data-testid="book-now"><Link href={`/o/${slug}/book`}>Book an appointment <ArrowRight /></Link></Button>
+      </div>
 
       <section id="branches">
         <h2 className="mb-4 text-xl font-semibold tracking-tight">Locations</h2>
