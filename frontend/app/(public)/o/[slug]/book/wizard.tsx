@@ -10,6 +10,8 @@ import { useOrg } from "../org-provider";
 import { useAuth } from "@/components/auth/auth-provider";
 import { publicCatalog } from "@/services/catalog";
 import { bookingSessionKey, publicBooking } from "@/services/booking";
+import { customerSelfService, publicForms } from "@/services/customers";
+import { DynamicForm, formErrorsFromApi, type Answers } from "@/components/forms/dynamic-form";
 import { SlotPicker } from "@/components/booking/slot-picker";
 import { HoldCountdown } from "@/components/booking/hold-countdown";
 import { Button } from "@/components/ui/button";
@@ -41,6 +43,9 @@ export function BookingWizard() {
   const [hold, setHold] = useState<Hold | null>(null);
   const [tz, setTz] = useState<string>(data.organization.timezone);
   const [draft, setDraft] = useState<{ full_name?: string; mobile?: string; email?: string; notes: string }>({ notes: "" });
+  const [answers, setAnswers] = useState<Answers>({});
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [dependentId, setDependentId] = useState("");
   // Signed-in users get their profile pre-filled; anything they type wins.
   const details = { full_name: draft.full_name ?? user?.full_name ?? "", mobile: draft.mobile ?? user?.mobile ?? "", email: draft.email ?? user?.email ?? "", notes: draft.notes };
   const setDetails = (next: typeof details) => setDraft({ full_name: next.full_name, mobile: next.mobile, email: next.email, notes: next.notes });
@@ -57,6 +62,8 @@ export function BookingWizard() {
     enabled: !!serviceId && !!branchId,
   });
 
+  const bookingForm = useQuery({ queryKey: ["public-form", slug, serviceId, branchId], queryFn: () => publicForms.form(slug, { service_id: serviceId!, branch_id: branchId! }), enabled: !!serviceId && !!branchId });
+  const dependents = useQuery({ queryKey: ["my-dependents-for", data.organization.id], queryFn: () => customerSelfService.dependents(data.organization.id), enabled: !!user, retry: false });
   const service = services.data?.find((s) => s.id === serviceId) ?? null;
   const step = !serviceId ? 0 : !branchId ? 1 : professionalId === null ? 2 : !hold ? 3 : 4;
 
@@ -78,13 +85,14 @@ export function BookingWizard() {
     mutationFn: () => publicBooking.book(slug, {
       hold_id: hold!.id, session_key: sessionKey,
       customer: { full_name: details.full_name, mobile: details.mobile || undefined, email: details.email || undefined },
-      customer_notes: details.notes || undefined,
+      customer_notes: details.notes || undefined, dependent_id: dependentId || undefined,
+      form_answers: bookingForm.data ? answers : undefined,
     }),
     onSuccess: (appt) => {
       try { window.localStorage.setItem(`ap.appt.${appt.reference}`, appt.access_token ?? ""); } catch { /* ignore */ }
       router.push(`/o/${slug}/appointments/${appt.reference}${appt.access_token ? `?t=${appt.access_token}` : ""}`);
     },
-    onError: (e) => toast.error(errorMessage(e)),
+    onError: (e) => { const fe = formErrorsFromApi(e); if (fe) { setFormErrors(fe); toast.error("Please check the highlighted answers."); } else toast.error(errorMessage(e)); },
   });
 
   const onExpire = useCallback(() => { toast.warning("Your slot hold expired. Please choose a time again."); setHold(null); setSlot(null); }, []);
@@ -177,7 +185,21 @@ export function BookingWizard() {
               <Field label="Full name" htmlFor="bk_name" className="sm:col-span-2"><Input id="bk_name" required minLength={2} value={details.full_name} onChange={(e) => setDetails({ ...details, full_name: e.target.value })} /></Field>
               <Field label="Mobile number" htmlFor="bk_mobile"><Input id="bk_mobile" inputMode="tel" required={!user?.mobile && !details.email} value={details.mobile} onChange={(e) => setDetails({ ...details, mobile: e.target.value })} /></Field>
               <Field label="Email (optional)" htmlFor="bk_email"><Input id="bk_email" type="email" value={details.email} onChange={(e) => setDetails({ ...details, email: e.target.value })} /></Field>
+              {user && dependents.data?.length ? (
+                <Field label="Booking for" htmlFor="bk_for" className="sm:col-span-2">
+                  <select id="bk_for" className="h-10 w-full rounded-lg border px-3 text-sm" value={dependentId} onChange={(e) => setDependentId(e.target.value)}>
+                    <option value="">Myself</option>
+                    {dependents.data.map((d) => <option key={d.id} value={d.id}>{d.full_name} ({d.relationship_label})</option>)}
+                  </select>
+                </Field>
+              ) : null}
               <Field label="Anything the professional should know? (optional)" htmlFor="bk_notes" className="sm:col-span-2"><Textarea id="bk_notes" value={details.notes} onChange={(e) => setDetails({ ...details, notes: e.target.value })} /></Field>
+              {bookingForm.data ? (
+                <div className="space-y-3 rounded-xl border p-4 sm:col-span-2" data-testid="booking-form-section">
+                  <div><p className="font-medium">{bookingForm.data.name}</p>{bookingForm.data.instructions ? <p className="text-sm text-muted-foreground">{bookingForm.data.instructions}</p> : null}</div>
+                  <DynamicForm fields={bookingForm.data.fields} answers={answers} onChange={(a) => { setAnswers(a); setFormErrors({}); }} errors={formErrors} uploadFile={(file) => publicForms.uploadFile(slug, file)} />
+                </div>
+              ) : null}
               {!user ? <p className="text-xs text-muted-foreground sm:col-span-2">Already have an account? <Link className="underline" href={`/login?next=${encodeURIComponent(`/o/${slug}/book?service=${serviceId}`)}`}>Sign in</Link> to see this booking in your dashboard.</p> : null}
               <Button type="submit" size="lg" className="sm:col-span-2" disabled={book.isPending}>{book.isPending ? <Loader2 className="animate-spin" /> : null} Confirm booking</Button>
             </form>

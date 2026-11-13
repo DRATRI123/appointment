@@ -79,8 +79,11 @@ def appointment_detail(db: Session, appt: Appointment, **kwargs) -> AppointmentD
     users = ids_to_public(db, User, {h.changed_by_user_id for h in appt.status_history if h.changed_by_user_id})
     names = dict(db.execute(select(User.id, User.full_name).where(User.id.in_(list(users)))).all()) if users else {}
     history = [StatusHistoryRead(from_status=h.from_status, to_status=h.to_status, changed_at=h.changed_at, reason=h.reason, changed_by=names.get(h.changed_by_user_id)) for h in appt.status_history]
+    from app.services.form_service import FormService
+
+    response = FormService(db, db.get(Organization, appt.organization_id)).response_for_appointment(appt)
     return AppointmentDetail(**base.model_dump(), history=history, pricing_snapshot=appt.pricing_snapshot if kwargs.get("include_internal") else None,
-                             form_answers=(appt.metadata_ or {}).get("form_answers"))
+                             form_answers=response.answers if response else None)
 
 
 def waitlist_read(db: Session, row: Waitlist) -> WaitlistRead:

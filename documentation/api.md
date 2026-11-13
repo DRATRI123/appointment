@@ -34,8 +34,8 @@ Base URL: `/api/v1`. Interactive docs: `/docs` (Swagger UI) and `/redoc`; OpenAP
 | `/appointments` (+ holds, calendar, recurring, status, reschedule), `/waitlist` | 4 | implemented |
 | `/customer/appointments` | 4 | implemented |
 | `/public/organizations/{slug}/availability`, `/quote`, `/holds`, `/appointments` | 4 | implemented |
-| `/customers` | 5 | planned |
-| `/booking-forms` | 5 | planned |
+| `/customers` (+ dependents, notes, documents, export), `/customer/organizations/{id}/…` | 5 | implemented |
+| `/booking-forms` (+ templates, publish, assign, responses), `/public/…/booking-form` | 5 | implemented |
 | `/upi-accounts`, `/payments`, `/admin/payments` | 6 | planned |
 | `/refunds`, `/bank-statements` | 7 | planned |
 | `/notifications` | 8 | planned |
@@ -190,3 +190,42 @@ their slot is released. Every change is written to `appointment_status_history` 
    professional row before checking availability.
 3. `tests/test_concurrency.py` races eight sessions for one slot and asserts exactly one winner, and
    proves the index alone rejects a bypassing insert.
+
+## Phase 5 endpoints
+
+### Customers (tenant routes)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/customers?search&tag&segment&is_guest&page&page_size` | `customers:read` | Segments: `new_30d`, `upcoming`, `returning`, `inactive_90d` |
+| GET | `/customers/export.csv` | `customers:export` | Audit-logged |
+| POST / GET / PATCH / DELETE | `/customers[/{id}]` | `customers:write` / `customers:read` | Sequential `customer_code` per organization; mobile unique per organization; delete blocked while appointments are upcoming |
+| GET / POST / PATCH / DELETE | `/customers/{id}/dependents[/{dep_id}]` | read / write | Family members usable as `dependent_id` on bookings |
+| GET / POST / DELETE | `/customers/{id}/notes[/{note_id}]` | `customers:clinical_read` / `customers:clinical_write` | Bodies encrypted with AES-GCM (`DATA_ENCRYPTION_KEY`); every list is audit-logged with `purpose` |
+| GET / POST / DELETE | `/customers/{id}/documents[/{doc_id}]` | clinical read / write | Private storage, PNG/JPEG/WebP/PDF sniffed, retention from `privacy.document_retention_days` |
+| GET | `/customers/{id}/documents/{doc_id}/download?purpose` | `customers:clinical_read` | Streams with `Cache-Control: private, no-store`; audit-logged |
+
+Customer self-service (signed-in users, per organization, gated by `privacy.allow_customer_self_update`):
+`GET /customer/organizations`, `GET/PATCH /customer/organizations/{org_id}/profile`,
+`GET/POST/PATCH/DELETE /customer/organizations/{org_id}/dependents[/{id}]`.
+
+### Booking forms (tenant routes)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/booking-forms?include_templates&all_versions` | `booking_forms:read` | Latest version per slug by default |
+| GET | `/booking-forms/templates` | read | Built-in starting points (patient intake, skin consultation, consent) |
+| POST | `/booking-forms` | `booking_forms:write` | `clone_from` accepts a template slug or a form id; field keys unique; option types need options; conditions must reference known fields |
+| GET / PATCH / DELETE | `/booking-forms/{id}` | read / write | Editing fields of a published form creates a new draft version; delete blocked while assigned to services |
+| POST | `/booking-forms/{id}/publish` | write | Unpublishes earlier versions and re-points their services |
+| POST | `/booking-forms/assign` | write | `{service_id, form_id|null}` |
+| GET | `/booking-forms/responses/by-appointment/{appointment_id}` | `appointments:read` | |
+| GET | `/public/organizations/{slug}/booking-form?service_id&branch_id` | public | Resolution: service form → branch form → organization default; `null` when none |
+| POST | `/public/organizations/{slug}/booking-form-files` | public, rate limited | Private upload for file fields; returns `{key, name, mime_type, size_bytes}` |
+
+Field types: text, textarea, number, email, mobile, dropdown, radio, checkbox, date, file, multi_select.
+Validation (`validation`): min/max length, min/max, regex, max_files, accept, min/max date (`today`).
+Conditions (`conditions`): equals, not_equals, in, not_in, is_true, is_false, is_empty, is_not_empty, gt, lt.
+Booking requests include `form_answers`; the server validates against the resolved form (hidden fields are
+skipped), returns 422 `form_invalid` with per-field `errors`, and stores a `booking_form_responses` row
+tied to the appointment and form version.

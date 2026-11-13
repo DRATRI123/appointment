@@ -31,8 +31,9 @@ appointment is confirmed.
 | 2 | Authentication (OTP, email/password, Google), users, organizations, staff, RBAC, audit logs, platform admin | ✅ done |
 | 3 | Branches, professionals, service categories, services, packages, image uploads, public catalogue pages | ✅ done |
 | 4 | Schedules, exceptions, holidays, leave; availability engine; slot holds; booking wizard; appointment lifecycle, reschedule, recurring, waitlist; calendar | ✅ done |
-| 5 | Customers, dependents, documents, booking form builder | next |
-| 6–14 | See roadmap in `documentation/architecture.md` | planned |
+| 5 | Customer management, family members, encrypted notes, private documents with retention, CSV export, no-code booking form builder with versions, templates, conditional fields and server-side validation | ✅ done |
+| 6 | Own UPI QR payment system and verification dashboard | next |
+| 7–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 

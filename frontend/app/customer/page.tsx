@@ -13,12 +13,13 @@ export default function CustomerHome() {
       <PageHeader title={`Hello, ${user?.full_name ?? ""}`} description="Your bookings and payments will appear here." actions={<Button asChild variant="outline"><Link href="/customer/profile">Profile &amp; security</Link></Button>} />
       <div className="flex flex-wrap gap-3">
         <Button asChild><Link href="/customer/appointments">My appointments</Link></Button>
+        <Button asChild variant="outline"><Link href="/customer/family">Family &amp; preferences</Link></Button>
       </div>
       <PhasePlaceholder
         title="Coming next"
-        description="Payment receipts, family profiles and saved professionals."
-        phase={5}
-        items={["Payment receipts", "Family member profiles", "Saved professionals and branches", "Documents"]}
+        description="UPI payment receipts and payment history."
+        phase={6}
+        items={["Pay by UPI QR", "Submit UTR and screenshot", "Payment status and receipts"]}
       />
     </div>
   );

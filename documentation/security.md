@@ -79,8 +79,11 @@ double-submit, session revocation check, tenant resolution, permission guards),
 ## Healthcare privacy
 
 * Customer notes and documents are restricted to clinical roles (`customers:clinical_read`).
-* Sensitive columns (customer notes body, document metadata) use application-level encryption
-  (`app/security/crypto.py`, AES-GCM with key from `DATA_ENCRYPTION_KEY`) from Phase 5.
+* Clinical note bodies are encrypted with AES-256-GCM (`app/security/crypto.py`, key from
+  `DATA_ENCRYPTION_KEY`, derived from `SECRET_KEY` only in development/test). Documents live in private
+  storage and are streamed only to `customers:clinical_read` holders; every note view and document download is
+  written to `audit_logs` with the stated purpose. Retention: `privacy.document_retention_days` drives the
+  `purge_expired_documents` job.
 * Access to customer records is written to `audit_logs` with purpose.
 * Retention: `organization_settings.retention_days_*` drive scheduled purge jobs (Phase 12).
 * Consent flags captured at booking (`customers.consent_json`).

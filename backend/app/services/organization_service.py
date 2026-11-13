@@ -15,7 +15,7 @@ from app.repositories.organizations import MembershipRepository, OrganizationRep
 from app.schemas.organization import DomainCreate, OrganizationCreate, OrganizationUpdate
 from app.services.audit_service import RequestMeta, record_audit
 
-SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general"}
+SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy"}
 
 DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     "booking": {
@@ -52,6 +52,12 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     "branding": {"primary_color": "#0f766e", "accent_color": "#14b8a6", "tagline": ""},
     "legal": {"privacy_policy": "", "terms": "", "refund_policy": ""},
     "general": {"business_hours": {}, "booking_page_enabled": True},
+    "privacy": {
+        "document_retention_days": 0,
+        "consent_text": "I agree to the clinic storing my details to manage my appointments.",
+        "require_consent_at_booking": False,
+        "allow_customer_self_update": True,
+    },
 }
 
 

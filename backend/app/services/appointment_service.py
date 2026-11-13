@@ -160,6 +160,11 @@ class AppointmentService:
             raise ValidationFailed("This professional cannot be booked online.", code="not_bookable")
 
         customer = self.customers.resolve(payload.customer, user=user, allow_guest=allow_guest, staff_booking=staff)
+        from app.services.form_service import FormService
+
+        forms = FormService(self.db, self.org, self.actor, self.meta)
+        form = forms.resolve(service, branch)
+        form_answers = forms.validate_answers(form, payload.form_answers) if form else None
         dependent_id = None
         if payload.dependent_id:
             dep = self.db.scalar(select(CustomerDependent).where(CustomerDependent.public_id == payload.dependent_id, CustomerDependent.customer_id == customer.id))
@@ -192,12 +197,14 @@ class AppointmentService:
             tax_paise=q.tax_paise, total_amount_paise=q.total_amount_paise, advance_due_paise=q.advance_due_paise, paid_amount_paise=0,
             pricing_snapshot=q.as_snapshot(), customer_notes=payload.customer_notes, internal_notes=payload.internal_notes if staff else None,
             payment_due_at=due_at, confirmed_at=now if status == AppointmentStatus.CONFIRMED else None,
-            metadata_={"access_token": secrets.token_urlsafe(24), "form_answers": payload.form_answers} if True else None,
+            metadata_={"access_token": secrets.token_urlsafe(24)},
         )
         _insert_or_conflict(self.db, appt, "This slot was just taken. Please pick another time.")
         if hold:
             hold.status = HoldStatus.CONVERTED
             hold.customer_id = customer.id
+        if form is not None and form_answers is not None:
+            forms.record_response(form, form_answers, appointment=appt, customer=customer)
         self._history(appt, None, status, reason="created")
         record_audit(self.db, action="appointment.created", actor=self.actor, organization_id=self.org.id, entity_type="appointment",
                      entity_id=appt.reference, after={"status": status, "start_at": start.isoformat(), "total_paise": q.total_amount_paise}, meta=self.meta)

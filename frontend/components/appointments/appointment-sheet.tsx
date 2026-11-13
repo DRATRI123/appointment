@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -53,6 +54,13 @@ export function AppointmentSheet({ id, onClose, onChanged }: { id: string; onClo
           <div className="space-y-6">
             <AppointmentSummary appt={a} showCustomer />
             {a.internal_notes ? <p className="rounded-lg bg-muted/50 p-3 text-sm"><span className="font-medium">Internal note:</span> {a.internal_notes}</p> : null}
+            {a.form_answers && Object.keys(a.form_answers).length ? (
+              <div className="rounded-lg border p-3 text-sm" data-testid="form-answers">
+                <p className="mb-2 font-medium">Booking form answers</p>
+                <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-2">{Object.entries(a.form_answers).map(([k, v]) => <div key={k}><dt className="text-xs uppercase tracking-wide text-muted-foreground">{k.replace(/_/g, " ")}</dt><dd>{Array.isArray(v) ? v.map((x) => (typeof x === "object" && x && "name" in x ? (x as { name: string }).name : String(x))).join(", ") : typeof v === "boolean" ? (v ? "Yes" : "No") : String(v)}</dd></div>)}</dl>
+              </div>
+            ) : null}
+            <p className="text-xs text-muted-foreground"><Link href={`/admin/customers/${a.customer.id}`} className="underline">Open customer record</Link></p>
             {a.status === "pending_payment" ? <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">Awaiting payment{a.payment_due_at ? ` until ${formatDateTime(a.payment_due_at)}` : ""}. Use <strong>Confirm</strong> only after payment is received; the UPI verification queue arrives in Phase 6.</p> : null}
             <div className="space-y-2">
               <Textarea placeholder="Reason / note for this action (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />

@@ -197,3 +197,33 @@ def public_reschedule(slug: str, reference: str, payload: RescheduleRequest, db:
     appt = service.get_by_reference(reference, access_token, user)
     service.reschedule(appt, payload, by_customer=True, session_key=session_key)
     return appointment_detail(db, service.get(appt.public_id), service=service, viewer_is_customer=True)
+
+
+# ---------------------------------------------------------- booking forms
+from fastapi import File, UploadFile  # noqa: E402
+
+from app.api.deps import AppSettings  # noqa: E402
+from app.core.storage import get_storage, validate_upload  # noqa: E402
+from app.schemas.booking_form import PublicForm  # noqa: E402
+from app.services.form_service import FormService  # noqa: E402
+
+FORM_FILE_TYPES = {"image/png", "image/jpeg", "image/webp", "application/pdf"}
+
+
+@router.get("/organizations/{slug}/booking-form", response_model=PublicForm | None, summary="The form to show for a service/branch (null when none)")
+def public_booking_form(slug: str, db: DB, service_id: str | None = None, branch_id: str | None = None):
+    org, catalog = _org(db, slug)
+    service = catalog.get_service(service_id) if service_id else None
+    branch = catalog.get_branch(branch_id) if branch_id else None
+    form = FormService(db, org).resolve(service, branch)
+    return FormService(db, org).public_form(form) if form else None
+
+
+@router.post("/organizations/{slug}/booking-form-files", summary="Upload a file for a booking-form file field (private storage)")
+@limiter.limit("20/minute")
+async def public_form_file(request: Request, response: Response, slug: str, db: DB, settings: AppSettings, file: UploadFile = File(...)):
+    org, _ = _org(db, slug)
+    data = await file.read()
+    mime = validate_upload(data, allowed=FORM_FILE_TYPES, max_mb=settings.max_upload_size_mb)
+    stored = get_storage().save(scope=f"org/{org.public_id}/form-files", visibility="private", data=data, mime_type=mime)
+    return {"key": stored.key, "name": (file.filename or "file")[:160], "mime_type": stored.mime_type, "size_bytes": stored.size_bytes}

@@ -45,8 +45,8 @@ const groups = [
       { href: "/admin/services", label: "Services", icon: Briefcase },
       { href: "/admin/categories", label: "Categories", icon: LayoutList },
       { href: "/admin/branches", label: "Branches", icon: Building2 },
-      { href: "/admin/customers", label: "Customers", icon: Users, phase: 5 },
-      { href: "/admin/booking-forms", label: "Booking forms", icon: FileSpreadsheet, phase: 5 },
+      { href: "/admin/customers", label: "Customers", icon: Users },
+      { href: "/admin/booking-forms", label: "Booking forms", icon: FileSpreadsheet },
     ],
   },
   {

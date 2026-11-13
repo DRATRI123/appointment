@@ -10,7 +10,7 @@ const groups = [
       { href: "/customer", label: "Overview", icon: Home },
       { href: "/customer/appointments", label: "Appointments", icon: CalendarDays },
       { href: "/customer/payments", label: "Payments", icon: CreditCard, phase: 6 },
-      { href: "/customer/family", label: "Family members", icon: Users, phase: 5 },
+      { href: "/customer/family", label: "Family & preferences", icon: Users },
       { href: "/customer/profile", label: "Profile & security", icon: UserCog },
     ],
   },

@@ -33,4 +33,14 @@ def expire_unpaid() -> int:
     return count
 
 
-PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments")
+@job("purge_expired_documents")
+def purge_documents() -> int:
+    from app.services.customer_management_service import purge_expired_documents
+
+    with session_scope() as db:
+        count = purge_expired_documents(db)
+    log.info("jobs.purge_expired_documents", purged=count)
+    return count
+
+
+PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents")

@@ -20,6 +20,7 @@ class Customer(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMi
     __tablename__ = "customers"
     __table_args__ = (
         UniqueConstraint("organization_id", "user_id"),
+        UniqueConstraint("organization_id", "customer_code"),
         Index("ix_customers_org_mobile", "organization_id", "mobile"),
         Index("ix_customers_org_email", "organization_id", "email"),
     )
