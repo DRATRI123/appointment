@@ -64,4 +64,24 @@ def dispatch_notifications() -> dict:
     return counts
 
 
-PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "schedule_reminders", "dispatch_notifications")
+@job("sync_external")
+def sync_external_job() -> dict:
+    from app.services.integration_service import sync_external
+
+    with session_scope() as db:
+        counts = sync_external(db)
+    if any(counts.values()):
+        log.info("jobs.sync_external", **counts)
+    return counts
+
+
+@job("pull_calendar_busy")
+def pull_calendar_busy() -> int:
+    from app.services.integration_service import pull_all_busy
+
+    with session_scope() as db:
+        return pull_all_busy(db)
+
+
+PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "pull_calendar_busy", "sync_external",
+                 "schedule_reminders", "dispatch_notifications")

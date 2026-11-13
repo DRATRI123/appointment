@@ -65,7 +65,7 @@ const groups = [
     title: "Operations",
     items: [
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
-      { href: "/admin/integrations", label: "Integrations", icon: Plug, phase: 9 },
+      { href: "/admin/integrations", label: "Integrations", icon: Plug },
       { href: "/admin/reports", label: "Reports", icon: BarChart3, phase: 10 },
       { href: "/admin/staff", label: "Staff", icon: UsersRound },
       { href: "/admin/roles", label: "Roles & permissions", icon: KeyRound },

@@ -11,6 +11,7 @@ import { PaymentStatusBadge } from "@/components/payments/payment-status-badge";
 import { PaymentSheet } from "@/components/payments/payment-sheet";
 import { formatPaise } from "@/lib/utils";
 import { METHOD_LABEL } from "@/types/payment";
+import { AppointmentMeeting } from "@/components/appointments/appointment-meeting";
 import { AppointmentSummary, StatusBadge } from "@/components/booking/appointment-summary";
 import { SlotPicker } from "@/components/booking/slot-picker";
 import { Button } from "@/components/ui/button";
@@ -66,8 +67,9 @@ export function AppointmentSheet({ id, onClose, onChanged }: { id: string; onClo
               </div>
             ) : null}
             <p className="text-xs text-muted-foreground"><Link href={`/admin/customers/${a.customer.id}`} className="underline">Open customer record</Link></p>
+            <AppointmentMeeting key={`${a.id}:${a.meeting_link ?? ""}`} appt={a} />
             <AppointmentPayments appointmentId={a.id} total={a.total_amount_paise} paid={a.paid_amount_paise} advanceDue={a.advance_due_paise} closed={["cancelled", "expired", "no_show"].includes(a.status)} />
-            {a.status === "pending_payment" ? <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">Awaiting payment{a.payment_due_at ? ` until ${formatDateTime(a.payment_due_at)}` : ""}. Use <strong>Confirm</strong> only after payment is received; the UPI verification queue arrives in Phase 6.</p> : null}
+            {a.status === "pending_payment" ? <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">Awaiting payment{a.payment_due_at ? ` until ${formatDateTime(a.payment_due_at)}` : ""}. Payments are confirmed from the verification queue; use <strong>Confirm</strong> only if you received the payment some other way.</p> : null}
             <div className="space-y-2">
               <Textarea placeholder="Reason / note for this action (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
               <div className="flex flex-wrap gap-2">

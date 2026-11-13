@@ -97,6 +97,25 @@ double-submit, session revocation check, tenant resolution, permission guards),
 * Real OTP delivery never returns the code in the API response (only the console provider in
   development does); a delivery failure returns 503 `otp_delivery_failed`.
 
+## Integration security (calendars and video)
+
+* Google OAuth uses the server-side web flow with offline access; the `state` is a signed, 10-minute,
+  single-use token bound to the organization, integration and user (a hash of its nonce is stored and
+  cleared on use), so callbacks cannot be replayed or forged. Only the `calendar.events` scope plus
+  `openid email` is requested.
+* Refresh/access tokens and Zoom client secrets are stored with AES-256-GCM (`credentials_encrypted`) and
+  never returned by the API. Disconnecting revokes the Google token and deletes stored credentials.
+* Admins (`integrations:write`) manage all connections; a professional can manage only the profile linked
+  to their own account. Other organizations get 404.
+* Imported busy time stores only start and end ("Busy"), never event titles or attendees. Events we create
+  carry a private marker so they are never re-imported as busy time.
+* Patient names in Google Calendar events can be turned off per calendar. Zoom meeting topics never
+  contain patient names.
+* Private calendar feeds use an unguessable token (`<professional id>.<32-byte secret>`) compared in constant
+  time; replacing the link invalidates the old one. Feeds are `noindex` and cached privately.
+* External API calls never run inside a booking request: a provider outage delays a calendar event, never a
+  booking, and failures are retried with exponential backoff and shown under Sync problems.
+
 ## Healthcare privacy
 
 * Customer notes and documents are restricted to clinical roles (`customers:clinical_read`).

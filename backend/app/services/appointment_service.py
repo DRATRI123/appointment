@@ -19,6 +19,7 @@ from app.core.exceptions import (
     ValidationFailed,
 )
 from app.core.ids import new_reference
+from app.core.logging import get_logger
 from app.core.time import utcnow
 from app.models import (
     Appointment,
@@ -59,6 +60,8 @@ TRANSITIONS: dict[str, dict[str, str]] = {
     "expire": {AppointmentStatus.PENDING_PAYMENT: AppointmentStatus.EXPIRED, AppointmentStatus.DRAFT: AppointmentStatus.EXPIRED},
 }
 
+
+log = get_logger(__name__)
 
 def _insert_or_conflict(db: Session, row, message: str, code: str = "slot_unavailable") -> None:
     """Insert inside a SAVEPOINT so a unique-index collision only undoes this row, never the caller's work."""
@@ -418,8 +421,14 @@ class AppointmentService:
             reason=reason, changed_at=utcnow(), metadata_=extra,
         ))
         self.db.flush()
+        from app.services.integration_service import mark_for_sync
         from app.services.notification_service import NotificationService
 
+        try:
+            with self.db.begin_nested():
+                mark_for_sync(self.db, self.org, appt)
+        except Exception:  # noqa: BLE001 - calendar sync must never block a booking
+            log.exception("integration.mark_failed", appointment=appt.reference)
         NotificationService(self.db, self.org, self.actor, self.meta).on_appointment_status(appt, from_status, to_status, reason=reason, extra=extra)
 
     # -------------------------------------------------------------- lists

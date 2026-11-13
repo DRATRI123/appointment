@@ -154,7 +154,14 @@ class AvailabilityService:
                 ProfessionalLeave.end_at > day_start, ProfessionalLeave.start_at < day_end,
             )
         ).all()
-        return busy, [(s, e) for s, e in leaves]
+        from app.models import ExternalBusyBlock
+
+        external = self.db.execute(
+            select(ExternalBusyBlock.start_at, ExternalBusyBlock.end_at).where(
+                ExternalBusyBlock.professional_id == professional.id, ExternalBusyBlock.end_at > day_start, ExternalBusyBlock.start_at < day_end,
+            )
+        ).all()
+        return busy, [(s, e) for s, e in leaves] + [(s, e) for s, e in external]
 
     # ------------------------------------------------------------- engine
     def slots_for_professional(self, service: Service, professional: Professional, branch: Branch, day: date, *, now: datetime | None = None, ignore_notice: bool = False, exclude_appointment_id: int | None = None) -> list[SlotRead]:

@@ -11,6 +11,7 @@ import { bookingSessionKey, publicBooking } from "@/services/booking";
 import { publicPayments } from "@/services/payments";
 import { UpiCheckout } from "@/components/payments/upi-checkout";
 import { AppointmentSummary } from "@/components/booking/appointment-summary";
+import { JoinAndCalendar } from "@/components/booking/join-and-calendar";
 import { SlotPicker } from "@/components/booking/slot-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +74,8 @@ export function AppointmentStatusPage({ reference }: { reference: string }) {
       <Card>
         <CardContent><AppointmentSummary appt={a} /></CardContent>
       </Card>
+
+      <JoinAndCalendar appt={a} slug={slug} token={token} organizationName={data.organization.name} />
 
       {checkout.data && (due > 0 || checkout.data.payment.status !== "verified") && !["cancelled", "expired"].includes(a.status) ? (
         <UpiCheckout

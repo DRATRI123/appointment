@@ -237,6 +237,21 @@ worker: schedule_reminders → dispatch_due
 `emit` runs in a SAVEPOINT and never raises: a notification problem cannot fail a booking or payment.
 Templates are plain `{{variable}}` substitution (no expressions); email HTML escapes all text.
 
+### Calendars and video (Phase 9)
+
+```
+appointment change (_history) ── mark_for_sync ──▶ appointment_external_events (pending)
+   └─ manual meeting link applied immediately (so the confirmation can include it)
+worker: pull_calendar_busy (≤ every 10 min per calendar) ─▶ external_busy_blocks ─▶ availability (like leave)
+        sync_external ─▶ claim row ─▶ desired state? (confirmed/checked-in/in-progress/completed)
+             ├─ Google: insert (with Meet createRequest) / patch / delete event
+             └─ Zoom:   create / update / delete meeting
+             ─▶ meeting link stored on the appointment ─▶ "appointment.meeting_link" notification
+```
+
+Meeting provider per professional: `auto` (Google Meet if their calendar is connected, else Zoom, else
+their manual link), or an explicit choice. A link staff set on one appointment always wins.
+
 ## 9. Development roadmap
 
 | Phase | Scope | Exit criteria |

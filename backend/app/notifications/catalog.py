@@ -52,14 +52,21 @@ EVENTS: dict[str, Event] = {e.code: e for e in [
           [*COMMON, "amount_paid", "meeting_link"], ("email", "sms", "whatsapp"),
           _t("Confirmed: {{service_name}} on {{appointment_date}} at {{appointment_time}}",
              "Hello {{customer_name}},\n\nYour appointment is confirmed.\n\n{{service_name}} with {{professional_name}}\n{{appointment_date}} at {{appointment_time}}\n{{branch_name}}, {{branch_address}}\n\n"
-             "Paid so far: {{amount_paid}}\n\nView, reschedule or cancel: {{manage_link}}\n\nReference: {{appointment_reference}}\n{{organization_name}} {{organization_phone}}",
+             "Join online: {{meeting_link}}\nPaid so far: {{amount_paid}}\n\nView, reschedule or cancel: {{manage_link}}\n\nReference: {{appointment_reference}}\n{{organization_name}} {{organization_phone}}",
              "{{organization_name}}: confirmed {{service_name}} with {{professional_name}} on {{appointment_date}} {{appointment_time}}, {{branch_name}}. Ref {{appointment_reference}}. {{manage_link}}")),
+    Event("appointment.meeting_link", "Online consultation link", CUSTOMER,
+          "Sent when the video link for an online appointment is ready (Google Meet, Zoom or a link added by staff).",
+          [*COMMON, "meeting_link"], ("email", "sms", "whatsapp"),
+          _t("Your video link for {{service_name}} on {{appointment_date}}",
+             "Hello {{customer_name}},\n\nYour online consultation with {{professional_name}} is on {{appointment_date}} at {{appointment_time}}.\n\n"
+             "Join here a few minutes early:\n{{meeting_link}}\n\nUse a quiet place with a good connection. Need to change the time? {{manage_link}}\n\n{{organization_name}} {{organization_phone}}",
+             "{{organization_name}}: join your online consultation on {{appointment_date}} {{appointment_time}}: {{meeting_link}}")),
     Event("appointment.reminder", "Appointment reminder", CUSTOMER,
           "Sent before confirmed appointments at the hours set in notification settings.",
           [*COMMON, "hours_before", "meeting_link"], ("email", "sms", "whatsapp"),
           _t("Reminder: {{service_name}} on {{appointment_date}} at {{appointment_time}}",
              "Hello {{customer_name}},\n\nThis is a reminder of your appointment:\n\n{{service_name}} with {{professional_name}}\n{{appointment_date}} at {{appointment_time}}\n{{branch_name}}, {{branch_address}}\n\n"
-             "Need to change it? {{manage_link}}\n\n{{organization_name}} {{organization_phone}}",
+             "Join online: {{meeting_link}}\n\nNeed to change it? {{manage_link}}\n\n{{organization_name}} {{organization_phone}}",
              "Reminder from {{organization_name}}: {{service_name}} on {{appointment_date}} at {{appointment_time}}, {{branch_name}}. {{manage_link}}")),
     Event("appointment.rescheduled", "Appointment rescheduled", CUSTOMER, "Sent when the date, time or professional changes.",
           [*COMMON, "previous_date", "previous_time"], ("email", "sms", "whatsapp"),

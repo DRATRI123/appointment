@@ -158,7 +158,7 @@ class NotificationService:
         cust = self.db.get(Customer, appt.customer_id)
         token = (appt.metadata_ or {}).get("access_token")
         link = f"{get_settings().frontend_url.rstrip('/')}/o/{self.org.slug}/appointments/{appt.reference}" + (f"?t={token}" if token else "")
-        meeting = (appt.metadata_ or {}).get("meeting_link") or ""
+        meeting = appt.meeting_link if appt.consultation_mode == "online" else ""
         return {
             "customer_name": cust.full_name if cust else "", "customer_mobile": (cust.mobile or "") if cust else "", "organization_name": self.org.name,
             "organization_phone": self.org.phone or (branch.phone if branch and branch.phone else "") or "", "service_name": svc.name if svc else "",
@@ -166,7 +166,7 @@ class NotificationService:
             "appointment_date": fmt_date(appt.start_at, appt.timezone), "appointment_time": fmt_time(appt.start_at, appt.timezone),
             "appointment_reference": appt.reference, "manage_link": link, "payment_link": link, "amount_due": inr(max(0, appt.advance_due_paise - (appt.paid_amount_paise or 0))),
             "amount_paid": inr(appt.paid_amount_paise or 0), "payment_deadline": f"{fmt_date(appt.payment_due_at, appt.timezone)}, {fmt_time(appt.payment_due_at, appt.timezone)}" if appt.payment_due_at else "",
-            "meeting_link": meeting, "status": appt.status.replace("_", " "),
+            "meeting_link": meeting or "", "status": appt.status.replace("_", " "),
         }
 
     # ------------------------------------------------------------ recipients

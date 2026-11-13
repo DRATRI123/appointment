@@ -35,7 +35,8 @@ appointment is confirmed.
 | 6 | Own UPI QR payments: UPI accounts, dynamic QR, app deep links, UTR and screenshot submission, verification queue with audit trail, cash and bank transfers, balance payments, coupons | ✅ done |
 | 7 | Refunds (request → approve → record the transfer you sent, with proof and maker-checker option) and bank statement reconciliation (CSV import with bank presets or custom column mapping, UTR/reference/amount matching suggestions, unmatched report with CSV export) | ✅ done |
 | 8 | Notifications: email (SMTP), SMS (MSG91, Twilio), WhatsApp (Meta Cloud API, Twilio), in-app bell; outbox with retries and backoff; reminders; editable templates with live preview; per-event channel settings; customer message preferences and WhatsApp opt-in; OTP delivery | ✅ done |
-| 9–14 | See roadmap in `documentation/architecture.md` | planned |
+| 9 | Google Calendar per professional (events, Google Meet links, busy time blocks slots), Zoom meetings (Server-to-Server OAuth), manual video links, background sync with retries, .ics downloads and private calendar feeds, Join / Add-to-calendar for customers | ✅ done |
+| 10–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -161,8 +162,8 @@ One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perfo
 
 ## Background jobs
 
-The worker expires holds and unpaid bookings, schedules reminders and **delivers notifications**
-(email, SMS, WhatsApp). Run it alongside the API; a short interval keeps messages prompt:
+The worker expires holds and unpaid bookings, schedules reminders, **delivers notifications** (email, SMS,
+WhatsApp) and **syncs calendars and video meetings**. Run it alongside the API; a short interval keeps messages prompt:
 
 ```powershell
 cd backend
@@ -191,6 +192,23 @@ outbox. To deliver for real, set these in `backend/.env` and restart the API and
 
 Then turn the channels on in Admin → Notifications → Settings and use **Delivery setup → Send a test
 message**.
+
+### Google Calendar, Google Meet and Zoom (optional)
+
+* **Google Calendar / Meet**: in Google Cloud Console create an OAuth client of type *Web application*,
+  enable the *Google Calendar API*, and add the redirect URI shown on Admin → Integrations (by default
+  `<FRONTEND_URL>/api/v1/integrations/google/callback`). Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+  in `backend/.env` and restart. Each professional then clicks **Connect Google Calendar** (Admin →
+  Integrations, or Calendar & video in the professional dashboard). While the Google app is in *testing*
+  mode only the test users you list can connect; publish it for wider use.
+* **Zoom**: in the Zoom App Marketplace create a *Server-to-Server OAuth* app with the scopes
+  `meeting:write:meeting:admin` and `user:read:user:admin`, then paste the account ID, client ID and
+  secret on Admin → Integrations (stored encrypted, checked with Zoom before saving).
+* **No accounts needed**: each professional can set a fixed meeting-room link, staff can add a link to a
+  single appointment, customers get **Add to calendar** files, and professionals can subscribe to a
+  private calendar feed from any calendar app.
+
+Calendar events and meetings are created by the worker, so keep it running.
 
 ## Run with Docker (PostgreSQL + Redis)
 

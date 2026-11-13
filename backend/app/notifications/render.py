@@ -14,9 +14,13 @@ def placeholders(text: str | None) -> set[str]:
 def render(text: str | None, values: dict[str, str]) -> str:
     if not text:
         return ""
-    out = PLACEHOLDER.sub(lambda m: str(values.get(m.group(1), "")), text)
-    # Drop lines that became empty because an optional value was blank, and collapse runs of blank lines.
-    lines = [ln.rstrip() for ln in out.splitlines()]
+    lines: list[str] = []
+    for raw in text.splitlines():
+        names = PLACEHOLDER.findall(raw)
+        if names and all(not str(values.get(n, "") or "").strip() for n in names):
+            continue  # every value on this line is blank (e.g. "Join online: {{meeting_link}}" for an in-person visit)
+        lines.append(PLACEHOLDER.sub(lambda m: str(values.get(m.group(1), "")), raw).rstrip())
+    # Collapse runs of blank lines.
     cleaned: list[str] = []
     for ln in lines:
         if ln == "" and cleaned and cleaned[-1] == "":

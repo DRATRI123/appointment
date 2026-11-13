@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None
+    # Google Calendar OAuth callback. Defaults to <FRONTEND_URL>/api/v1/integrations/google/callback (the
+    # frontend proxies /api to the API). Register exactly this URL in Google Cloud Console.
+    google_calendar_redirect_uri: str | None = None
+    calendar_sync_days_ahead: int = 60
+    integration_http_timeout_seconds: int = 20
 
     # --- frontend ----------------------------------------------------------
     frontend_url: str = "http://localhost:3000"

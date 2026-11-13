@@ -112,3 +112,42 @@ class IntegrationLog(PKMixin, Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
 
     integration: Mapped[Integration] = relationship(back_populates="logs")
+
+
+class AppointmentExternalEvent(PKMixin, TenantMixin, TimestampMixin, Base):
+    """Mirror of one appointment in one external system (a Google Calendar event or a Zoom meeting).
+
+    The worker reconciles each row towards the appointment's current state: create, update or delete.
+    """
+
+    __tablename__ = "appointment_external_events"
+    __table_args__ = (
+        UniqueConstraint("appointment_id", "integration_id"),
+        Index("ix_appt_external_status_next", "status", "next_attempt_at"),
+    )
+
+    appointment_id: Mapped[int] = mapped_column(ForeignKey("appointments.id", ondelete="CASCADE"), nullable=False, index=True)
+    integration_id: Mapped[int] = mapped_column(ForeignKey("integrations.id", ondelete="CASCADE"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)  # google_calendar | zoom
+    external_id: Mapped[str | None] = mapped_column(String(255))
+    external_url: Mapped[str | None] = mapped_column(String(1024))  # event htmlLink / meeting join url
+    meeting_url: Mapped[str | None] = mapped_column(String(1024))
+    synced_start_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)  # pending|synced|deleted|failed
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class ExternalBusyBlock(PKMixin, TenantMixin, Base):
+    """Busy time imported from a professional's external calendar; blocks booking slots like leave."""
+
+    __tablename__ = "external_busy_blocks"
+    __table_args__ = (Index("ix_external_busy_pro_time", "professional_id", "start_at", "end_at"),)
+
+    professional_id: Mapped[int] = mapped_column(ForeignKey("professionals.id", ondelete="CASCADE"), nullable=False)
+    integration_id: Mapped[int] = mapped_column(ForeignKey("integrations.id", ondelete="CASCADE"), nullable=False, index=True)
+    start_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    end_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(64))  # "Busy" only; event titles are not stored
+    fetched_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)

@@ -22,7 +22,15 @@ from app.models.booking_form import BookingForm, BookingFormField, BookingFormRe
 from app.models.branch import Branch, BranchSetting
 from app.models.coupon import Coupon
 from app.models.customer import Customer, CustomerDependent, CustomerDocument, CustomerNote
-from app.models.integration import APIKey, Integration, IntegrationLog, WebhookEndpoint, WebhookEvent
+from app.models.integration import (
+    APIKey,
+    AppointmentExternalEvent,
+    ExternalBusyBlock,
+    Integration,
+    IntegrationLog,
+    WebhookEndpoint,
+    WebhookEvent,
+)
 from app.models.notification import Notification, NotificationLog, NotificationTemplate
 from app.models.organization import (
     Organization,
@@ -64,7 +72,7 @@ __all__ = [
     "UPIAccount", "Payment", "PaymentSubmission", "PaymentVerificationLog", "PaymentRefund",
     "BankStatementImport", "BankTransaction",
     "NotificationTemplate", "Notification", "NotificationLog",
-    "Integration", "APIKey", "WebhookEndpoint", "WebhookEvent", "IntegrationLog",
+    "Integration", "APIKey", "WebhookEndpoint", "WebhookEvent", "IntegrationLog", "AppointmentExternalEvent", "ExternalBusyBlock",
     "AuditLog", "SystemSetting",
     "Coupon",
 ]

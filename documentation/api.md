@@ -369,3 +369,36 @@ Events: `appointment.pending_payment`, `appointment.confirmed`, `appointment.rem
 Public booking accepts `customer.whatsapp_opt_in`; `GET /public/organizations/{slug}` exposes only
 `settings.messaging.whatsapp_enabled` from the notification settings.
 
+## Phase 9: calendars and video meetings
+
+### Integrations (tenant)
+
+Admins need `integrations:read` / `integrations:write`; a professional linked to the signed-in user can use the
+professional-scoped endpoints for their own profile.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/integrations` | Google configured?, redirect URI, Zoom, and per professional: Google connection, meeting preference, effective provider, feed URL |
+| POST | `/integrations/google/connect` | `{professional_id, return_to}` → `{authorization_url}`; 422 `google_not_configured` |
+| GET | `/integrations/google/callback?code&state` | Redirects to `return_to?google=connected|denied|failed|invalid_state` |
+| POST | `/integrations/zoom` | `{account_id, client_id, client_secret, default_user?}`; verified with Zoom, 422 `zoom_rejected` |
+| PATCH | `/integrations/{id}` | Google: `calendar_id`, `create_meet`, `block_busy`, `show_patient_names`; Zoom: `default_user`; both: `is_enabled` |
+| POST | `/integrations/{id}/test` · `/sync` | Check the connection · re-read busy time now |
+| GET | `/integrations/{id}/logs` | Recent API calls (no request secrets) |
+| DELETE | `/integrations/{id}` | Disconnect (Google token revoked) |
+| GET/PUT | `/integrations/professionals/{id}/meeting` | `{provider: auto|google_meet|zoom|manual|none, manual_url (https), zoom_user}` |
+| POST/DELETE | `/integrations/professionals/{id}/feed` | Create/replace or turn off the private feed URL |
+| GET | `/integrations/sync-issues` · POST `/integrations/sync-issues/{id}/retry` | Failed or retried calendar/meeting syncs |
+
+### Appointments and calendars
+
+| Method | Path | Notes |
+|---|---|---|
+| PUT | `/appointments/{id}/meeting` | `{meeting_link: https://… | null}` (`appointments:write`); notifies the customer of a new link |
+| GET | `/appointments/{id}/calendar.ics` | Staff calendar file |
+| GET | `/customer/appointments/{id}/calendar.ics` | Signed-in customer |
+| GET | `/public/organizations/{slug}/appointments/{reference}/calendar.ics?access_token` | Guest |
+| GET | `/calendar-feeds/{token}.ics` | Private subscription feed (30 days back, 180 ahead) |
+
+`AppointmentRead.meeting_link` carries the video link; new notification event `appointment.meeting_link`.
+
