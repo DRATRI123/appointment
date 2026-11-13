@@ -54,6 +54,11 @@ class RefundService:
         self.actor = actor
         self.meta = meta or RequestMeta()
 
+    def _notifications(self):
+        from app.services.notification_service import NotificationService
+
+        return NotificationService(self.db, self.org, self.actor, self.meta)
+
     def _payments(self):
         from app.services.payment_service import PaymentService
 
@@ -141,6 +146,8 @@ class RefundService:
         self.db.flush()
         self._audit(refund, "requested", None, RefundStatus.REQUESTED, {"amount_paise": amount, "payment": payment.reference, "by": "system" if system else "staff"}, purpose=reason)
         self._sync_payment(payment, "refund_requested", reason=f"{refund.reference}: {reason}", details={"refund": refund.reference, "amount_paise": amount})
+        appt = self.db.get(Appointment, payment.appointment_id) if payment.appointment_id else None
+        self._notifications().emit("staff.refund_requested", appointment=appt, payment=payment, refund=refund)
         return refund
 
     def auto_request_for_cancellation(self, appt: Appointment, eligible_paise: int, reason: str | None) -> list[PaymentRefund]:
@@ -228,6 +235,7 @@ class RefundService:
                     {"amount_paise": refund.amount_paise, "method": refund.refund_method, "refund_reference": refund.refund_reference})
         self._sync_payment(payment, "refund_processed", reason=payload.notes,
                            details={"refund": refund.reference, "amount_paise": refund.amount_paise, "refund_reference": refund.refund_reference})
+        self._notifications().emit("refund.processed", appointment=appt, payment=payment, refund=refund)
         return refund
 
     def attach_proof(self, refund: PaymentRefund, data: bytes) -> PaymentRefund:

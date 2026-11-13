@@ -51,6 +51,9 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "whatsapp_enabled": False,
         "reminder_hours": [24, 2],
         "notify_staff_on_booking": True,
+        "in_app_enabled": True,
+        "reply_to_email": "",
+        "events": {},  # {"appointment.reminder": {"enabled": true, "channels": ["email", "whatsapp"]}, ...}
     },
     "branding": {"primary_color": "#0f766e", "accent_color": "#14b8a6", "tagline": ""},
     "legal": {"privacy_policy": "", "terms": "", "refund_policy": ""},

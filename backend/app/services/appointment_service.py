@@ -302,7 +302,7 @@ class AppointmentService:
         previous = appt.status
         appt.status = target
         self.db.flush()
-        self._history(appt, previous, target, reason=reason or action)
+        self._history(appt, previous, target, reason=reason or action, extra={"by_customer": True} if by_customer else None)
         record_audit(self.db, action=f"appointment.{action}", actor=self.actor, organization_id=self.org.id, entity_type="appointment", entity_id=appt.reference,
                      before={"status": previous}, after={"status": target}, purpose=reason, meta=self.meta)
         if action in ("cancel", "expire"):
@@ -418,6 +418,9 @@ class AppointmentService:
             reason=reason, changed_at=utcnow(), metadata_=extra,
         ))
         self.db.flush()
+        from app.services.notification_service import NotificationService
+
+        NotificationService(self.db, self.org, self.actor, self.meta).on_appointment_status(appt, from_status, to_status, reason=reason, extra=extra)
 
     # -------------------------------------------------------------- lists
     def list(self, *, from_at: datetime | None, to_at: datetime | None, professional_id: str | None, branch_id: str | None, status: str | None, customer_id: str | None, search: str | None, restrict_professional_id: int | None = None) -> list[Appointment]:

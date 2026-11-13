@@ -46,6 +46,7 @@ export function BookingWizard() {
   const [answers, setAnswers] = useState<Answers>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [dependentId, setDependentId] = useState("");
+  const [whatsappOptIn, setWhatsappOptIn] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [coupon, setCoupon] = useState<string | null>(null);
   // Signed-in users get their profile pre-filled; anything they type wins.
@@ -87,7 +88,7 @@ export function BookingWizard() {
   const book = useMutation({
     mutationFn: () => publicBooking.book(slug, {
       hold_id: hold!.id, session_key: sessionKey,
-      customer: { full_name: details.full_name, mobile: details.mobile || undefined, email: details.email || undefined },
+      customer: { full_name: details.full_name, mobile: details.mobile || undefined, email: details.email || undefined, whatsapp_opt_in: whatsappOptIn },
       customer_notes: details.notes || undefined, dependent_id: dependentId || undefined,
       form_answers: bookingForm.data ? answers : undefined, coupon_code: coupon ?? undefined,
     }),
@@ -188,6 +189,12 @@ export function BookingWizard() {
               <Field label="Full name" htmlFor="bk_name" className="sm:col-span-2"><Input id="bk_name" required minLength={2} value={details.full_name} onChange={(e) => setDetails({ ...details, full_name: e.target.value })} /></Field>
               <Field label="Mobile number" htmlFor="bk_mobile"><Input id="bk_mobile" inputMode="tel" required={!user?.mobile && !details.email} value={details.mobile} onChange={(e) => setDetails({ ...details, mobile: e.target.value })} /></Field>
               <Field label="Email (optional)" htmlFor="bk_email"><Input id="bk_email" type="email" value={details.email} onChange={(e) => setDetails({ ...details, email: e.target.value })} /></Field>
+              {data.settings.messaging?.whatsapp_enabled ? (
+                <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                  <input type="checkbox" className="mt-0.5 size-4 accent-primary" checked={whatsappOptIn} onChange={(e) => setWhatsappOptIn(e.target.checked)} data-testid="whatsapp-opt-in" />
+                  <span>Send booking updates and reminders to my mobile on WhatsApp</span>
+                </label>
+              ) : null}
               {user && dependents.data?.length ? (
                 <Field label="Booking for" htmlFor="bk_for" className="sm:col-span-2">
                   <select id="bk_for" className="h-10 w-full rounded-lg border px-3 text-sm" value={dependentId} onChange={(e) => setDependentId(e.target.value)}>

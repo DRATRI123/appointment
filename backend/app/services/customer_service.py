@@ -41,6 +41,15 @@ class CustomerService:
         return c
 
     def resolve(self, payload: CustomerInput, *, user: User | None, allow_guest: bool, staff_booking: bool) -> Customer:
+        customer = self._resolve(payload, user=user, allow_guest=allow_guest, staff_booking=staff_booking)
+        if payload.whatsapp_opt_in:
+            # WhatsApp business messages need the customer's explicit opt-in; record when and how it was given.
+            prefs = dict(customer.communication_preferences or {})
+            prefs.update({"whatsapp": True, "whatsapp_opt_in_at": utcnow().isoformat(), "whatsapp_opt_in_source": "staff" if staff_booking else "booking"})
+            customer.communication_preferences = prefs
+        return customer
+
+    def _resolve(self, payload: CustomerInput, *, user: User | None, allow_guest: bool, staff_booking: bool) -> Customer:
         if payload.customer_id:
             if not staff_booking:
                 raise ValidationFailed("customer_id is only accepted for staff bookings.")

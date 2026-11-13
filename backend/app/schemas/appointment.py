@@ -33,6 +33,7 @@ class CustomerInput(APIModel):
     mobile: str | None = Field(default=None, max_length=32)
     email: str | None = Field(default=None, max_length=255)
     customer_id: str | None = Field(default=None, description="Existing customer (staff booking)")
+    whatsapp_opt_in: bool = Field(default=False, description="Customer agreed to receive booking updates on WhatsApp")
 
 
 class PriceQuote(APIModel):

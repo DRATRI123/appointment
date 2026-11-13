@@ -84,6 +84,19 @@ double-submit, session revocation check, tenant resolution, permission guards),
   as evidence (`bank_matched` in the payment log) and never verifies the payment. Exported reports
   neutralise spreadsheet formulas (`=`, `+`, `-`, `@` prefixes).
 
+## Notification security
+
+* Provider credentials only come from environment variables; the provider status endpoint shows which
+  adapter is active and whether it is configured, never a secret.
+* Templates cannot run code: only `{{name}}` placeholders from the event's variable list are accepted
+  (unknown names are rejected on save); email HTML escapes every value and only links http(s) URLs.
+* WhatsApp messages go only to customers who opted in (time and source recorded); customers can turn
+  email, SMS, WhatsApp and reminders off per clinic. Changes are audit-logged.
+* Messages carry the minimum needed (service, time, amount). Clinical notes and form answers are never
+  included. Customers see message status only through their own appointments.
+* Real OTP delivery never returns the code in the API response (only the console provider in
+  development does); a delivery failure returns 503 `otp_delivery_failed`.
+
 ## Healthcare privacy
 
 * Customer notes and documents are restricted to clinical roles (`customers:clinical_read`).

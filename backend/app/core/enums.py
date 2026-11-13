@@ -183,6 +183,7 @@ class NotificationChannel(StrEnum):
 class NotificationStatus(StrEnum):
     PENDING = "pending"
     SCHEDULED = "scheduled"
+    SENDING = "sending"
     SENT = "sent"
     FAILED = "failed"
     CANCELLED = "cancelled"

@@ -34,7 +34,8 @@ appointment is confirmed.
 | 5 | Customer management, family members, encrypted notes, private documents with retention, CSV export, no-code booking form builder with versions, templates, conditional fields and server-side validation | ✅ done |
 | 6 | Own UPI QR payments: UPI accounts, dynamic QR, app deep links, UTR and screenshot submission, verification queue with audit trail, cash and bank transfers, balance payments, coupons | ✅ done |
 | 7 | Refunds (request → approve → record the transfer you sent, with proof and maker-checker option) and bank statement reconciliation (CSV import with bank presets or custom column mapping, UTR/reference/amount matching suggestions, unmatched report with CSV export) | ✅ done |
-| 8–14 | See roadmap in `documentation/architecture.md` | planned |
+| 8 | Notifications: email (SMTP), SMS (MSG91, Twilio), WhatsApp (Meta Cloud API, Twilio), in-app bell; outbox with retries and backoff; reminders; editable templates with live preview; per-event channel settings; customer message preferences and WhatsApp opt-in; OTP delivery | ✅ done |
+| 9–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -160,16 +161,36 @@ One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perfo
 
 ## Background jobs
 
-Expired slot holds and unpaid appointments are cleaned up by the worker. Run it alongside the API:
+The worker expires holds and unpaid bookings, schedules reminders and **delivers notifications**
+(email, SMS, WhatsApp). Run it alongside the API; a short interval keeps messages prompt:
 
 ```powershell
 cd backend
 .\.venv\Scripts\Activate.ps1
-python -m app.workers.runner --interval 60
+python -m app.workers.runner --interval 20
 ```
 
-(`--once` runs a single pass.) The API also expires stale holds whenever availability is computed, so
-development works without the worker.
+(`--once` runs a single pass.) Without the worker, messages wait in the outbox (Admin → Notifications);
+in-app bell notifications appear immediately either way.
+
+### Sending real email, SMS and WhatsApp
+
+Development uses `console` providers: every message is written to the API/worker log and shown in the
+outbox. To deliver for real, set these in `backend/.env` and restart the API and worker:
+
+* Email: `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY` (`starttls`, `ssl` or `none`),
+  `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`.
+* SMS: `SMS_PROVIDER=msg91` with `MSG91_AUTH_KEY`, `MSG91_SENDER_ID`, or `SMS_PROVIDER=twilio` with
+  `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_SMS_FROM`. In India every SMS must match a
+  DLT-registered template: put the DLT/flow id on each SMS template (Admin → Notifications → Templates).
+* WhatsApp: `WHATSAPP_PROVIDER=meta` with `WHATSAPP_CLOUD_TOKEN`, `WHATSAPP_CLOUD_PHONE_NUMBER_ID`, or
+  `twilio` with `TWILIO_WHATSAPP_FROM`. Business-initiated messages need templates approved by Meta;
+  put the template name on each WhatsApp template. Only customers who opted in receive WhatsApp.
+* Login codes: `OTP_PROVIDER=notifications` sends OTPs through the SMS/email provider
+  (`OTP_SMS_TEMPLATE_ID` for the DLT template).
+
+Then turn the channels on in Admin → Notifications → Settings and use **Delivery setup → Send a test
+message**.
 
 ## Run with Docker (PostgreSQL + Redis)
 

@@ -85,6 +85,23 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_from: str | None = None
+    smtp_from_name: str | None = None  # defaults to the organization name per message
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    smtp_timeout_seconds: int = 20
+    # SMS: console | twilio | msg91. WhatsApp: console | meta | twilio. Credentials only via environment.
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    twilio_sms_from: str | None = None  # E.164 number or messaging service SID (MG...)
+    twilio_whatsapp_from: str | None = None  # e.g. whatsapp:+14155238886
+    msg91_auth_key: str | None = None
+    msg91_sender_id: str | None = None
+    msg91_route: str = "4"
+    whatsapp_cloud_token: str | None = None
+    whatsapp_cloud_phone_number_id: str | None = None
+    whatsapp_cloud_api_version: str = "v21.0"
+    otp_sms_template_id: str | None = None  # DLT / MSG91 flow id for the login-code SMS
+    notification_max_attempts: int = 5
+    notification_http_timeout_seconds: int = 15
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None

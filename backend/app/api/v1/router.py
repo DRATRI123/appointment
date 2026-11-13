@@ -8,6 +8,7 @@ from app.api.v1 import (
     customers,
     health,
     meta,
+    notifications,
     organizations,
     payments,
     platform,
@@ -38,6 +39,8 @@ api_router.include_router(payments.admin_router)
 api_router.include_router(payments.coupons_router)
 api_router.include_router(refunds.router)
 api_router.include_router(reconciliation.router)
+api_router.include_router(notifications.router)
+api_router.include_router(notifications.me_router)
 api_router.include_router(uploads.router)
 api_router.include_router(public.router)
 api_router.include_router(platform.router)

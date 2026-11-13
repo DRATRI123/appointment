@@ -34,7 +34,7 @@ export function DashboardShell({
         <header className="flex h-16 items-center justify-between gap-3 border-b px-4 md:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <span className="lg:hidden">
-              <Logo />
+              <Logo labelClassName="hidden sm:inline" />
             </span>
             <h1 className="hidden truncate text-base font-semibold sm:block md:text-lg">{title}</h1>
           </div>

@@ -335,3 +335,37 @@ eligible amount (`cancellation.auto_request_refund`, default on). The payment mo
 `GET /payments/{id}` now includes `bank_evidence` (statement lines carrying the submitted UTR or matched to
 the payment) and `refund` (the refund summary) so the verifier sees the bank line next to the customer's claim.
 
+## Phase 8: notifications
+
+### Organization (`notifications:read` / `notifications:write`)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/notifications?status&channel&event&search` | Outbox. Status: `pending`, `scheduled`, `sending`, `sent`, `failed`, `cancelled`, `read` |
+| GET | `/notifications/stats` · `/notifications/{id}` | Detail includes every delivery attempt (provider, message id, error) |
+| POST | `/notifications/{id}/retry` · `/cancel` | Write. Retry failed/cancelled; cancel pending/scheduled |
+| GET/PUT | `/notifications/settings` | `{email_enabled, sms_enabled, whatsapp_enabled, in_app_enabled, notify_staff_on_booking, reminder_hours (≤3, 0.25–336), reply_to_email, events: {code: {enabled, channels}}}`; staff events allow only email and in-app |
+| GET | `/notifications/events` | Catalogue: audience, variables, default and effective channels |
+| GET | `/notifications/templates` | Effective template per event and channel, with the default text |
+| PUT/DELETE | `/notifications/templates/{event}/{channel}` | `{subject (email), body, provider_template_id, is_active}`; unknown variables 422; DELETE resets to default |
+| POST | `/notifications/templates/{event}/{channel}/preview` | Rendered with sample data; email HTML; SMS segment count |
+| GET | `/notifications/providers` | Adapter per channel, configured or not, on for this organization |
+| POST | `/notifications/test` | `{channel, to}` sends a test through the real provider |
+
+Events: `appointment.pending_payment`, `appointment.confirmed`, `appointment.reminder`,
+`appointment.rescheduled`, `appointment.cancelled`, `appointment.expired`, `payment.submitted`,
+`payment.rejected`, `payment.verified`, `refund.processed`, and for staff `staff.new_booking`,
+`staff.payment_to_verify`, `staff.appointment_cancelled`, `staff.refund_requested`.
+
+### Personal
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/me/notifications?unread_only&limit` | In-app inbox across organizations, with unread count |
+| POST | `/me/notifications/read` | `{ids?}`; no ids marks everything read |
+| GET | `/customer/notification-preferences` | Per clinic: `email`, `sms`, `whatsapp`, `reminders`, `whatsapp_available` |
+| PATCH | `/customer/notification-preferences/{organization_id}` | Records opt-in/opt-out time for WhatsApp |
+
+Public booking accepts `customer.whatsapp_opt_in`; `GET /public/organizations/{slug}` exposes only
+`settings.messaging.whatsapp_enabled` from the notification settings.
+

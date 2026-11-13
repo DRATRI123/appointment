@@ -30,7 +30,10 @@ def _org(db: Session, slug: str) -> tuple[Organization, CatalogService]:
 
 def _public_settings(db: Session, org: Organization) -> dict:
     all_settings = OrganizationService(db).get_settings(org)
-    return {ns: all_settings.get(ns, {}) for ns in ("branding", "booking", "cancellation", "legal", "general")}
+    out = {ns: all_settings.get(ns, {}) for ns in ("branding", "booking", "cancellation", "legal", "general")}
+    # Only the flag the booking page needs; the rest of the notification config stays private.
+    out["messaging"] = {"whatsapp_enabled": bool(all_settings.get("notification", {}).get("whatsapp_enabled"))}
+    return out
 
 
 @router.get("/organizations/{slug}", response_model=PublicOrganization)

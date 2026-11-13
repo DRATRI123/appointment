@@ -220,6 +220,23 @@ phases plug in ARQ/Celery via the same `JobQueue` interface. Jobs: expire bookin
 unpaid appointments, send scheduled reminders, deliver webhooks with retry, parse bank statement
 imports, sync calendar events.
 
+### Notifications (Phase 8)
+
+```
+domain change (appointment/payment/refund service)
+   └─ NotificationService.emit(event)            same DB transaction (outbox)
+        ├─ event catalogue → audience, channels (org settings), template (org override or default)
+        ├─ recipients: customer (preferences, WhatsApp opt-in) or staff (permission, branch scope)
+        └─ notifications rows: in_app = sent now; email/sms/whatsapp = pending | scheduled
+worker: schedule_reminders → dispatch_due
+   └─ claim row (conditional UPDATE) → re-check (still confirmed? same start? channel still on?)
+      → provider adapter (console | smtp | msg91 | twilio | meta) → notification_logs
+      → sent | pending with backoff (1, 2, 4, 8 min) | failed (permanent or max attempts)
+```
+
+`emit` runs in a SAVEPOINT and never raises: a notification problem cannot fail a booking or payment.
+Templates are plain `{{variable}}` substitution (no expressions); email HTML escapes all text.
+
 ## 9. Development roadmap
 
 | Phase | Scope | Exit criteria |

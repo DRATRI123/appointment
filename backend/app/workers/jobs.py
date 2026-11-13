@@ -43,4 +43,25 @@ def purge_documents() -> int:
     return count
 
 
-PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents")
+@job("schedule_reminders")
+def reminders() -> int:
+    from app.services.notification_service import schedule_reminders
+
+    with session_scope() as db:
+        count = schedule_reminders(db)
+    log.info("jobs.schedule_reminders", created=count)
+    return count
+
+
+@job("dispatch_notifications")
+def dispatch_notifications() -> dict:
+    from app.services.notification_service import dispatch_due
+
+    with session_scope() as db:
+        counts = dispatch_due(db)
+    if any(counts.values()):
+        log.info("jobs.dispatch_notifications", **counts)
+    return counts
+
+
+PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "schedule_reminders", "dispatch_notifications")

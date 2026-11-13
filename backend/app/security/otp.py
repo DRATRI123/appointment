@@ -77,6 +77,10 @@ def register_otp_provider(provider: OTPProvider) -> None:
 
 def get_otp_provider() -> OTPProvider:
     name = get_settings().otp_provider
+    if name == "notifications" and name not in _PROVIDERS:
+        from app.notifications.otp import NotificationOTPProvider
+
+        register_otp_provider(NotificationOTPProvider())
     try:
         return _PROVIDERS[name]
     except KeyError as exc:

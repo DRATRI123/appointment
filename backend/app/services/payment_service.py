@@ -97,6 +97,11 @@ class PaymentService:
 
         return AppointmentService(self.db, self.org, self.actor, self.meta)
 
+    def _notifications(self):
+        from app.services.notification_service import NotificationService
+
+        return NotificationService(self.db, self.org, self.actor, self.meta)
+
     def get(self, public_id: str) -> Payment:
         p = self.db.scalar(select(Payment).where(Payment.public_id == public_id, Payment.organization_id == self.org.id))
         if p is None:
@@ -234,6 +239,10 @@ class PaymentService:
         self._set_status(payment, PaymentStatus.SUBMITTED, "submitted", details={"utr": utr_n, "screenshot": stored is not None, "by": "staff" if staff else "customer"})
         if appt is not None and appt.status == AppointmentStatus.PENDING_PAYMENT:
             self._appointments().move(appt, AppointmentStatus.PENDING_VERIFICATION, reason="payment submitted for verification")
+        notes = self._notifications()
+        if not staff:
+            notes.emit("payment.submitted", appointment=appt, payment=payment)
+        notes.emit("staff.payment_to_verify", appointment=appt, payment=payment)
         return sub
 
     # ------------------------------------------------------------- review
@@ -268,10 +277,12 @@ class PaymentService:
         self.db.flush()
         if appt.status in (AppointmentStatus.PENDING_PAYMENT, AppointmentStatus.PENDING_VERIFICATION):
             if appt.paid_amount_paise >= appt.advance_due_paise:
-                self._appointments().move(appt, AppointmentStatus.CONFIRMED, reason=f"payment {payment.reference} verified")
+                self._appointments().move(appt, AppointmentStatus.CONFIRMED, reason=f"payment {payment.reference} verified")  # sends the confirmation
             else:
                 appt.payment_due_at = now + self._window()
                 self._appointments().move(appt, AppointmentStatus.PENDING_PAYMENT, reason="verified amount is less than the advance due")
+        else:
+            self._notifications().emit("payment.verified", appointment=appt, payment=payment)
 
     def reject(self, payment: Payment, req: RejectRequest) -> Payment:
         if payment.status not in IN_REVIEW_STATUSES:
@@ -285,6 +296,11 @@ class PaymentService:
         if appt is not None and appt.status == AppointmentStatus.PENDING_VERIFICATION:
             appt.payment_due_at = payment.expires_at
             self._appointments().move(appt, AppointmentStatus.PENDING_PAYMENT, reason=f"payment rejected: {req.reason}")
+        from app.services.notification_service import fmt_date, fmt_time
+
+        tz = appt.timezone if appt is not None else None
+        self._notifications().emit("payment.rejected", appointment=appt, payment=payment, extra={
+            "reason": req.reason.strip(), "payment_deadline": f"{fmt_date(payment.expires_at, tz)}, {fmt_time(payment.expires_at, tz)}"})
         return payment
 
     def add_note(self, payment: Payment, notes: str) -> None:

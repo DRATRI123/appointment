@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Building2, Check, ChevronsUpDown, LogOut, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth/auth-provider";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -31,7 +32,8 @@ export function HeaderUser({ showOrgSwitcher = true }: { showOrgSwitcher?: boole
   const staffMemberships = memberships.filter((m) => m.role_code !== "customer");
 
   return (
-    <div className="flex min-w-0 shrink items-center gap-2">
+    <div className="flex min-w-0 shrink items-center gap-1.5 sm:gap-2">
+      <NotificationBell />
       {showOrgSwitcher && staffMemberships.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

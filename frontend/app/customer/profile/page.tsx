@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/forms/field";
+import { MessagePreferences } from "@/components/notifications/message-preferences";
 import { errorMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 
@@ -64,6 +65,7 @@ export default function ProfilePage() {
           </dl>
         </CardContent>
       </Card>
+      <MessagePreferences />
       <Card>
         <CardHeader><CardTitle>Password</CardTitle><CardDescription>Leave the current password empty if you signed up with OTP or Google.</CardDescription></CardHeader>
         <CardContent>
