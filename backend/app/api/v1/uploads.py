@@ -13,7 +13,7 @@ from app.schemas.catalog import UploadResponse
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
-WRITE_PERMISSIONS = ("organization:write", "branches:write", "professionals:write", "services:write")
+WRITE_PERMISSIONS = ("organization:write", "branches:write", "professionals:write", "services:write", "upi_accounts:write")
 
 
 @router.post("/images", response_model=UploadResponse, summary="Upload a public image (PNG/JPEG/WebP, max 5 MB)")

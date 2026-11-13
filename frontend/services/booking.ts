@@ -61,7 +61,7 @@ export const publicBooking = {
     api.get<DayAvailability>(`/public/organizations/${slug}/availability`, { searchParams: params }),
   summary: (slug: string, params: { service_id: string; branch_id: string; from_date: string; to_date: string; professional_id?: string }) =>
     api.get<AvailabilitySummary[]>(`/public/organizations/${slug}/availability/summary`, { searchParams: params }),
-  quote: (slug: string, params: { service_id: string; branch_id: string; professional_id?: string }) => api.get<PriceQuote>(`/public/organizations/${slug}/quote`, { searchParams: params }),
+  quote: (slug: string, params: { service_id: string; branch_id: string; professional_id?: string; coupon_code?: string }) => api.get<PriceQuote>(`/public/organizations/${slug}/quote`, { searchParams: params }),
   hold: (slug: string, body: Body) => api.post<Hold>(`/public/organizations/${slug}/holds`, body),
   releaseHold: (slug: string, id: string, session_key: string) => api.delete<ApiErrorBody>(`/public/organizations/${slug}/holds/${id}`, { searchParams: { session_key } }),
   book: (slug: string, body: Body) => api.post<AppointmentDetail>(`/public/organizations/${slug}/appointments`, body),

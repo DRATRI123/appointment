@@ -20,6 +20,7 @@ from app.models.auth import (
 from app.models.base import Base
 from app.models.booking_form import BookingForm, BookingFormField, BookingFormResponse
 from app.models.branch import Branch, BranchSetting
+from app.models.coupon import Coupon
 from app.models.customer import Customer, CustomerDependent, CustomerDocument, CustomerNote
 from app.models.integration import APIKey, Integration, IntegrationLog, WebhookEndpoint, WebhookEvent
 from app.models.notification import Notification, NotificationLog, NotificationTemplate
@@ -65,4 +66,5 @@ __all__ = [
     "NotificationTemplate", "Notification", "NotificationLog",
     "Integration", "APIKey", "WebhookEndpoint", "WebhookEvent", "IntegrationLog",
     "AuditLog", "SystemSetting",
+    "Coupon",
 ]

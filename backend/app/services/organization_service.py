@@ -40,7 +40,8 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "allow_pay_at_clinic": True,
         "allow_cash": True,
         "auto_expire_unpaid": True,
-        "duplicate_utr_policy": "block",
+        "show_payment_instructions": True,
+        "require_screenshot": False,
     },
     "notification": {
         "email_enabled": True,

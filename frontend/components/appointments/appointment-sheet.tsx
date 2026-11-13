@@ -6,6 +6,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth/auth-provider";
 import { appointmentsService, schedulingService } from "@/services/booking";
+import { paymentsService } from "@/services/payments";
+import { PaymentStatusBadge } from "@/components/payments/payment-status-badge";
+import { PaymentSheet } from "@/components/payments/payment-sheet";
+import { formatPaise } from "@/lib/utils";
+import { METHOD_LABEL } from "@/types/payment";
 import { AppointmentSummary, StatusBadge } from "@/components/booking/appointment-summary";
 import { SlotPicker } from "@/components/booking/slot-picker";
 import { Button } from "@/components/ui/button";
@@ -61,6 +66,7 @@ export function AppointmentSheet({ id, onClose, onChanged }: { id: string; onClo
               </div>
             ) : null}
             <p className="text-xs text-muted-foreground"><Link href={`/admin/customers/${a.customer.id}`} className="underline">Open customer record</Link></p>
+            <AppointmentPayments appointmentId={a.id} total={a.total_amount_paise} paid={a.paid_amount_paise} advanceDue={a.advance_due_paise} closed={["cancelled", "expired", "no_show"].includes(a.status)} />
             {a.status === "pending_payment" ? <p className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">Awaiting payment{a.payment_due_at ? ` until ${formatDateTime(a.payment_due_at)}` : ""}. Use <strong>Confirm</strong> only after payment is received; the UPI verification queue arrives in Phase 6.</p> : null}
             <div className="space-y-2">
               <Textarea placeholder="Reason / note for this action (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -86,5 +92,35 @@ export function AppointmentSheet({ id, onClose, onChanged }: { id: string; onClo
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+
+function AppointmentPayments({ appointmentId, total, paid, advanceDue, closed }: { appointmentId: string; total: number; paid: number; advanceDue: number; closed: boolean }) {
+  const { hasPermission } = useAuth();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState<string | null>(null);
+  const payments = useQuery({ queryKey: ["payments", "appointment", appointmentId], queryFn: () => paymentsService.list({ appointment_id: appointmentId, page_size: 50 }), enabled: hasPermission("payments:read") });
+  const create = useMutation({
+    mutationFn: (body: { kind: string; method: string }) => paymentsService.create({ appointment_id: appointmentId, ...body }),
+    onSuccess: (p) => { toast.success(p.method === "cash" ? `Cash ${formatPaise(p.amount_paise)} recorded` : `UPI request for ${formatPaise(p.amount_paise)} created`); ["payments", "appointment", "appointments", "calendar"].forEach((k) => queryClient.invalidateQueries({ queryKey: [k] })); if (p.method !== "cash") setOpen(p.id); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  if (!hasPermission("payments:read")) return null;
+  const balance = Math.max(0, total - paid);
+  const advanceLeft = Math.max(0, advanceDue - paid);
+  return (
+    <div className="space-y-2 rounded-lg border p-3 text-sm" data-testid="appointment-payments">
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">Payments</p><span className="text-xs text-muted-foreground">Paid {formatPaise(paid)} of {formatPaise(total)}{balance ? ` · balance ${formatPaise(balance)}` : ""}</span></div>
+      <ul className="divide-y">{payments.data?.data.map((p) => <li key={p.id} className="flex cursor-pointer items-center justify-between gap-2 py-1.5 hover:bg-muted/40" onClick={() => setOpen(p.id)}><span>{formatPaise(p.amount_paise)} · {METHOD_LABEL[p.method]} · {p.kind}{p.latest_utr ? <span className="ml-1 font-mono text-xs text-muted-foreground">{p.latest_utr}</span> : null}</span><PaymentStatusBadge status={p.status} /></li>)}{payments.data?.data.length === 0 ? <li className="py-2 text-muted-foreground">No payments yet.</li> : null}</ul>
+      {!closed && hasPermission("payments:record") && balance > 0 ? (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {advanceLeft > 0 ? <Button size="sm" variant="outline" onClick={() => create.mutate({ kind: "advance", method: "cash" })} disabled={create.isPending} data-testid="record-cash-advance">Cash advance {formatPaise(advanceLeft)}</Button> : null}
+          <Button size="sm" variant="outline" onClick={() => create.mutate({ kind: "balance", method: "cash" })} disabled={create.isPending} data-testid="record-cash-balance">Cash balance {formatPaise(balance)}</Button>
+          <Button size="sm" variant="outline" onClick={() => create.mutate({ kind: advanceLeft > 0 ? "advance" : "balance", method: "upi_qr" })} disabled={create.isPending}>UPI request {formatPaise(advanceLeft > 0 ? advanceLeft : balance)}</Button>
+        </div>
+      ) : null}
+      {open ? <PaymentSheet id={open} onClose={() => setOpen(null)} /> : null}
+    </div>
   );
 }

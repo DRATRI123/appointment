@@ -62,6 +62,7 @@ class AppointmentCreate(APIModel):
     confirm_without_payment: bool = Field(default=False, description="Staff only: confirm immediately and collect later")
     session_key: str | None = Field(default=None, max_length=64)
     form_answers: dict[str, Any] | None = None
+    coupon_code: str | None = Field(default=None, max_length=32)
 
 
 class RecurringCreate(AppointmentCreate):

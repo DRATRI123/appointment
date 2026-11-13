@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarCheck2, QrCode } from "lucide-react";
+import { CalendarCheck2 } from "lucide-react";
 import { useOrg } from "../../org-provider";
 import { bookingSessionKey, publicBooking } from "@/services/booking";
+import { publicPayments } from "@/services/payments";
+import { UpiCheckout } from "@/components/payments/upi-checkout";
 import { AppointmentSummary } from "@/components/booking/appointment-summary";
 import { SlotPicker } from "@/components/booking/slot-picker";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,13 @@ export function AppointmentStatusPage({ reference }: { reference: string }) {
     try { return window.localStorage.getItem(`ap.appt.${reference}`); } catch { return null; }
   }, [params, reference]);
   const appt = useQuery({ queryKey: ["public-appt", slug, reference, token], queryFn: () => publicBooking.status(slug, reference, token), retry: false });
+  const checkout = useQuery({
+    queryKey: ["public-checkout", slug, reference, token],
+    queryFn: () => publicPayments.checkout(slug, reference, token),
+    retry: false,
+    enabled: appt.isSuccess,
+    refetchInterval: (q) => (q.state.data && ["submitted", "under_review"].includes(q.state.data.payment.status) ? 20_000 : false),
+  });
   const [rescheduling, setRescheduling] = useState(false);
   const sessionKey = useMemo(() => bookingSessionKey(), []);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["public-appt", slug, reference] });
@@ -56,7 +65,7 @@ export function AppointmentStatusPage({ reference }: { reference: string }) {
       <div className="flex items-start gap-3">
         <span className="grid size-12 shrink-0 place-items-center rounded-full bg-success/15 text-success"><CalendarCheck2 className="size-6" /></span>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight" data-testid="booking-heading">{a.status === "pending_payment" ? "Slot reserved. Complete the payment to confirm." : a.status === "confirmed" ? "Your appointment is confirmed." : a.status === "cancelled" ? "This appointment was cancelled." : "Appointment details"}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight" data-testid="booking-heading">{a.status === "pending_payment" ? "Slot reserved. Complete the payment to confirm." : a.status === "pending_verification" ? "Payment received for checking. We'll confirm shortly." : a.status === "confirmed" ? "Your appointment is confirmed." : a.status === "cancelled" ? "This appointment was cancelled." : "Appointment details"}</h1>
           <p className="text-sm text-muted-foreground">Reference <span className="font-mono">{a.reference}</span>. Keep this link to manage your booking.</p>
         </div>
       </div>
@@ -65,13 +74,11 @@ export function AppointmentStatusPage({ reference }: { reference: string }) {
         <CardContent><AppointmentSummary appt={a} /></CardContent>
       </Card>
 
-      {a.status === "pending_payment" && due > 0 ? (
-        <Card className="border-primary/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><QrCode className="size-4" /> Pay by UPI</CardTitle>
-            <CardDescription>The UPI QR checkout and payment submission land in Phase 6. Until then {data.organization.name} will confirm your booking once payment is received{a.payment_due_at ? ` (please pay before ${new Date(a.payment_due_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })})` : ""}.</CardDescription>
-          </CardHeader>
-        </Card>
+      {checkout.data && (due > 0 || checkout.data.payment.status !== "verified") && !["cancelled", "expired"].includes(a.status) ? (
+        <UpiCheckout
+          checkout={checkout.data}
+          onSubmit={async (d) => { await publicPayments.submit(slug, reference, token, d); await Promise.all([checkout.refetch(), appt.refetch()]); }}
+        />
       ) : null}
 
       {(a.can_cancel || a.can_reschedule) && !rescheduling ? (

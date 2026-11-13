@@ -173,7 +173,15 @@ class AppointmentService:
             dependent_id = dep.id
 
         duration, _ = appointment_length(service, pro, branch)
-        q = quote(service, branch, pro)
+        coupon = None
+        if payload.coupon_code:
+            from app.services.coupon_service import CouponService
+
+            base = quote(service, branch, pro)
+            coupon = CouponService(self.db, self.org, self.actor, self.meta).validate(
+                payload.coupon_code, service=service, price_paise=base.subtotal_paise - base.discount_paise, customer_id=customer.id
+            )
+        q = quote(service, branch, pro, coupon=coupon)
         now = utcnow()
         mode = payload.consultation_mode or ("online" if service.consultation_mode == "online" else "in_person")
         if service.consultation_mode == "in_person" and mode == "online":
@@ -196,6 +204,7 @@ class AppointmentService:
             is_follow_up=(service.kind == "follow_up"), currency=q.currency, subtotal_paise=q.subtotal_paise, discount_paise=q.discount_paise,
             tax_paise=q.tax_paise, total_amount_paise=q.total_amount_paise, advance_due_paise=q.advance_due_paise, paid_amount_paise=0,
             pricing_snapshot=q.as_snapshot(), customer_notes=payload.customer_notes, internal_notes=payload.internal_notes if staff else None,
+            coupon_code=coupon.code if coupon is not None else None,
             payment_due_at=due_at, confirmed_at=now if status == AppointmentStatus.CONFIRMED else None,
             metadata_={"access_token": secrets.token_urlsafe(24)},
         )
@@ -206,6 +215,10 @@ class AppointmentService:
         if form is not None and form_answers is not None:
             forms.record_response(form, form_answers, appointment=appt, customer=customer)
         self._history(appt, None, status, reason="created")
+        if status == AppointmentStatus.PENDING_PAYMENT:
+            from app.services.payment_service import PaymentService
+
+            PaymentService(self.db, self.org, self.actor, self.meta).create_request(appt)
         record_audit(self.db, action="appointment.created", actor=self.actor, organization_id=self.org.id, entity_type="appointment",
                      entity_id=appt.reference, after={"status": status, "start_at": start.isoformat(), "total_paise": q.total_amount_paise}, meta=self.meta)
         return appt
@@ -279,6 +292,27 @@ class AppointmentService:
         self.db.flush()
         self._history(appt, previous, target, reason=reason or action)
         record_audit(self.db, action=f"appointment.{action}", actor=self.actor, organization_id=self.org.id, entity_type="appointment", entity_id=appt.reference,
+                     before={"status": previous}, after={"status": target}, purpose=reason, meta=self.meta)
+        if action in ("cancel", "expire"):
+            from app.core.enums import PaymentStatus
+            from app.services.payment_service import PaymentService
+
+            closed = PaymentStatus.CANCELLED if action == "cancel" else PaymentStatus.EXPIRED
+            PaymentService(self.db, self.org, self.actor, self.meta).close_open(appt, closed, reason or action)
+        return appt
+
+    def move(self, appt: Appointment, target: str, *, reason: str) -> Appointment:
+        """Internal status change driven by another module (payments). Writes history and audit like ``transition``."""
+        previous = appt.status
+        if previous == target:
+            return appt
+        if target == AppointmentStatus.CONFIRMED:
+            appt.confirmed_at = utcnow()
+            appt.payment_due_at = None
+        appt.status = target
+        self.db.flush()
+        self._history(appt, previous, target, reason=reason)
+        record_audit(self.db, action=f"appointment.{target}", actor=self.actor, organization_id=self.org.id, entity_type="appointment", entity_id=appt.reference,
                      before={"status": previous}, after={"status": target}, purpose=reason, meta=self.meta)
         return appt
 

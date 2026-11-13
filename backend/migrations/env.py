@@ -18,6 +18,15 @@ config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"
 target_metadata = Base.metadata
 
 
+def render_item(type_, obj, autogen_context):
+    """Render app-specific column types as plain SQLAlchemy so migrations never import app code."""
+    from app.core.types import UTCDateTime
+
+    if type_ == "type" and isinstance(obj, UTCDateTime):
+        return "sa.DateTime(timezone=True)"
+    return False
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=settings.database_url,
@@ -26,6 +35,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,
         compare_type=True,
+        render_item=render_item,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -43,6 +53,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             render_as_batch=True,
             compare_type=True,
+            render_item=render_item,
         )
         with context.begin_transaction():
             context.run_migrations()

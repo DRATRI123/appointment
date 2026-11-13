@@ -44,7 +44,7 @@ export function OrgProvider({ slug, children }: { slug: string; children: React.
               {org.phone ? <span className="flex items-center gap-1"><Phone className="size-3.5" />{org.phone}</span> : null}
             </p>
           </div>
-          <nav className="flex gap-4 text-sm">
+          <nav className="flex w-full gap-4 text-sm sm:w-auto">
             <Link href={`/o/${slug}`} className="hover:text-primary">Overview</Link>
             <Link href={`/o/${slug}#services`} className="hover:text-primary">Services</Link>
             <Link href={`/o/${slug}#professionals`} className="hover:text-primary">Professionals</Link>

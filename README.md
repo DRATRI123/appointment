@@ -32,8 +32,9 @@ appointment is confirmed.
 | 3 | Branches, professionals, service categories, services, packages, image uploads, public catalogue pages | ✅ done |
 | 4 | Schedules, exceptions, holidays, leave; availability engine; slot holds; booking wizard; appointment lifecycle, reschedule, recurring, waitlist; calendar | ✅ done |
 | 5 | Customer management, family members, encrypted notes, private documents with retention, CSV export, no-code booking form builder with versions, templates, conditional fields and server-side validation | ✅ done |
-| 6 | Own UPI QR payment system and verification dashboard | next |
-| 7–14 | See roadmap in `documentation/architecture.md` | planned |
+| 6 | Own UPI QR payments: UPI accounts, dynamic QR, app deep links, UTR and screenshot submission, verification queue with audit trail, cash and bank transfers, balance payments, coupons | ✅ done |
+| 7 | Refund management and bank statement reconciliation | next |
+| 8–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -150,6 +151,9 @@ One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perfo
 * **Platform console**: sign in with the super admin created above and open `/super-admin`.
 * **Public booking page**: every organization gets `/o/<slug>` listing branches, services and
   professionals. The slug is shown under Organization settings → Profile.
+* **UPI payments**: add the clinic's UPI ID under Payments → UPI accounts and scan the test QR. Bookings
+  that need an advance then show a QR to the customer. After they submit the UTR, approve it under
+  Payments → Verification once you see the credit in the bank.
 * **Google sign-in**: set `GOOGLE_CLIENT_ID` in `backend/.env`; the frontend button is wired in the
   Phase 2 API (`POST /api/v1/auth/google`) and needs the Google Identity Services script on the
   login page, which ships with the public booking site.

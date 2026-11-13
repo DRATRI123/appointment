@@ -46,6 +46,8 @@ export function BookingWizard() {
   const [answers, setAnswers] = useState<Answers>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [dependentId, setDependentId] = useState("");
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<string | null>(null);
   // Signed-in users get their profile pre-filled; anything they type wins.
   const details = { full_name: draft.full_name ?? user?.full_name ?? "", mobile: draft.mobile ?? user?.mobile ?? "", email: draft.email ?? user?.email ?? "", notes: draft.notes };
   const setDetails = (next: typeof details) => setDraft({ full_name: next.full_name, mobile: next.mobile, email: next.email, notes: next.notes });
@@ -57,9 +59,10 @@ export function BookingWizard() {
     enabled: !!serviceId && !!branchId,
   });
   const quote = useQuery({
-    queryKey: ["quote", slug, serviceId, branchId, slot?.professional_id],
-    queryFn: () => publicBooking.quote(slug, { service_id: serviceId!, branch_id: branchId!, professional_id: slot?.professional_id }),
+    queryKey: ["quote", slug, serviceId, branchId, slot?.professional_id, coupon],
+    queryFn: () => publicBooking.quote(slug, { service_id: serviceId!, branch_id: branchId!, professional_id: slot?.professional_id, coupon_code: coupon ?? undefined }),
     enabled: !!serviceId && !!branchId,
+    retry: false,
   });
 
   const bookingForm = useQuery({ queryKey: ["public-form", slug, serviceId, branchId], queryFn: () => publicForms.form(slug, { service_id: serviceId!, branch_id: branchId! }), enabled: !!serviceId && !!branchId });
@@ -86,7 +89,7 @@ export function BookingWizard() {
       hold_id: hold!.id, session_key: sessionKey,
       customer: { full_name: details.full_name, mobile: details.mobile || undefined, email: details.email || undefined },
       customer_notes: details.notes || undefined, dependent_id: dependentId || undefined,
-      form_answers: bookingForm.data ? answers : undefined,
+      form_answers: bookingForm.data ? answers : undefined, coupon_code: coupon ?? undefined,
     }),
     onSuccess: (appt) => {
       try { window.localStorage.setItem(`ap.appt.${appt.reference}`, appt.access_token ?? ""); } catch { /* ignore */ }
@@ -224,6 +227,17 @@ export function BookingWizard() {
               <Row label="Pay now" value={<strong data-testid="pay-now">{quote.data.advance_due_paise === 0 ? "Nothing" : formatPaise(quote.data.advance_due_paise)}</strong>} />
               <p className="pt-1 text-xs text-muted-foreground">{quote.data.advance_due_paise === 0 ? "Pay at the clinic." : "Paid by UPI to the clinic's own account after booking. The clinic confirms once the payment is verified."}</p>
             </div>
+          ) : null}
+          {quote.isError && coupon ? <p className="text-xs text-destructive" data-testid="coupon-error">{errorMessage(quote.error)} <button type="button" className="underline" onClick={() => { setCoupon(null); setCouponInput(""); }}>Remove</button></p> : null}
+          {serviceId && branchId && quote.data?.payment_mode !== "free" ? (
+            coupon && !quote.isError ? (
+              <p className="flex items-center justify-between text-xs"><span className="text-success">Coupon <b className="font-mono">{coupon}</b> applied</span><button type="button" className="underline" onClick={() => { setCoupon(null); setCouponInput(""); }}>Remove</button></p>
+            ) : (
+              <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (couponInput.trim()) setCoupon(couponInput.trim().toUpperCase()); }}>
+                <Input aria-label="Coupon code" placeholder="Coupon code" className="h-8 font-mono uppercase" value={couponInput} onChange={(e) => setCouponInput(e.target.value)} />
+                <Button type="submit" size="sm" variant="outline">Apply</Button>
+              </form>
+            )
           ) : null}
           {hold ? <Badge variant="success" className="w-full justify-center">Slot reserved</Badge> : null}
         </CardContent>

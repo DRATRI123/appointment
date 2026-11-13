@@ -1,6 +1,6 @@
-export function formatDateTime(value: string | null | undefined, locale = "en-IN") {
+export function formatDateTime(value: string | null | undefined, timeZone?: string | null, locale = "en-IN") {
   if (!value) return "—";
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: timeZone ?? undefined }).format(new Date(value));
 }
 
 export function titleCase(value: string) {

@@ -23,7 +23,7 @@ export interface SlotPickerProps {
 
 export function SlotPicker({ serviceId, branchId, professionalId, fetchDay, fetchSummary, onSelect, selected, startDate = new Date(), daysVisible = 7 }: SlotPickerProps) {
   const [offset, setOffset] = useState(0);
-  const [date, setDate] = useState<string>(toISODate(startDate));
+  const [chosen, setDate] = useState<string | null>(null);
   const first = addDays(startDate, offset);
   const days = useMemo(() => Array.from({ length: daysVisible }, (_, i) => addDays(first, i)), [first, daysVisible]);
   const from = toISODate(days[0]);
@@ -33,9 +33,14 @@ export function SlotPicker({ serviceId, branchId, professionalId, fetchDay, fetc
     queryKey: ["avail-summary", serviceId, branchId, professionalId, from, to],
     queryFn: () => fetchSummary({ service_id: serviceId, branch_id: branchId, from_date: from, to_date: to, professional_id: professionalId }),
   });
+  // Until the customer picks a day, open the first day in view that has a free slot (late in the
+  // evening "today" is usually full).
+  const firstAvailable = summary.data?.find((d) => d.available)?.date;
+  const date = chosen ?? firstAvailable ?? from;
   const day = useQuery({
     queryKey: ["avail-day", serviceId, branchId, professionalId, date],
     queryFn: () => fetchDay({ service_id: serviceId, branch_id: branchId, date, professional_id: professionalId }),
+    enabled: chosen !== null || !summary.isLoading,
     refetchInterval: 30_000,
   });
   const summaryMap = new Map((summary.data ?? []).map((s) => [s.date, s]));
@@ -72,7 +77,7 @@ export function SlotPicker({ serviceId, branchId, professionalId, fetchDay, fetc
         <Button type="button" size="icon" variant="outline" onClick={() => setOffset((o) => o + daysVisible)} aria-label="Later dates"><ChevronRight /></Button>
       </div>
 
-      {day.isLoading ? (
+      {day.isLoading || (chosen === null && summary.isLoading) ? (
         <Skeleton className="h-32" />
       ) : !day.data || day.data.professionals.every((p) => p.slots.length === 0) ? (
         <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No free slots on this day. Try another date.</p>

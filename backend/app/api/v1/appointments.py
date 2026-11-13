@@ -254,3 +254,19 @@ def reschedule_mine(appointment_id: str, payload: RescheduleRequest, db: DB, use
     appt, service = _own_appointment(db, user, appointment_id)
     service.reschedule(appt, payload, by_customer=True, session_key=None)
     return appointment_detail(db, service.get(appt.public_id), service=service, viewer_is_customer=True)
+
+
+
+@customer_router.get("/payments", summary="Payments of the signed-in customer across organizations")
+def my_payments(db: DB, user: CurrentUser) -> list[dict]:
+    from app.models import Payment
+    from app.services.payment_service import PaymentService
+
+    rows = db.scalars(select(Payment).join(Customer, Customer.id == Payment.customer_id).where(Customer.user_id == user.id).order_by(Payment.created_at.desc())).all()
+    out = []
+    for p in rows:
+        org = db.get(Organization, p.organization_id)
+        read = PaymentService(db, org).to_read(p).model_dump(mode="json")
+        read["organization_name"], read["organization_slug"] = org.name, org.slug
+        out.append(read)
+    return out

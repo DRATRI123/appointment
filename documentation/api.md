@@ -36,7 +36,7 @@ Base URL: `/api/v1`. Interactive docs: `/docs` (Swagger UI) and `/redoc`; OpenAP
 | `/public/organizations/{slug}/availability`, `/quote`, `/holds`, `/appointments` | 4 | implemented |
 | `/customers` (+ dependents, notes, documents, export), `/customer/organizations/{id}/…` | 5 | implemented |
 | `/booking-forms` (+ templates, publish, assign, responses), `/public/…/booking-form` | 5 | implemented |
-| `/upi-accounts`, `/payments`, `/admin/payments` | 6 | planned |
+| `/upi-accounts`, `/payments`, `/admin/payments`, `/coupons`, `/customer/payments` | 6 | implemented |
 | `/refunds`, `/bank-statements` | 7 | planned |
 | `/notifications` | 8 | planned |
 | `/integrations` | 9, 11 | planned |
@@ -229,3 +229,68 @@ Conditions (`conditions`): equals, not_equals, in, not_in, is_true, is_false, is
 Booking requests include `form_answers`; the server validates against the resolved form (hidden fields are
 skipped), returns 422 `form_invalid` with per-field `errors`, and stores a `booking_form_responses` row
 tied to the appointment and form version.
+
+## Phase 6 endpoints: own UPI QR payments
+
+No payment gateway is involved. Customers pay the organization's own UPI ID; staff confirm each payment
+against the bank before the booking is confirmed.
+
+### UPI accounts (tenant routes)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET / POST | `/upi-accounts` | `upi_accounts:read` / `upi_accounts:write` | UPI ID validated and lower-cased, unique per organization; optional branch scope; first account in a scope becomes its default; one default per scope |
+| GET / PATCH / DELETE | `/upi-accounts/{id}` | read / write | Static-QR accounts need an uploaded image (`/uploads/images`) |
+| GET | `/upi-accounts/{id}/preview?amount_paise=100` | read | Test QR and `upi://` URI |
+| POST | `/upi-accounts/assign` | write | `{service_id, upi_account_id|null}` |
+
+Account selection for a booking: service account → branch default → any active branch account →
+organization default → any active organization account.
+
+UPI request format (all values percent-encoded, `@` kept literal):
+`upi://pay?pa=<upi_id>&pn=<merchant>&tr=<payment ref>&tn=<appointment ref>&am=<rupees.paise>&cu=INR`.
+QR codes are PNGs rendered by `qrcode` (error correction M). A QR is a request, never proof of payment.
+
+### Payments (tenant routes)
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/payments?status&method&search&appointment_id&customer_id&from_at&to_at` | `payments:read` | Search matches reference, UTR, customer name or mobile |
+| POST | `/payments` | `payments:record` (cash) | `{appointment_id, kind: advance|balance|full, method: upi_qr|cash|bank_transfer, utr?}`; amount always computed (advance = advance due − paid, balance/full = total − paid); cash is recorded as verified by the recorder and cancels unpaid UPI requests; bank transfer creates a submission needing verification |
+| GET | `/payments/{id}` | read | Submissions and the immutable verification log |
+| GET | `/payments/{id}/checkout` | read | QR for the reception desk |
+| GET | `/payments/{id}/submissions/{sid}/screenshot` | read | Private file, `no-store`, audit-logged |
+
+### Verification queue
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/admin/payments/stats` | `payments:read` | Counts and amounts |
+| GET | `/admin/payments/queue?status=submitted,under_review` | `payments:verify` | Oldest submission first |
+| POST | `/admin/payments/{id}/review` | verify | Marks under review |
+| POST | `/admin/payments/{id}/verify` | verify | `{bank_credit_confirmed: true, verified_amount_paise, amount_mismatch_reason?, notes?}`; a different amount needs a reason; confirms the appointment when the advance is covered |
+| POST | `/admin/payments/{id}/reject` | verify | `{reason}`; reopens the payment with a fresh window and returns the appointment to pending payment |
+| POST | `/admin/payments/{id}/notes` | verify | Adds a note to the log |
+
+### Public checkout
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/public/organizations/{slug}/appointments/{reference}/payment?access_token` | QR data URL, UPI ID, merchant, instructions, app deep links (generic `upi://`, Google Pay, PhonePe, Paytm, BHIM), status and message; `null` when nothing is due |
+| POST | `…/payment/submit?access_token` | multipart `utr` (required), `transaction_reference`, `paid_at`, `payer_upi_id`, `notes`, `screenshot` (PNG/JPEG/WebP/PDF); rate limited; moves the appointment to pending verification and never confirms it |
+
+### Coupons
+
+`GET/POST /coupons`, `PATCH/DELETE /coupons/{id}` (`services:read` / `services:write`). Percent (with optional
+cap) or flat, minimum amount, validity window, total and per-customer limits, optional service list.
+Redemptions are counted from non-cancelled, non-expired appointments, so cancelling returns the use.
+`GET /public/organizations/{slug}/quote?coupon_code=` previews; bookings send `coupon_code` and the server
+re-validates. Invalid codes return 422 `coupon_invalid`.
+
+### Payment lifecycle
+
+`initiated → awaiting_payment → submitted → under_review → verified`; `rejected` (customer may resubmit),
+`expired` (appointment expired), `cancelled` (appointment cancelled or replaced by cash). Requests already
+submitted stay open on cancellation so staff can still verify and refund (Phase 7). Every change writes
+`payment_verification_logs` and `audit_logs`. A UTR can back only one payment per organization; a repeat
+attempt returns 409 `duplicate_utr` and is flagged on both payments.

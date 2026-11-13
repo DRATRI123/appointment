@@ -27,8 +27,11 @@ class Quote:
         }
 
 
-def quote(service: Service, branch: Branch, professional: Professional | None) -> Quote:
-    """Price precedence: professional fee override for this service → branch price override → service price."""
+def quote(service: Service, branch: Branch, professional: Professional | None, coupon=None) -> Quote:
+    """Price precedence: professional fee override for this service → branch price override → service price.
+
+    A validated ``Coupon`` (see ``CouponService.validate``) is applied after the list discount and before tax.
+    """
     source = "service"
     list_price = service.price_paise
     discounted = service.discounted_price_paise
@@ -57,6 +60,12 @@ def quote(service: Service, branch: Branch, professional: Professional | None) -
         list_price, discounted = 0, None
 
     effective = discounted if (discounted is not None and discounted < list_price) else list_price
+    coupon_discount_paise = 0
+    if coupon is not None:
+        from app.services.coupon_service import coupon_discount
+
+        coupon_discount_paise = coupon_discount(coupon, effective)
+        effective -= coupon_discount_paise
     discount = list_price - effective
     tax = round(effective * service.tax_percent / 100) if service.tax_percent else 0
     total = effective + tax
@@ -78,5 +87,6 @@ def quote(service: Service, branch: Branch, professional: Professional | None) -
         currency=service.currency, subtotal_paise=list_price, discount_paise=discount, tax_paise=tax,
         total_amount_paise=total, advance_due_paise=advance, payment_mode=mode,
         breakdown={"price_source": source, "tax_percent": service.tax_percent, "service_id": service.public_id, "branch_id": branch.public_id,
-                   "professional_id": professional.public_id if professional else None},
+                   "professional_id": professional.public_id if professional else None,
+                   "coupon_code": coupon.code if coupon is not None else None, "coupon_discount_paise": coupon_discount_paise},
     )

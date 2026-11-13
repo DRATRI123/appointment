@@ -130,10 +130,18 @@ def public_availability_summary(slug: str, db: DB, service_id: str, branch_id: s
     return compute_summary(db, org, service_id=service_id, branch_id=branch_id, professional_id=professional_id, from_date=from_date, to_date=to_date)
 
 
-@router.get("/organizations/{slug}/quote", response_model=PriceQuote, summary="Server-side price for a service at a branch (optionally with a professional)")
-def public_quote(slug: str, db: DB, service_id: str, branch_id: str, professional_id: str | None = None):
+@router.get("/organizations/{slug}/quote", response_model=PriceQuote, summary="Server-side price for a service at a branch (optionally with a professional and coupon)")
+def public_quote(slug: str, db: DB, service_id: str, branch_id: str, professional_id: str | None = None, coupon_code: str | None = None):
     org, catalog = _org(db, slug)
-    q = _quote(catalog.get_service(service_id), catalog.get_branch(branch_id), catalog.get_professional(professional_id) if professional_id else None)
+    service, branch = catalog.get_service(service_id), catalog.get_branch(branch_id)
+    pro = catalog.get_professional(professional_id) if professional_id else None
+    coupon = None
+    if coupon_code:
+        from app.services.coupon_service import CouponService
+
+        base = _quote(service, branch, pro)
+        coupon = CouponService(db, org).validate(coupon_code, service=service, price_paise=base.subtotal_paise - base.discount_paise, customer_id=None)
+    q = _quote(service, branch, pro, coupon=coupon)
     return PriceQuote(currency=q.currency, subtotal_paise=q.subtotal_paise, discount_paise=q.discount_paise, tax_paise=q.tax_paise, total_amount_paise=q.total_amount_paise,
                       advance_due_paise=q.advance_due_paise, payment_mode=q.payment_mode, breakdown=q.breakdown)
 
@@ -227,3 +235,48 @@ async def public_form_file(request: Request, response: Response, slug: str, db: 
     mime = validate_upload(data, allowed=FORM_FILE_TYPES, max_mb=settings.max_upload_size_mb)
     stored = get_storage().save(scope=f"org/{org.public_id}/form-files", visibility="private", data=data, mime_type=mime)
     return {"key": stored.key, "name": (file.filename or "file")[:160], "mime_type": stored.mime_type, "size_bytes": stored.size_bytes}
+
+
+# ------------------------------------------------------------- UPI checkout
+from datetime import datetime as _datetime  # noqa: E402
+
+from fastapi import Form  # noqa: E402
+
+from app.schemas.payment import Checkout  # noqa: E402
+from app.services.payment_service import PaymentService  # noqa: E402
+
+
+def _payment_for(db, slug: str, reference: str, access_token: str | None, user):
+    org, _ = _org(db, slug)
+    appt = AppointmentService(db, org, user).get_by_reference(reference, access_token, user)
+    svc = PaymentService(db, org, user)
+    payment = svc.current_for_appointment(appt)
+    return org, appt, svc, payment
+
+
+@router.get("/organizations/{slug}/appointments/{reference}/payment", response_model=Checkout | None,
+            summary="UPI checkout for an appointment: QR, UPI ID, app links and submission status (null when nothing is due)")
+def public_checkout(slug: str, reference: str, db: DB, user: OptionalUser, access_token: str | None = None):
+    _, _, svc, payment = _payment_for(db, slug, reference, access_token, user)
+    return svc.checkout(payment) if payment else None
+
+
+@router.post("/organizations/{slug}/appointments/{reference}/payment/submit", response_model=Checkout,
+             summary="Submit the UTR (and optional screenshot) after paying. This never confirms the payment by itself.")
+@limiter.limit("10/minute")
+async def public_submit_payment(
+    request: Request, response: Response, slug: str, reference: str, db: DB, user: OptionalUser, meta: Meta,
+    access_token: str | None = None,
+    utr: str = Form(..., max_length=64), transaction_reference: str | None = Form(None, max_length=128), paid_at: _datetime | None = Form(None),
+    payer_upi_id: str | None = Form(None, max_length=120), notes: str | None = Form(None, max_length=2000), screenshot: UploadFile | None = File(None),
+):
+    org, appt, _, payment = _payment_for(db, slug, reference, access_token, user)
+    svc = PaymentService(db, org, user, meta)
+    if payment is None:
+        from app.core.exceptions import ConflictError
+
+        raise ConflictError("Nothing is due for this appointment.", code="nothing_due")
+    data = await screenshot.read() if screenshot is not None else None
+    svc.submit(payment, utr=utr, transaction_reference=transaction_reference, paid_at=paid_at, payer_upi_id=payer_upi_id, notes=notes, screenshot=data or None,
+               submitted_ip=meta.ip_address)
+    return svc.checkout(payment)

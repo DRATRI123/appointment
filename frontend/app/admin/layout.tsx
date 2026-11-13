@@ -21,6 +21,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  TicketPercent,
   Stethoscope,
   Users,
   UsersRound,
@@ -52,9 +53,10 @@ const groups = [
   {
     title: "Payments",
     items: [
-      { href: "/admin/payments", label: "Payments", icon: CreditCard, phase: 6 },
-      { href: "/admin/upi-accounts", label: "UPI accounts", icon: QrCode, phase: 6 },
-      { href: "/admin/payments/verification", label: "Verification", icon: ShieldCheck, phase: 6 },
+      { href: "/admin/payments", label: "Payments", icon: CreditCard },
+      { href: "/admin/upi-accounts", label: "UPI accounts", icon: QrCode },
+      { href: "/admin/payments/verification", label: "Verification", icon: ShieldCheck },
+      { href: "/admin/coupons", label: "Coupons", icon: TicketPercent },
       { href: "/admin/reconciliation", label: "Bank reconciliation", icon: Landmark, phase: 7 },
       { href: "/admin/refunds", label: "Refunds", icon: RotateCcw, phase: 7 },
     ],
