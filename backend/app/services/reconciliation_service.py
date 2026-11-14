@@ -15,6 +15,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.database import lock_row
 from app.core.enums import BankImportStatus, PaymentMethod, PaymentStatus
 from app.core.enums import BankTransactionMatchStatus as M
 from app.core.exceptions import ConflictError, NotFoundError, ValidationFailed
@@ -270,6 +271,7 @@ class ReconciliationService:
         PaymentService(self.db, self.org, self.actor, self.meta)._log(payment, action, payment.status, payment.status, reason=reason, details=details)
 
     def confirm(self, txn: BankTransaction, payment_id: str, notes: str | None) -> BankTransaction:
+        lock_row(self.db, txn)
         if txn.match_status == M.MATCHED:
             raise ConflictError("This bank line is already matched. Unmatch it first.", code="already_matched")
         if txn.direction != "credit":
@@ -277,6 +279,7 @@ class ReconciliationService:
         payment = self.db.scalar(select(Payment).where(Payment.public_id == payment_id, Payment.organization_id == self.org.id))
         if payment is None:
             raise NotFoundError("Payment not found.")
+        lock_row(self.db, payment)  # two bank lines must not both claim one payment
         other = self.db.scalar(select(BankTransaction).where(BankTransaction.organization_id == self.org.id, BankTransaction.matched_payment_id == payment.id,
                                                             BankTransaction.match_status == M.MATCHED))
         if other is not None:

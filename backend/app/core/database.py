@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Generator, Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -83,3 +83,18 @@ def session_scope() -> Iterator[Session]:
         raise
     finally:
         db.close()
+
+
+def lock_row(db: Session, obj):
+    """Lock ``obj``'s row until the transaction ends and reload its committed values.
+
+    Call it first in any method that reads a status and then acts on it (verify a payment, request a refund, cancel an
+    appointment). On PostgreSQL concurrent requests otherwise all see the old status and all proceed: a payment
+    verified twice, refunds beyond what was paid. The second request now waits, then sees the new status and is
+    refused. On SQLite the whole database is already locked for the transaction, so this costs nothing there.
+    Pending changes are flushed first, so nothing made earlier in this transaction is lost by the reload."""
+    db.flush()
+    model = type(obj)
+    # The row must actually be fetched: the ORM refreshes the object only as rows are loaded.
+    locked = db.scalars(select(model).where(model.id == obj.id).with_for_update().execution_options(populate_existing=True)).one()
+    return locked

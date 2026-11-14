@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.database import lock_row
 from app.core.enums import AppointmentStatus, PaymentMethod, PaymentStatus, RefundStatus
 from app.core.exceptions import ConflictError, NotFoundError, PermissionDenied, ValidationFailed
 from app.core.ids import new_reference
@@ -118,6 +119,7 @@ class RefundService:
         return self._request(payment, payload.amount_paise, payload.reason, destination=payload.destination, method=payload.refund_method, system=system)
 
     def _request(self, payment: Payment, amount: int | None, reason: str, *, destination: str | None = None, method: str | None = None, system: bool = False) -> PaymentRefund:
+        lock_row(self.db, payment)  # parallel requests are summed one after another, never beyond what was paid
         if payment.status not in REFUNDABLE_PAYMENT_STATUSES:
             raise ConflictError("Only verified payments can be refunded. Unverified submissions should be rejected instead.", code="payment_not_verified")
         refundable = self.refundable(payment)
@@ -168,6 +170,7 @@ class RefundService:
         return out
 
     def _must_be(self, refund: PaymentRefund, *statuses: str, verb: str) -> None:
+        lock_row(self.db, refund)
         if refund.status not in statuses:
             raise ConflictError(f"A {refund.status} refund cannot be {verb}.", code="invalid_transition")
 
@@ -242,6 +245,7 @@ class RefundService:
         return refund
 
     def attach_proof(self, refund: PaymentRefund, data: bytes) -> PaymentRefund:
+        lock_row(self.db, refund)
         if refund.status not in (RefundStatus.APPROVED, RefundStatus.PROCESSED):
             raise ConflictError("Attach proof to an approved or processed refund.", code="invalid_transition")
         mime = validate_upload(data, allowed=PROOF_TYPES, max_mb=get_settings().max_upload_size_mb)

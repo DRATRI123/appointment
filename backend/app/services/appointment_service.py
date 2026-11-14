@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
+from app.core.database import lock_row
 from app.core.enums import AppointmentSource, AppointmentStatus, HoldStatus
 from app.core.exceptions import (
     ConflictError,
@@ -285,6 +286,7 @@ class AppointmentService:
         raise PermissionDenied("Not allowed to view this appointment.", code="forbidden")
 
     def transition(self, appt: Appointment, action: str, *, reason: str | None = None, by_customer: bool = False) -> Appointment:
+        lock_row(self.db, appt)  # e.g. cancel clicked twice, or cancel racing check-in
         allowed = TRANSITIONS.get(action)
         if allowed is None:
             raise ValidationFailed("Unknown action.")

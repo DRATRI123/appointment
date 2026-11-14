@@ -4,6 +4,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.database import lock_row
 from app.core.enums import AppointmentStatus
 from app.core.exceptions import ConflictError, NotFoundError, ValidationFailed
 from app.core.time import utcnow
@@ -91,6 +92,8 @@ class CouponService:
             raise CouponInvalid("This coupon does not apply to the selected service.")
         if c.min_amount_paise and price_paise < c.min_amount_paise:
             raise CouponInvalid("The booking amount is below this coupon's minimum.")
+        if c.max_redemptions is not None or c.per_customer_limit is not None:
+            lock_row(self.db, c)  # bookings with the same coupon are counted one after another
         if c.max_redemptions is not None and self.redemptions(c) >= c.max_redemptions:
             raise CouponInvalid("This coupon has been fully used.")
         if customer_id is not None and c.per_customer_limit is not None and self.redemptions(c, customer_id) >= c.per_customer_limit:

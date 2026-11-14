@@ -42,7 +42,7 @@ class APIKey(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     __tablename__ = "api_keys"
 
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    key_prefix: Mapped[str] = mapped_column(String(12), nullable=False, index=True)
+    key_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)  # "ak_live_" + 8 hex = 16
     key_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     scopes: Mapped[list[Any] | None] = mapped_column(nullable=True)  # permission codes
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))

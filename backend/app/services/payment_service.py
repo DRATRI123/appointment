@@ -22,6 +22,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.database import lock_row
 from app.core.enums import AppointmentStatus, PaymentKind, PaymentMethod, PaymentStatus
 from app.core.exceptions import ConflictError, DuplicateUTR, NotFoundError, PermissionDenied, ValidationFailed
 from app.core.ids import new_reference
@@ -149,7 +150,7 @@ class PaymentService:
         return payment
 
     def staff_create(self, payload: PaymentCreate) -> Payment:
-        appt = self._appointments().get(payload.appointment_id)
+        appt = lock_row(self.db, self._appointments().get(payload.appointment_id))  # one money record per appointment at a time
         if appt.status in (AppointmentStatus.CANCELLED, AppointmentStatus.EXPIRED, AppointmentStatus.NO_SHOW):
             raise ConflictError("This appointment is closed.", code="appointment_closed")
         open_rows = [p for p in self.for_appointment(appt) if p.status in OPEN_STATUSES or p.status in IN_REVIEW_STATUSES]
@@ -183,6 +184,7 @@ class PaymentService:
     # ------------------------------------------------------------- submit
     def submit(self, payment: Payment, *, utr: str, transaction_reference: str | None, paid_at: datetime | None, payer_upi_id: str | None,
                notes: str | None, screenshot: bytes | None, staff: bool = False, submitted_ip: str | None = None) -> PaymentSubmission:
+        lock_row(self.db, payment)
         if payment.status in IN_REVIEW_STATUSES:
             raise ConflictError("This payment is already submitted and waiting for verification.", code="already_submitted")
         if payment.status not in SUBMITTABLE:
@@ -250,12 +252,14 @@ class PaymentService:
 
     # ------------------------------------------------------------- review
     def start_review(self, payment: Payment) -> Payment:
+        lock_row(self.db, payment)
         if payment.status != PaymentStatus.SUBMITTED:
             raise ConflictError("Only submitted payments can be taken for review.", code="invalid_transition")
         self._set_status(payment, PaymentStatus.UNDER_REVIEW, "review_started")
         return payment
 
     def verify(self, payment: Payment, req: VerifyRequest) -> Payment:
+        lock_row(self.db, payment)  # two people approving at once: the second waits, then sees "verified" and is refused
         if payment.status not in IN_REVIEW_STATUSES:
             raise ConflictError("Only submitted payments can be verified.", code="invalid_transition")
         if not req.bank_credit_confirmed:
@@ -279,6 +283,7 @@ class PaymentService:
         appt = self.db.get(Appointment, payment.appointment_id) if payment.appointment_id else None
         if appt is None:
             return
+        lock_row(self.db, appt)  # advance and balance verified at the same moment must both be added
         appt.paid_amount_paise = (appt.paid_amount_paise or 0) + amount
         self.db.flush()
         if appt.status in (AppointmentStatus.PENDING_PAYMENT, AppointmentStatus.PENDING_VERIFICATION):
@@ -291,6 +296,7 @@ class PaymentService:
             self._notifications().emit("payment.verified", appointment=appt, payment=payment)
 
     def reject(self, payment: Payment, req: RejectRequest) -> Payment:
+        lock_row(self.db, payment)
         if payment.status not in IN_REVIEW_STATUSES:
             raise ConflictError("Only submitted payments can be rejected.", code="invalid_transition")
         now = utcnow()

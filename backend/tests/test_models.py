@@ -160,3 +160,30 @@ def test_upi_id_unique_per_organization(db):
     db.add(UPIAccount(organization_id=org.id, display_name="B", upi_id="acme@upi", merchant_name="Acme"))
     with pytest.raises(IntegrityError):
         db.flush()
+
+
+def test_enum_backed_columns_fit_every_enum_value():
+    """SQLite ignores VARCHAR lengths; PostgreSQL rejects values that do not fit. Catch it before production does."""
+    from enum import StrEnum
+
+    from sqlalchemy import String
+
+    from app.models import Base
+
+    too_short = []
+    for table in Base.metadata.sorted_tables:
+        for col in table.columns:
+            default = col.default.arg if col.default is not None and not callable(col.default.arg) else None
+            if isinstance(col.type, String) and col.type.length and isinstance(default, StrEnum):
+                longest = max(len(v) for v in type(default))
+                if longest > col.type.length:
+                    too_short.append(f"{table.name}.{col.name} VARCHAR({col.type.length}) < {type(default).__name__} ({longest})")
+    assert too_short == []
+
+
+def test_api_key_prefix_fits_its_column():
+    from app.models import APIKey
+    from app.security.api_keys import generate
+
+    raw, prefix = generate()
+    assert raw.startswith(prefix) and len(prefix) <= APIKey.__table__.c.key_prefix.type.length

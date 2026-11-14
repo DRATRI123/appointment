@@ -25,13 +25,27 @@ def db_path(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return tmp_path_factory.mktemp("db") / "test.db"
 
 
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")  # e.g. postgresql+psycopg://app:pw@127.0.0.1/app_test
+
+
+def is_postgres() -> bool:
+    return bool(TEST_DATABASE_URL and TEST_DATABASE_URL.startswith("postgresql"))
+
+
 @pytest.fixture(scope="session")
 def engine(db_path: Path):
-    eng = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    """SQLite file by default; the whole suite runs on PostgreSQL when TEST_DATABASE_URL is set (CI does both)."""
+    if is_postgres():
+        eng = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+        Base.metadata.drop_all(eng)
+        with eng.begin() as conn:
+            conn.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
+    else:
+        eng = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
 
-    @event.listens_for(eng, "connect")
-    def _fk(dbapi_connection, _):
-        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+        @event.listens_for(eng, "connect")
+        def _fk(dbapi_connection, _):
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
     Base.metadata.create_all(eng)
     # Equivalent of `alembic stamp head`: the schema above is the current release (test_seed_and_migrations checks the
