@@ -19,6 +19,7 @@ jobs:
       postgres:
         image: postgres:16-alpine   # matches the runner's PostgreSQL 16 client tools
         env: {POSTGRES_USER: app, POSTGRES_PASSWORD: ci-only-password, POSTGRES_DB: backup_test}
+        # extra databases (app_test, migrations_check, *_race, *_migrate) are created by the steps and tests
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U app" --health-interval 5s --health-retries 20
       redis:
@@ -40,15 +41,30 @@ jobs:
         run: bandit -q -r app
       - name: Dependency vulnerabilities (pip-audit)
         run: pip-audit -r requirements.txt
-      - name: Migrations apply cleanly
-        run: alembic upgrade head
+      - name: Migrations apply cleanly and match the models (SQLite)
+        run: alembic upgrade head && alembic check
         env:
           APP_ENV: test
           DATABASE_URL: sqlite:///./data/ci.db
+      - name: Migrations apply cleanly, match the models and roll back (PostgreSQL)
+        run: |
+          PGPASSWORD=ci-only-password psql -h 127.0.0.1 -U app -d backup_test -c "CREATE DATABASE migrations_check" -c "CREATE DATABASE app_test"
+          alembic upgrade head && alembic check
+          alembic downgrade base && alembic upgrade head
+        env:
+          APP_ENV: test
+          DATABASE_URL: postgresql+psycopg://app:ci-only-password@127.0.0.1:5432/migrations_check
       - name: Tests with coverage
         run: python -m pytest --cov=app --cov-report=term-missing:skip-covered --cov-fail-under=88
         env:
           APP_ENV: test
+          TEST_POSTGRES_URL: postgresql+psycopg://app:ci-only-password@127.0.0.1:5432/backup_test
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      - name: Whole suite on PostgreSQL (concurrency races, data migration, dialect differences)
+        run: python -m pytest
+        env:
+          APP_ENV: test
+          TEST_DATABASE_URL: postgresql+psycopg://app:ci-only-password@127.0.0.1:5432/app_test
           TEST_POSTGRES_URL: postgresql+psycopg://app:ci-only-password@127.0.0.1:5432/backup_test
           TEST_REDIS_URL: redis://127.0.0.1:6379/0
 

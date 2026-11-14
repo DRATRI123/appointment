@@ -29,6 +29,8 @@ class Appointment(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
             postgresql_where=text(f"status IN ({_ACTIVE_STATUS_SQL})"),
         ),
         Index("ix_appointments_org_start", "organization_id", "start_at"),
+        # First-visit dates per customer (new vs returning on the dashboard): answered from the index alone.
+        Index("ix_appointments_org_customer_start", "organization_id", "customer_id", "start_at", postgresql_include=["status"]),
         Index("ix_appointments_org_status", "organization_id", "status"),
         Index("ix_appointments_customer_start", "customer_id", "start_at"),
         Index("ix_appointments_professional_start", "professional_id", "start_at"),

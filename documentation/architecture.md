@@ -206,12 +206,27 @@ Double-booking prevention stack:
 Rules that are never bypassed: a screenshot or UTR never confirms a payment; QR is a request not a
 receipt; amounts are never trusted from the client; every status change is logged with actor.
 
-### SQLite write serialisation
+### Concurrency: why double booking and double payment cannot happen
 
-In development every session begins with `BEGIN IMMEDIATE`, so one writer at a time holds the database
-and slot reservation cannot race. Reads inside a request also run under that lock, which is fine for a
-single clinic on one machine but is the main reason PostgreSQL is required before multi-instance or
-high-traffic deployment (Phase 14).
+* **SQLite** (development, a single PC): every transaction starts with `BEGIN IMMEDIATE`, so there is one writer at
+  a time.
+* **PostgreSQL** (production): transactions run in parallel, so every "read the current state, then decide" step
+  takes a row lock first (`SELECT ... FOR UPDATE`):
+  * booking, holding or rescheduling a slot locks the **professional**, so two requests for one doctor are decided
+    one after another; a partial unique index on (professional, branch, start, sequence) for active appointments
+    and holds is the last line of defence;
+  * verifying or rejecting a payment, recording cash and requesting a refund lock the **payment** (and the
+    appointment whose paid total changes); approving or processing a refund locks the **refund**;
+  * cancelling or changing an appointment's status locks the **appointment**; applying a limited coupon locks the
+    **coupon**; matching a bank line locks the **bank line** and the **payment**.
+* The lock helper (`app.core.database.lock_row`) reloads the row after locking, so the second request sees the
+  first one's result and is refused (`409`), never applied twice.
+* The database commit happens **before** the HTTP response is sent (`Depends(get_db, scope="function")`): a client is
+  never told "created" for data whose commit failed, and its next request always sees what it just created.
+* Proof: `backend/tests/test_races.py` fires parallel requests through the real API with real commits on SQLite and
+  PostgreSQL (CI runs both): overlapping bookings of different lengths, holds against staff bookings, reschedules
+  into one slot, a payment verified by several people at once, refund requests beyond the amount paid, a coupon
+  past its limit, cancel clicked twice.
 
 ## 8. Background jobs
 
@@ -269,7 +284,7 @@ their manual link), or an explicit choice. A link staff set on one appointment a
 | 11 | Developer API keys, webhooks, external integrations | Signed deliveries + retries |
 | 12 | Security hardening, full test suites, Playwright e2e | Security checklist passes |
 | 13 | Production deployment, backups, monitoring | Docker + runbooks |
-| 14 | PostgreSQL migration, performance tuning | Load test targets met |
+| 14 | PostgreSQL migration, performance tuning | Load test targets met (see `performance.md`) |
 
 ## 10. Project folder structure
 

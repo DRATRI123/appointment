@@ -107,7 +107,7 @@ def list_payments(
     svc = PaymentService(db, ctx.organization, ctx.user, meta)
     rows, total = svc.list(status=status_filter, method=method, from_at=from_at, to_at=to_at, search=search, appointment_id=appointment_id,
                            customer_id=customer_id, page=params.page, page_size=params.page_size)
-    return Page(data=[svc.to_read(p) for p in rows], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
+    return Page(data=[svc.to_read(p) for p in svc.prepare_reads(rows)], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
 
 
 @payments_router.post("", response_model=PaymentDetail, status_code=status.HTTP_201_CREATED,
@@ -152,7 +152,7 @@ def stats(db: DB, ctx: ReadPay, meta: Meta):
 def queue(db: DB, ctx: VerifyPay, meta: Meta, params: Annotated[PageParams, Depends(page_params)], status_filter: Annotated[str, Query(alias="status")] = "submitted,under_review"):
     svc = PaymentService(db, ctx.organization, ctx.user, meta)
     rows, total = svc.list(status=status_filter, method=None, from_at=None, to_at=None, search=None, appointment_id=None, customer_id=None, page=params.page, page_size=params.page_size)
-    return Page(data=[svc.to_read(p) for p in rows], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
+    return Page(data=[svc.to_read(p) for p in svc.prepare_reads(rows)], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
 
 
 @admin_router.post("/{payment_id}/review", response_model=PaymentDetail)

@@ -17,11 +17,18 @@
 		}
 		reverse_proxy api:8000 {
 			health_uri /api/v1/health
+			transport http {
+				keepalive 60s
+			}
 		}
 	}
 
 	handle {
-		reverse_proxy web:3000
+		reverse_proxy web:3000 {
+			transport http {
+				keepalive 60s
+			}
+		}
 	}
 
 	log {

@@ -82,6 +82,11 @@ class AvailabilityService:
         self.db = db
         self.org = org
         self._booking_settings = None
+        # Configuration caches for this instance (one request): schedules, exceptions and holidays do not change while
+        # slots are computed. Busy time (appointments, holds) is never cached: bookings re-read it under a lock.
+        self._holidays: list[Holiday] | None = None
+        self._schedules: dict[tuple[int, int], list[Schedule]] = {}
+        self._exceptions: dict[int, list[ScheduleException]] = {}
 
     @property
     def booking_settings(self) -> dict:
@@ -100,17 +105,32 @@ class AvailabilityService:
             self.db.flush()
         return len(rows)
 
+    def _org_holidays(self) -> list[Holiday]:
+        if self._holidays is None:
+            self._holidays = list(self.db.scalars(select(Holiday).where(Holiday.organization_id == self.org.id)).all())
+        return self._holidays
+
+    def _pro_exceptions(self, professional_id: int) -> list[ScheduleException]:
+        if professional_id not in self._exceptions:
+            self._exceptions[professional_id] = list(self.db.scalars(
+                select(ScheduleException).where(ScheduleException.professional_id == professional_id)).all())
+        return self._exceptions[professional_id]
+
+    def _pro_schedules(self, professional_id: int, branch_id: int) -> list[Schedule]:
+        key = (professional_id, branch_id)
+        if key not in self._schedules:
+            self._schedules[key] = list(self.db.scalars(select(Schedule).where(
+                Schedule.professional_id == professional_id, Schedule.branch_id == branch_id, Schedule.is_active.is_(True))).all())
+        return self._schedules[key]
+
     def windows_for(self, professional: Professional, branch: Branch, day: date, tz: ZoneInfo) -> list[Window]:
         # Holidays (organization-wide or this branch; yearly recurring by month/day)
-        for h in self.db.scalars(select(Holiday).where(Holiday.organization_id == self.org.id, Holiday.branch_id.in_([None, branch.id]) if False else (Holiday.branch_id.is_(None) | (Holiday.branch_id == branch.id)))).all():
+        for h in self._org_holidays():
+            if h.branch_id not in (None, branch.id):
+                continue
             if h.date == day or (h.is_recurring_yearly and (h.date.month, h.date.day) == (day.month, day.day)):
                 return []
-        exceptions = self.db.scalars(
-            select(ScheduleException).where(
-                ScheduleException.professional_id == professional.id, ScheduleException.date == day,
-                ScheduleException.branch_id.is_(None) | (ScheduleException.branch_id == branch.id),
-            )
-        ).all()
+        exceptions = [e for e in self._pro_exceptions(professional.id) if e.date == day and e.branch_id in (None, branch.id)]
         if any(not e.is_available for e in exceptions):
             return []
         windows: list[Window] = []
@@ -119,52 +139,64 @@ class AvailabilityService:
             for e in available_exceptions:
                 windows.append(Window(_at(day, e.start_time, tz), _at(day, e.end_time, tz), e.capacity or professional.slot_capacity, None))
             return windows
-        schedules = self.db.scalars(
-            select(Schedule).where(
-                Schedule.professional_id == professional.id, Schedule.branch_id == branch.id, Schedule.weekday == day.weekday(), Schedule.is_active.is_(True),
-            )
-        ).all()
-        for s in schedules:
+        for s in self._pro_schedules(professional.id, branch.id):
+            if s.weekday != day.weekday():
+                continue
             if s.valid_from and day < s.valid_from:
                 continue
             if s.valid_to and day > s.valid_to:
                 continue
             windows.append(Window(_at(day, s.start_time, tz), _at(day, s.end_time, tz), s.capacity or professional.slot_capacity, s.slot_minutes))
-        return windows
+        return sorted(windows, key=lambda w: w.start)
 
     def busy_for(self, professional: Professional, branch: Branch, day_start: datetime, day_end: datetime, *, exclude_appointment_id: int | None = None, exclude_hold_id: int | None = None) -> tuple[list[Busy], list[tuple[datetime, datetime]]]:
-        appts = self.db.execute(
-            select(Appointment.start_at, Appointment.end_at, Appointment.slot_sequence, Appointment.id).where(
-                Appointment.professional_id == professional.id, Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
+        return self.busy_for_many([professional], branch, day_start, day_end, exclude_appointment_id=exclude_appointment_id, exclude_hold_id=exclude_hold_id)[professional.id]
+
+    def busy_for_many(self, professionals: list[Professional], branch: Branch, day_start: datetime, day_end: datetime, *,
+                      exclude_appointment_id: int | None = None, exclude_hold_id: int | None = None) -> dict[int, tuple[list[Busy], list[tuple[datetime, datetime]]]]:
+        """Appointments, live holds, leave and external calendar blocks for several professionals in four queries.
+        Always read fresh (never cached): the booking path calls this after locking the professional."""
+        from app.models import ExternalBusyBlock
+
+        ids = [p.id for p in professionals]
+        out: dict[int, tuple[list[Busy], list[tuple[datetime, datetime]]]] = {pid: ([], []) for pid in ids}
+        if not ids:
+            return out
+        for pid, s, e, seq, aid in self.db.execute(
+            select(Appointment.professional_id, Appointment.start_at, Appointment.end_at, Appointment.slot_sequence, Appointment.id).where(
+                Appointment.professional_id.in_(ids), Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
                 Appointment.end_at > day_start, Appointment.start_at < day_end,
             )
-        ).all()
-        holds = self.db.execute(
-            select(BookingHold.start_at, BookingHold.end_at, BookingHold.slot_sequence, BookingHold.id).where(
-                BookingHold.professional_id == professional.id, BookingHold.status == HoldStatus.ACTIVE, BookingHold.expires_at > utcnow(),
+        ):
+            if aid != exclude_appointment_id:
+                out[pid][0].append(Busy(s, e, seq))
+        for pid, s, e, seq, hid in self.db.execute(
+            select(BookingHold.professional_id, BookingHold.start_at, BookingHold.end_at, BookingHold.slot_sequence, BookingHold.id).where(
+                BookingHold.professional_id.in_(ids), BookingHold.status == HoldStatus.ACTIVE, BookingHold.expires_at > utcnow(),
                 BookingHold.end_at > day_start, BookingHold.start_at < day_end,
             )
-        ).all()
-        busy = [Busy(s, e, seq) for s, e, seq, aid in appts if aid != exclude_appointment_id]
-        busy += [Busy(s, e, seq) for s, e, seq, hid in holds if hid != exclude_hold_id]
-        leaves = self.db.execute(
-            select(ProfessionalLeave.start_at, ProfessionalLeave.end_at).where(
-                ProfessionalLeave.professional_id == professional.id, ProfessionalLeave.status == "approved",
+        ):
+            if hid != exclude_hold_id:
+                out[pid][0].append(Busy(s, e, seq))
+        for pid, s, e in self.db.execute(
+            select(ProfessionalLeave.professional_id, ProfessionalLeave.start_at, ProfessionalLeave.end_at).where(
+                ProfessionalLeave.professional_id.in_(ids), ProfessionalLeave.status == "approved",
                 ProfessionalLeave.branch_id.is_(None) | (ProfessionalLeave.branch_id == branch.id),
                 ProfessionalLeave.end_at > day_start, ProfessionalLeave.start_at < day_end,
             )
-        ).all()
-        from app.models import ExternalBusyBlock
-
-        external = self.db.execute(
-            select(ExternalBusyBlock.start_at, ExternalBusyBlock.end_at).where(
-                ExternalBusyBlock.professional_id == professional.id, ExternalBusyBlock.end_at > day_start, ExternalBusyBlock.start_at < day_end,
+        ):
+            out[pid][1].append((s, e))
+        for pid, s, e in self.db.execute(
+            select(ExternalBusyBlock.professional_id, ExternalBusyBlock.start_at, ExternalBusyBlock.end_at).where(
+                ExternalBusyBlock.professional_id.in_(ids), ExternalBusyBlock.end_at > day_start, ExternalBusyBlock.start_at < day_end,
             )
-        ).all()
-        return busy, [(s, e) for s, e in leaves] + [(s, e) for s, e in external]
+        ):
+            out[pid][1].append((s, e))
+        return out
 
     # ------------------------------------------------------------- engine
-    def slots_for_professional(self, service: Service, professional: Professional, branch: Branch, day: date, *, now: datetime | None = None, ignore_notice: bool = False, exclude_appointment_id: int | None = None) -> list[SlotRead]:
+    def slots_for_professional(self, service: Service, professional: Professional, branch: Branch, day: date, *, now: datetime | None = None, ignore_notice: bool = False, exclude_appointment_id: int | None = None,
+                               busy_override: tuple[list[Busy], list[tuple[datetime, datetime]]] | None = None) -> list[SlotRead]:
         tz = branch_tz(self.org, branch)
         now = now or utcnow()
         duration, buffer = appointment_length(service, professional, branch)
@@ -173,7 +205,7 @@ class AvailabilityService:
             return []
         day_start = _at(day, time(0, 0), tz)
         day_end = day_start + timedelta(days=1)
-        busy, leaves = self.busy_for(professional, branch, day_start, day_end, exclude_appointment_id=exclude_appointment_id)
+        busy, leaves = busy_override if busy_override is not None else self.busy_for(professional, branch, day_start, day_end, exclude_appointment_id=exclude_appointment_id)
         min_notice = service.min_notice_minutes if service.min_notice_minutes is not None else int(self.booking_settings.get("min_notice_minutes", 0) or 0)
         max_days = service.max_advance_days if service.max_advance_days is not None else int(self.booking_settings.get("max_advance_days", 365) or 365)
         earliest = now + timedelta(minutes=min_notice)
@@ -215,9 +247,11 @@ class AvailabilityService:
 
     def day(self, service: Service, branch: Branch, day: date, professionals: list[Professional], *, now: datetime | None = None) -> DayAvailability:
         tz = branch_tz(self.org, branch)
+        day_start = _at(day, time(0, 0), tz)
+        busy = self.busy_for_many(professionals, branch, day_start, day_start + timedelta(days=1))  # one round of queries for all
         result = []
         for pro in professionals:
-            slots = self.slots_for_professional(service, pro, branch, day, now=now)
+            slots = self.slots_for_professional(service, pro, branch, day, now=now, busy_override=busy[pro.id])
             result.append(ProfessionalAvailability(professional_id=pro.public_id, display_name=pro.display_name, slots=slots))
         duration = min((appointment_length(service, p, branch)[0] for p in professionals), default=service.duration_minutes)
         return DayAvailability(date=day, timezone=str(tz), service_id=service.public_id, branch_id=branch.public_id, duration_minutes=duration, professionals=result)

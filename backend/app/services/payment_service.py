@@ -26,6 +26,7 @@ from app.core.database import lock_row
 from app.core.enums import AppointmentStatus, PaymentKind, PaymentMethod, PaymentStatus
 from app.core.exceptions import ConflictError, DuplicateUTR, NotFoundError, PermissionDenied, ValidationFailed
 from app.core.ids import new_reference
+from app.core.preload import preload
 from app.core.storage import get_storage, validate_upload
 from app.core.time import utcnow
 from app.models import (
@@ -374,14 +375,36 @@ class PaymentService:
         return [VerificationLogRead(action=r.action, from_status=r.from_status, to_status=r.to_status, reason=r.reason, bank_credit_confirmed=r.bank_credit_confirmed,
                                     actor_name=names.get(r.actor_user_id), details=r.details, created_at=r.created_at) for r in rows]
 
+    def prepare_reads(self, rows: list[Payment]) -> list[Payment]:
+        """Batch everything to_read needs for a page of payments (a fixed number of queries, not several per row)."""
+        appts = preload(self.db, Appointment, (p.appointment_id for p in rows))
+        preload(self.db, Service, (a.service_id for a in appts.values()))
+        preload(self.db, Branch, (p.branch_id for p in rows))
+        preload(self.db, Customer, (p.customer_id for p in rows))
+        preload(self.db, UPIAccount, (p.upi_account_id for p in rows))
+        ids = [p.id for p in rows]
+        self._latest_utr = {}
+        self._dup_flags = set()
+        if ids:
+            for pid, utr in self.db.execute(select(PaymentSubmission.payment_id, PaymentSubmission.utr).where(
+                    PaymentSubmission.payment_id.in_(ids), PaymentSubmission.is_superseded.is_(False)).order_by(PaymentSubmission.id)):
+                self._latest_utr[pid] = utr  # ordered by id, so the newest wins
+            self._dup_flags = set(self.db.scalars(select(PaymentVerificationLog.payment_id).where(
+                PaymentVerificationLog.payment_id.in_(ids), PaymentVerificationLog.action == "duplicate_utr_attempt").distinct()))
+        self._batched = set(ids)
+        return rows
+
     def to_read(self, p: Payment) -> PaymentRead:
         appt = self.db.get(Appointment, p.appointment_id) if p.appointment_id else None
         svc = self.db.get(Service, appt.service_id) if appt else None
         branch = self.db.get(Branch, p.branch_id) if p.branch_id else None
         cust = self.db.get(Customer, p.customer_id) if p.customer_id else None
         acct = self.db.get(UPIAccount, p.upi_account_id) if p.upi_account_id else None
-        latest = self.db.scalar(select(PaymentSubmission.utr).where(PaymentSubmission.payment_id == p.id, PaymentSubmission.is_superseded.is_(False)).order_by(PaymentSubmission.id.desc()))
-        dup = self.db.scalar(select(func.count()).select_from(PaymentVerificationLog).where(PaymentVerificationLog.payment_id == p.id, PaymentVerificationLog.action == "duplicate_utr_attempt")) or 0
+        if p.id in getattr(self, "_batched", ()):
+            latest, dup = self._latest_utr.get(p.id), int(p.id in self._dup_flags)
+        else:
+            latest = self.db.scalar(select(PaymentSubmission.utr).where(PaymentSubmission.payment_id == p.id, PaymentSubmission.is_superseded.is_(False)).order_by(PaymentSubmission.id.desc()))
+            dup = self.db.scalar(select(func.count()).select_from(PaymentVerificationLog).where(PaymentVerificationLog.payment_id == p.id, PaymentVerificationLog.action == "duplicate_utr_attempt")) or 0
         return PaymentRead(
             id=p.public_id, reference=p.reference, status=p.status, kind=p.kind, method=p.method, currency=p.currency, amount_paise=p.amount_paise,
             verified_amount_paise=p.verified_amount_paise, expires_at=p.expires_at, submitted_at=p.submitted_at, verified_at=p.verified_at, rejected_at=p.rejected_at,

@@ -56,6 +56,7 @@ class Payment(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
         CheckConstraint("amount_paise >= 0", name="amount_non_negative"),
         Index("ix_payments_org_status", "organization_id", "status"),
         Index("ix_payments_appointment", "appointment_id"),
+        Index("ix_payments_org_verified", "organization_id", "verified_at"),  # revenue by verification date (dashboard, reports)
     )
 
     reference: Mapped[str] = mapped_column(String(48), unique=True, nullable=False)

@@ -40,7 +40,7 @@ appointment is confirmed.
 | 11 | Developer portal: scoped API keys (hashed, IP allowlist, per-key rate limit, usage), signed webhooks with outbox delivery, retries, SSRF protection and delivery logs, API docs; platform API usage; trusted-proxy client IPs | ✅ done |
 | 12 | Security hardening and testing: security counters survive failed requests, cross-tenant sweep of every ID route, forwarded-IP spoofing fix, no input echo in errors, generic 500s, CSP and safe post-login redirects, accessibility (axe) and CSP checks in the browser suite, customer data erasure, bandit / pip-audit / npm audit / ruff / coverage gates in CI | ✅ done |
 | 13 | Production: Docker stack with automatic HTTPS (Caddy), PostgreSQL 17, Redis, worker and one-shot migrations; startup refuses unsafe settings; encrypted, verified, pruned daily backups with restore and off-site copy; S3-compatible uploads; System health page, Prometheus metrics and alert rules, optional Sentry (scrubbed); nonce-based CSP; shared Redis rate limits; deployment runbook | ✅ done |
-| 14 | See roadmap in `documentation/architecture.md` | planned |
+| 14 | PostgreSQL and performance: whole suite runs on PostgreSQL in CI; real concurrency races fixed with row locks (payments verified twice, refunds beyond the amount paid, coupon limits, double cancel) and proven by parallel tests; commit before the response is sent; SQLite → PostgreSQL migration tool with checksum verification; N+1 queries removed; indexes; multi-process API; load-tested to 150 simultaneous users on 2 cores (`documentation/performance.md`) | ✅ done |
 
 ## Repository layout
 

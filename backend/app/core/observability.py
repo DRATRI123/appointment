@@ -127,6 +127,24 @@ class OpsCollector:
 
 REGISTRY.register(OpsCollector())
 
+_multiprocess_registry: CollectorRegistry | None = None
+
+
+def _exposition_registry() -> CollectorRegistry:
+    """With several API worker processes (PROMETHEUS_MULTIPROC_DIR set), request metrics are shared through files so a
+    scrape sees the sum over all processes, not whichever process happened to answer."""
+    global _multiprocess_registry
+    if not os.environ.get("PROMETHEUS_MULTIPROC_DIR"):
+        return REGISTRY
+    if _multiprocess_registry is None:
+        from prometheus_client import multiprocess
+
+        registry = CollectorRegistry()
+        multiprocess.MultiProcessCollector(registry)
+        registry.register(OpsCollector())
+        _multiprocess_registry = registry
+    return _multiprocess_registry
+
 
 def metrics_response(request: Request) -> Response:
     settings = get_settings()
@@ -135,7 +153,7 @@ def metrics_response(request: Request) -> Response:
     supplied = request.headers.get("authorization", "")
     if not hmac.compare_digest(supplied.encode(), f"Bearer {settings.metrics_token}".encode()):
         return Response(status_code=401, headers={"WWW-Authenticate": "Bearer"})
-    return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST, headers={"Cache-Control": "no-store"})
+    return Response(generate_latest(_exposition_registry()), media_type=CONTENT_TYPE_LATEST, headers={"Cache-Control": "no-store"})
 
 
 # ----------------------------------------------------------------------------------------------- readiness

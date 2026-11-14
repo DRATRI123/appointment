@@ -33,4 +33,8 @@ ENV STORAGE_LOCAL_PATH=/data/uploads BACKUP_DIR=/data/backups LOG_JSON=true
 EXPOSE 8000
 # Exec form so SIGTERM reaches uvicorn directly (graceful shutdown). Client IPs are resolved by the app itself
 # from FORWARDED_ALLOW_IPS, so uvicorn's own proxy-header handling is off.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-server-header", "--timeout-graceful-shutdown", "20"]
+# WEB_CONCURRENCY worker processes (default 2, one per CPU core is a good start); request metrics are shared between
+# them through PROMETHEUS_MULTIPROC_DIR. Keep-alive (75 s) outlasts Caddy's idle upstream timeout (60 s) so the proxy
+# always closes an idle connection first and never reuses one the API just closed (that race shows up as 502s).
+ENV WEB_CONCURRENCY=2
+CMD ["sh", "-c", "export PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus && rm -rf \"$PROMETHEUS_MULTIPROC_DIR\" && mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers \"$WEB_CONCURRENCY\" --no-proxy-headers --no-server-header --timeout-keep-alive 75 --timeout-graceful-shutdown 20"]

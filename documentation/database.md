@@ -289,3 +289,85 @@ alembic downgrade -1   # rollback one step
 
 Migrations use `render_as_batch=True` so that ALTER TABLE operations work on SQLite as well as
 PostgreSQL.
+
+## PostgreSQL in production
+
+PostgreSQL 17 is the production database (the Docker stack runs it); SQLite stays the zero-setup database for a
+single PC. The whole test suite runs on both in CI, so a feature that works in development works in production.
+
+Differences that matter, and how the code handles them:
+
+| SQLite | PostgreSQL | Handled by |
+|---|---|---|
+| ignores `VARCHAR(n)` lengths | rejects longer values | `test_enum_backed_columns_fit_every_enum_value`; the suite on PostgreSQL (it found `api_keys.key_prefix` too short) |
+| one writer at a time | parallel transactions | row locks on every status-dependent write; `tests/test_races.py` (see architecture.md) |
+| no ID sequences | sequences per table | the data migration tool moves them past copied rows |
+| plain `CREATE INDEX` | can build without blocking writes | new indexes use `CREATE INDEX CONCURRENTLY` in migrations |
+
+Connection settings (environment variables): `DATABASE_POOL_SIZE` (10) and `DATABASE_MAX_OVERFLOW` (20) per API
+process; `DATABASE_POOL_TIMEOUT_SECONDS` (10) fails fast when every connection is busy instead of hanging;
+`DATABASE_STATEMENT_TIMEOUT_MS` (30000) makes PostgreSQL cancel any runaway query; `DATABASE_SLOW_QUERY_MS` (500) logs
+slower statements with their SQL text (never their parameter values, which hold names, mobiles and UTRs). With
+`WEB_CONCURRENCY` worker processes the API can open up to `WEB_CONCURRENCY × (pool size + overflow)` connections;
+PostgreSQL's default limit is 100.
+
+## Moving existing data from SQLite to PostgreSQL
+
+For a clinic that started on the Windows/SQLite setup and is moving to the production server. Plan 15 minutes of
+downtime for bookings.
+
+1. **On the PC**, stop the API and worker, then back up, bring the SQLite database to the current schema, and make
+   it one complete file (SQLite keeps recent changes in a side file, `app.db-wal`, that a plain copy would miss):
+
+   ```powershell
+   cd backend
+   .\.venv\Scripts\Activate.ps1
+   python ..\scripts\backup.py create
+   alembic upgrade head
+   python -m app.ops.migrate_data --prepare-sqlite data\app.db
+   ```
+
+2. **On the server**, install as in `deployment.md` (sections 2 and 3) with the **same** `DATA_ENCRYPTION_KEY` and
+   `SECRET_KEY` as the PC's `backend/.env` (clinical notes are encrypted with it; a different key makes them
+   unreadable). Start once so the database is created, then stop everything except the database:
+
+   ```bash
+   docker compose up -d && docker compose stop caddy web api worker backup
+   ```
+
+3. **Copy the SQLite file and the uploads to the server** (PowerShell on the PC):
+
+   ```powershell
+   scp backend\data\app.db root@<server-ip>:/opt/appointment/app.db
+   scp -r backend\uploads root@<server-ip>:/opt/appointment/uploads-import
+   ```
+
+4. **Rehearse, then import** (on the server). `--dry-run` checks everything and writes nothing:
+
+   ```bash
+   docker compose run --rm -v /opt/appointment/app.db:/import/app.db:ro api \
+     sh -c 'python -m app.ops.migrate_data --source sqlite:////import/app.db --target "$DATABASE_URL" --dry-run'
+   ```
+
+   ```bash
+   docker compose run --rm -v /opt/appointment/app.db:/import/app.db:ro api \
+     sh -c 'python -m app.ops.migrate_data --source sqlite:////import/app.db --target "$DATABASE_URL"'
+   ```
+
+   The tool copies every table in one transaction, keeps every ID, moves the ID counters past the copied rows, and
+   then compares row counts and a SHA-256 checksum of every table with the source. Any difference, or any other
+   error, rolls the whole import back. It refuses a database that already holds clinics or users, so it can never
+   overwrite live data. (Roles, permissions and platform settings created by the first start are replaced by the
+   PC's own copies.)
+
+5. **Copy the uploads into the uploads volume and start:**
+
+   ```bash
+   docker run --rm -v appointment_uploads:/data -v /opt/appointment/uploads-import:/import:ro alpine sh -c 'cp -a /import/. /data/ && chown -R 10001:10001 /data'
+   docker compose up -d
+   ```
+
+6. **Check**: sign in, open a patient's notes (proves the encryption key matches), open a payment screenshot (proves
+   the uploads arrived), make a test booking, and look at Super admin → System health. Keep `app.db` and the PC
+   backup until the first nightly backup on the server has succeeded.
+

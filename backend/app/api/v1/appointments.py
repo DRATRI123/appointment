@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import DB, CurrentUser, Meta, TenantContext, get_tenant_context, require_permission
 from app.core.exceptions import PermissionDenied
+from app.core.preload import preload
 from app.models import Appointment, Branch, Customer, Organization, Professional, Service, User, Waitlist
 from app.schemas.appointment import (
     AppointmentCreate,
@@ -44,6 +45,22 @@ def hold_read(db: Session, hold) -> HoldRead:
     service = ids_to_public(db, Service, {hold.service_id})[hold.service_id]
     return HoldRead(id=hold.public_id, professional_id=pro, branch_id=branch, service_id=service, start_at=hold.start_at, end_at=hold.end_at,
                     expires_at=hold.expires_at, session_key=hold.session_key, status=hold.status)
+
+
+def prefetch_for_read(db: Session, rows: list[Appointment]) -> list[Appointment]:
+    """Load every row's organization, branch, professional, service, customer and dependent with one query per type,
+    so appointment_read finds them in the session instead of querying once per appointment (N+1)."""
+    from app.models import CustomerDependent
+
+    wanted = {
+        Organization: {a.organization_id for a in rows}, Branch: {a.branch_id for a in rows},
+        Professional: {a.professional_id for a in rows}, Service: {a.service_id for a in rows},
+        Customer: {a.customer_id for a in rows}, CustomerDependent: {a.dependent_id for a in rows if a.dependent_id},
+        Appointment: {a.parent_appointment_id for a in rows if a.parent_appointment_id},
+    }
+    for model, ids in wanted.items():
+        preload(db, model, ids)
+    return rows
 
 
 def appointment_read(db: Session, appt: Appointment, *, include_internal: bool = False, include_token: bool = False, service: AppointmentService | None = None, viewer_is_customer: bool = False) -> AppointmentRead:
@@ -90,9 +107,9 @@ def waitlist_read(db: Session, row: Waitlist) -> WaitlistRead:
     cust = db.get(Customer, row.customer_id)
     return WaitlistRead(
         id=row.public_id, customer=CustomerSummary(id=cust.public_id, full_name=cust.full_name, mobile=cust.mobile, email=cust.email, is_guest=cust.is_guest),
-        branch_id=ids_to_public(db, Branch, {row.branch_id}).get(row.branch_id) if row.branch_id else None,
-        professional_id=ids_to_public(db, Professional, {row.professional_id}).get(row.professional_id) if row.professional_id else None,
-        service_id=ids_to_public(db, Service, {row.service_id}).get(row.service_id) if row.service_id else None,
+        branch_id=db.get(Branch, row.branch_id).public_id if row.branch_id else None,
+        professional_id=db.get(Professional, row.professional_id).public_id if row.professional_id else None,
+        service_id=db.get(Service, row.service_id).public_id if row.service_id else None,
         preferred_date=row.preferred_date, status=row.status, notes=row.notes, created_at=row.created_at,
     )
 
@@ -131,7 +148,7 @@ def list_appointments(
     own = _own_professional_id(db, ctx)
     service = AppointmentService(db, ctx.organization, ctx.user, meta)
     rows = service.list(from_at=from_at, to_at=to_at, professional_id=professional_id, branch_id=branch_id, status=status_filter, customer_id=customer_id, search=search, restrict_professional_id=own)
-    return [appointment_read(db, a, include_internal=True, service=service) for a in rows]
+    return [appointment_read(db, a, include_internal=True, service=service) for a in prefetch_for_read(db, rows)]
 
 
 @router.get("/appointments/calendar", response_model=list[CalendarEvent])
@@ -198,7 +215,10 @@ def reschedule(appointment_id: str, payload: RescheduleRequest, db: DB, ctx: Wri
 # --------------------------------------------------------------- waitlist
 @router.get("/waitlist", response_model=list[WaitlistRead])
 def list_waitlist(db: DB, ctx: ReadAppts, meta: Meta):
-    return [waitlist_read(db, w) for w in AppointmentService(db, ctx.organization, ctx.user, meta).list_waitlist()]
+    rows = AppointmentService(db, ctx.organization, ctx.user, meta).list_waitlist()
+    for model, attr in ((Customer, "customer_id"), (Branch, "branch_id"), (Professional, "professional_id"), (Service, "service_id")):
+        preload(db, model, (getattr(w, attr) for w in rows))
+    return [waitlist_read(db, w) for w in rows]
 
 
 @router.post("/waitlist", response_model=WaitlistRead, status_code=status.HTTP_201_CREATED)
@@ -221,10 +241,14 @@ def my_appointments(db: DB, user: CurrentUser):
     rows = db.scalars(
         select(Appointment).join(Customer, Customer.id == Appointment.customer_id).where(Customer.user_id == user.id).order_by(Appointment.start_at.desc())
     ).all()
+    services: dict[int, AppointmentService] = {}  # one per clinic, so its settings are read once
+    counts: dict[int, int] | None = None
     out = []
-    for a in rows:
-        org = db.get(Organization, a.organization_id)
-        out.append(appointment_read(db, a, service=AppointmentService(db, org), viewer_is_customer=True))
+    for a in prefetch_for_read(db, list(rows)):
+        if a.organization_id not in services:
+            services[a.organization_id] = AppointmentService(db, db.get(Organization, a.organization_id))
+            counts = services[a.organization_id].prime_reschedule_counts([r.id for r in rows], counts)
+        out.append(appointment_read(db, a, service=services[a.organization_id], viewer_is_customer=True))
     return out
 
 

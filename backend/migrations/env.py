@@ -14,7 +14,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+# Tools such as app.ops.migrate_data migrate another database by passing its URL in config.attributes.
+DATABASE_URL = config.attributes.get("database_url") or settings.database_url
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
@@ -29,7 +31,7 @@ def render_item(type_, obj, autogen_context):
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=DATABASE_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

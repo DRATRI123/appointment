@@ -46,6 +46,10 @@ def list_notifications(db: DB, ctx: Read, meta: Meta, params: Annotated[PagePara
                        event: str | None = None, search: Annotated[str | None, Query(max_length=64)] = None):
     svc = _svc(db, ctx, meta)
     rows, total = svc.list(status=status_filter, channel=channel, event=event, search=search, page=params.page, page_size=params.page_size)
+    from app.core.preload import preload
+    from app.models import Appointment
+
+    preload(db, Appointment, (n.appointment_id for n in rows))  # one query for the page, not one per message
     return Page(data=[svc.to_read(n) for n in rows], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
 
 

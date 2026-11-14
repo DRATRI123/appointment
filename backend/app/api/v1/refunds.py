@@ -38,7 +38,7 @@ def list_refunds(db: DB, ctx: Tenant, meta: Meta, params: Annotated[PageParams, 
     _can_view(ctx)
     svc = RefundService(db, ctx.organization, ctx.user, meta)
     rows, total = svc.list(status=status_filter, search=search, from_at=from_at, to_at=to_at, page=params.page, page_size=params.page_size)
-    return Page(data=[svc.to_read(r) for r in rows], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
+    return Page(data=[svc.to_read(r) for r in svc.prepare_reads(rows)], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
 
 
 @router.get("/stats", response_model=RefundStats)

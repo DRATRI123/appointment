@@ -20,6 +20,7 @@ from app.core.database import lock_row
 from app.core.enums import AppointmentStatus, PaymentMethod, PaymentStatus, RefundStatus
 from app.core.exceptions import ConflictError, NotFoundError, PermissionDenied, ValidationFailed
 from app.core.ids import new_reference
+from app.core.preload import preload
 from app.core.storage import get_storage, validate_upload
 from app.core.time import utcnow
 from app.models import (
@@ -285,12 +286,25 @@ class RefundService:
         self._payments()._log(payment, action, before, target, reason=reason, details=details)
 
     # ----------------------------------------------------------------- output
+    def prepare_reads(self, rows: list[PaymentRefund]) -> list[PaymentRefund]:
+        """Batch the payments, appointments, customers and staff names a page of refunds needs."""
+        payments = preload(self.db, Payment, (r.payment_id for r in rows))
+        preload(self.db, Appointment, (r.appointment_id for r in rows))
+        preload(self.db, Customer, (p.customer_id for p in payments.values()))
+        ids = {i for r in rows for i in (r.requested_by_user_id, r.approved_by_user_id, r.processed_by_user_id) if i}
+        self._names = dict(self.db.execute(select(User.id, User.full_name).where(User.id.in_(ids))).all()) if ids else {}
+        return rows
+
     def to_read(self, r: PaymentRefund) -> RefundRead:
         p = self.db.get(Payment, r.payment_id)
         appt = self.db.get(Appointment, r.appointment_id) if r.appointment_id else None
         cust = self.db.get(Customer, p.customer_id) if p and p.customer_id else None
         ids = {i for i in (r.requested_by_user_id, r.approved_by_user_id, r.processed_by_user_id) if i}
-        names = dict(self.db.execute(select(User.id, User.full_name).where(User.id.in_(ids))).all()) if ids else {}
+        cached = getattr(self, "_names", None)
+        if cached is not None and ids <= cached.keys():
+            names = cached
+        else:
+            names = dict(self.db.execute(select(User.id, User.full_name).where(User.id.in_(ids))).all()) if ids else {}
         return RefundRead(
             id=r.public_id, reference=r.reference, status=r.status, amount_paise=r.amount_paise, reason=r.reason, rejection_reason=r.rejection_reason,
             refund_method=r.refund_method, refund_reference=r.refund_reference, destination=r.destination, has_proof=bool(r.refund_proof_path), notes=r.notes,

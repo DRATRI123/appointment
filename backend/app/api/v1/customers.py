@@ -49,7 +49,7 @@ def list_customers(
 ):
     svc = _svc(db, ctx, meta)
     rows, total = svc.list(search=search, tag=tag, segment=segment, is_guest=is_guest, page=params.page, page_size=params.page_size)
-    return Page(data=[svc.to_read(c) for c in rows], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
+    return Page(data=[svc.to_read(c) for c in svc.prepare_reads(rows)], meta=PageMeta(page=params.page, page_size=params.page_size, total=total))
 
 
 @router.get("/export.csv", summary="Export customers as CSV")

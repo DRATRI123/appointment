@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     database_echo: bool = False
     database_pool_size: int = 10
     database_max_overflow: int = 20
+    database_pool_timeout_seconds: int = 10  # wait this long for a free connection, then fail fast (503-style) instead of hanging
+    database_statement_timeout_ms: int = 30000  # PostgreSQL: cancel any single query running longer than this
+    database_slow_query_ms: int = 500  # log queries slower than this (SQL text only, never parameter values); 0 = off
 
     # --- redis / jobs ------------------------------------------------------
     redis_url: str | None = None

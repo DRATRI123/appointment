@@ -335,9 +335,19 @@ class AppointmentService:
 
     def cancellation_rules(self, appt: Appointment) -> dict:
         service = self.db.get(Service, appt.service_id)
-        org_rules = OrganizationService(self.db).get_settings(self.org, "cancellation")["cancellation"]
+        if getattr(self, "_org_cancellation", None) is None:  # once per request, not once per appointment
+            self._org_cancellation = OrganizationService(self.db).get_settings(self.org, "cancellation")["cancellation"]
+        org_rules = self._org_cancellation
         rules = {**org_rules, **(service.cancellation_policy or {})} if service else org_rules
         return rules
+
+    def prime_reschedule_counts(self, appointment_ids: list[int], counts: dict[int, int] | None = None) -> dict[int, int]:
+        """Count reschedules for a whole list in one query, so customer_can() does not query per appointment."""
+        if counts is None:
+            counts = dict(self.db.execute(select(AppointmentReschedule.appointment_id, func.count()).where(
+                AppointmentReschedule.appointment_id.in_(appointment_ids)).group_by(AppointmentReschedule.appointment_id)).all()) if appointment_ids else {}
+        self._reschedule_counts = counts
+        return counts
 
     def customer_can(self, appt: Appointment, what: str) -> bool:
         if appt.status not in (AppointmentStatus.PENDING_PAYMENT, AppointmentStatus.PENDING_VERIFICATION, AppointmentStatus.CONFIRMED):
@@ -346,7 +356,11 @@ class AppointmentService:
         hours = float(rules.get(f"{what}_before_hours", 0) or 0)
         enabled = bool(rules.get(f"customer_can_{what}", True))
         if what == "reschedule":
-            count = self.db.scalar(select(func.count()).select_from(AppointmentReschedule).where(AppointmentReschedule.appointment_id == appt.id)) or 0
+            cached = getattr(self, "_reschedule_counts", None)
+            if cached is not None:
+                count = cached.get(appt.id, 0)
+            else:
+                count = self.db.scalar(select(func.count()).select_from(AppointmentReschedule).where(AppointmentReschedule.appointment_id == appt.id)) or 0
             if count >= int(rules.get("max_reschedules", 99) or 99):
                 return False
         return enabled and appt.start_at - timedelta(hours=hours) > utcnow()

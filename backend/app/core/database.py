@@ -24,10 +24,38 @@ def build_engine(settings: Settings | None = None) -> Engine:
     else:
         kwargs["pool_size"] = settings.database_pool_size
         kwargs["max_overflow"] = settings.database_max_overflow
+        kwargs["pool_timeout"] = settings.database_pool_timeout_seconds
+        kwargs["pool_recycle"] = 1800  # drop connections older than 30 minutes (load balancers and proxies cut idle ones)
+        if url.startswith("postgresql") and settings.database_statement_timeout_ms:
+            kwargs["connect_args"] = {"options": f"-c statement_timeout={int(settings.database_statement_timeout_ms)}",
+                                      "application_name": "appointment-platform"}
     engine = create_engine(url, **kwargs)
     if url.startswith("sqlite"):
         _configure_sqlite(engine)
+    if settings.database_slow_query_ms:
+        _log_slow_queries(engine, settings.database_slow_query_ms)
     return engine
+
+
+def _log_slow_queries(engine: Engine, threshold_ms: int) -> None:
+    """Warn about slow statements with their SQL text and duration. Parameters are never logged: they hold names,
+    mobile numbers and UTRs."""
+    import time
+
+    from app.core.logging import get_logger
+
+    log = get_logger("db.slow")
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _start(conn, cursor, statement, parameters, context, executemany):  # pragma: no cover - driver hook
+        conn.info.setdefault("query_start", []).append(time.perf_counter())
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def _end(conn, cursor, statement, parameters, context, executemany):  # pragma: no cover - driver hook
+        started = conn.info["query_start"].pop()
+        ms = (time.perf_counter() - started) * 1000
+        if ms >= threshold_ms:
+            log.warning("db.slow_query", duration_ms=round(ms, 1), statement=" ".join(statement.split())[:500])
 
 
 def _configure_sqlite(engine: Engine) -> None:

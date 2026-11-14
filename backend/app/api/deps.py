@@ -21,7 +21,10 @@ from app.security.permissions import PERMISSIONS
 from app.security.tokens import decode_access_token
 from app.services.audit_service import RequestMeta, record_audit
 
-DB = Annotated[Session, Depends(get_db)]
+# scope="function": the session commits after the endpoint returns but BEFORE the response is sent. With the default
+# ("request") FastAPI sends the response first and commits afterwards, so a client could be told "booked" for a booking
+# whose commit then failed, and its very next request could miss what it had just created.
+DB = Annotated[Session, Depends(get_db, scope="function")]
 AppSettings = Annotated[Settings, Depends(get_settings)]
 
 ACCESS_COOKIE = "access_token"
@@ -121,7 +124,7 @@ def track_api_key_usage(request: Request, db: DB):
             record_usage(db, key.id, key.organization_id, 200, False)
 
 
-def get_optional_user(request: Request, db: DB, _usage: Annotated[None, Depends(track_api_key_usage)] = None) -> User | None:
+def get_optional_user(request: Request, db: DB, _usage: Annotated[None, Depends(track_api_key_usage, scope="function")] = None) -> User | None:
     from app.security.api_keys import looks_like_key
 
     token, source = _extract_token(request)

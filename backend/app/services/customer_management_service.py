@@ -241,9 +241,23 @@ class CustomerManagementService:
             s.total_paid_paise += paid or 0
         return s
 
+    def prepare_reads(self, rows: list[Customer]) -> list[Customer]:
+        """One grouped count of family members and one user lookup for the whole page."""
+        ids = [c.id for c in rows]
+        self._dependent_counts = dict(self.db.execute(
+            select(CustomerDependent.customer_id, func.count()).where(CustomerDependent.customer_id.in_(ids), CustomerDependent.deleted_at.is_(None))
+            .group_by(CustomerDependent.customer_id)).all()) if ids else {}
+        self._batched = set(ids)
+        self._user_public = ids_to_public(self.db, User, {c.user_id for c in rows if c.user_id})
+        return rows
+
     def to_read(self, customer: Customer, *, with_stats: bool = False) -> CustomerRead:
-        dependents = self.db.scalar(select(func.count()).select_from(CustomerDependent).where(CustomerDependent.customer_id == customer.id, CustomerDependent.deleted_at.is_(None))) or 0
-        user_pub = ids_to_public(self.db, User, {customer.user_id}).get(customer.user_id) if customer.user_id else None
+        if customer.id in getattr(self, "_batched", ()):
+            dependents = self._dependent_counts.get(customer.id, 0)
+            user_pub = self._user_public.get(customer.user_id) if customer.user_id else None
+        else:
+            dependents = self.db.scalar(select(func.count()).select_from(CustomerDependent).where(CustomerDependent.customer_id == customer.id, CustomerDependent.deleted_at.is_(None))) or 0
+            user_pub = ids_to_public(self.db, User, {customer.user_id}).get(customer.user_id) if customer.user_id else None
         return CustomerRead(
             id=customer.public_id, customer_code=customer.customer_code, user_id=user_pub, full_name=customer.full_name, mobile=customer.mobile, email=customer.email,
             date_of_birth=customer.date_of_birth, gender=customer.gender, address=customer.address, profile_photo_url=customer.profile_photo_url, blood_group=customer.blood_group,
