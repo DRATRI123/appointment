@@ -191,6 +191,27 @@ def test_cli_create_verifies_prunes_and_records_the_outcome(tmp_path, monkeypatc
     assert recorded[-1]["ok"] is False
 
 
+def test_daily_schedule_runs_at_local_time():
+    # 02:30 in India is 21:00 UTC the previous day.
+    assert bk.next_run(datetime(2026, 11, 14, 20, 0, tzinfo=UTC), "02:30", "Asia/Kolkata") == datetime(2026, 11, 14, 21, 0, tzinfo=UTC)
+    assert bk.next_run(datetime(2026, 11, 14, 21, 0, tzinfo=UTC), "02:30", "Asia/Kolkata") == datetime(2026, 11, 15, 21, 0, tzinfo=UTC)
+
+
+def test_schedule_keeps_going_after_a_failed_night(tmp_path, monkeypatch):
+    calls = []
+
+    def flaky(cfg):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("disk full")
+        return tmp_path / "backup-x.tar.gz"
+
+    monkeypatch.setattr(bk, "run_backup", flaky)
+    monkeypatch.setattr(bk, "next_run", lambda now, at, tz: now)  # always due
+    assert bk.schedule(_cfg(tmp_path, "sqlite:///x.db", None), "02:30", "Asia/Kolkata", max_runs=2, sleep=lambda s: None) == 0
+    assert len(calls) == 2
+
+
 def test_bad_encryption_keys_are_rejected():
     with pytest.raises(bk.BackupError, match="32"):
         bk.decode_key(base64.b64encode(b"short").decode())

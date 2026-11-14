@@ -20,6 +20,7 @@ GOOD_PRODUCTION = {
     "forwarded_allow_ips": ["172.16.0.0/12"],
     "frontend_url": "https://clinic.example.com",
     "otp_provider": "msg91",
+    "backup_encryption_key": base64.b64encode(os.urandom(32)).decode(),
 }
 
 
@@ -57,6 +58,9 @@ def test_a_correct_production_configuration_starts():
     ({"webhook_allow_private_targets": True}, "WEBHOOK_ALLOW_PRIVATE_TARGETS"),
     ({"rate_limit_enabled": False}, "RATE_LIMIT_ENABLED"),
     ({"storage_backend": "s3"}, "S3_BUCKET"),
+    ({"backup_encryption_key": None}, "BACKUP_ENCRYPTION_KEY"),
+    ({"backup_encryption_key": "short"}, "BACKUP_ENCRYPTION_KEY"),
+    ({"metrics_token": "too-short"}, "METRICS_TOKEN"),
 ])
 def test_unsafe_production_settings_are_refused(override, message):
     with pytest.raises(ValidationError, match=message):
@@ -76,6 +80,23 @@ def test_staging_may_use_console_codes_and_plain_hosts_but_not_weak_secrets():
     assert s.app_env == "staging"
     with pytest.raises(ValidationError, match="SECRET_KEY"):
         _settings(app_env="staging", secret_key="short")
+
+
+def test_blank_optional_values_mean_off():
+    s = _settings(metrics_token="", sentry_dsn="")
+    assert not s.metrics_token and not s.sentry_dsn
+
+
+def test_backup_settings_come_from_the_settings_file(monkeypatch, tmp_path):
+    from app.core import config
+    from app.ops import backup as bk
+
+    key = base64.b64encode(os.urandom(32)).decode()
+    s = Settings(_env_file=None, backup_dir=str(tmp_path), backup_encryption_key=key, backup_keep_daily=3, backup_s3_bucket="")
+    monkeypatch.setattr(config, "get_settings", lambda: s)
+    cfg = bk.config_from_settings()
+    assert cfg.backup_dir == tmp_path and cfg.encryption_key == base64.b64decode(key) and cfg.keep_daily == 3
+    assert cfg.s3_bucket is None
 
 
 def test_development_defaults_still_work():

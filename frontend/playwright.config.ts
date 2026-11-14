@@ -8,6 +8,8 @@ export default defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
     trace: "off",
+    // For a local HTTPS stack (Caddy's own certificate for DOMAIN=localhost).
+    ignoreHTTPSErrors: process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS === "1",
   },
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined

@@ -17,6 +17,7 @@ from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.core.observability import MetricsMiddleware, init_sentry, metrics_response
+from app.core.storage import media_from_bucket
 from app.security.headers import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.security.rate_limit import limiter
 from app.workers import jobs  # noqa: F401  (registers background jobs)
@@ -73,10 +74,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_route("/metrics", metrics_response, include_in_schema=False)
 
 
-    # Public uploads (logos, photos, service images). Private files are never mounted.
-    public_dir = Path(settings.storage_local_path) / "public"
-    public_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/media", StaticFiles(directory=str(public_dir)), name="media")
+    # Public uploads (logos, photos, service images). Private files are never served from here.
+    if settings.storage_backend == "local":
+        public_dir = Path(settings.storage_local_path) / "public"
+        public_dir.mkdir(parents=True, exist_ok=True)
+        app.mount("/media", StaticFiles(directory=str(public_dir)), name="media")
+    else:
+        app.add_route("/media/{path:path}", media_from_bucket, methods=["GET", "HEAD"], include_in_schema=False)
     return app
 
 

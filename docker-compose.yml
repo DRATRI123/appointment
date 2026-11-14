@@ -1,60 +1,178 @@
+# Production stack: HTTPS (Caddy) -> web (Next.js) + API (FastAPI) -> PostgreSQL 17 + Redis,
+# plus the background worker, a daily encrypted backup and a one-shot migrate step.
+#
+#   python scripts/generate_env.py --domain clinic.example.com     # creates .env with fresh secrets
+#   docker compose up -d --build
+#   docker compose run --rm api python -m app.ops.platform_admin --email you@example.com
+#
+# Optional Prometheus: docker compose --profile monitoring up -d
+# Full guide: documentation/deployment.md
+
+name: appointment
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "5"}
+
+x-backend: &backend
+  image: appointment-api:${TAG:-latest}
+  build:
+    context: ./backend
+    dockerfile: ../infrastructure/docker/Dockerfile.backend
+  env_file: .env
+  environment: &backend-env
+    APP_ENV: ${APP_ENV:-production}
+    APP_NAME: ${APP_NAME:-Appointment Platform}
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:?run scripts/generate_env.py}@postgres:5432/${POSTGRES_DB:-appointments}
+    REDIS_URL: redis://redis:6379/0
+    COOKIE_SECURE: "true"
+    FRONTEND_URL: https://${DOMAIN:?set DOMAIN in .env}
+    CORS_ORIGINS: https://${DOMAIN}
+    TRUSTED_HOSTS: ${DOMAIN},api,localhost,127.0.0.1
+    FORWARDED_ALLOW_IPS: ${DOCKER_SUBNET:-172.28.0.0/16}
+    STORAGE_LOCAL_PATH: /data/uploads
+    BACKUP_DIR: /data/backups
+    LOG_JSON: "true"
+  volumes:
+    - uploads:/data/uploads
+  restart: unless-stopped
+  logging: *logging
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_healthy}
+
 services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./infrastructure/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web: {condition: service_healthy}
+      api: {condition: service_healthy}
+    logging: *logging
+
+  web:
+    image: appointment-web:${TAG:-latest}
+    build:
+      context: ./frontend
+      dockerfile: ../infrastructure/docker/Dockerfile.frontend
+      args:
+        API_INTERNAL_URL: http://api:8000
+        ENABLE_HSTS: ${ENABLE_HSTS:-true}
+        NEXT_PUBLIC_APP_NAME: ${APP_NAME:-Appointment Platform}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      api: {condition: service_healthy}
+    logging: *logging
+
+  migrate:
+    <<: *backend
+    command: ["python", "-m", "app.ops.setup"]
+    restart: "no"
+
+  api:
+    <<: *backend
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.workers.runner", "--interval", "20"]
+    stop_grace_period: 60s
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+
+  backup:
+    <<: *backend
+    command: ["python", "-m", "app.ops.backup", "schedule"]
+    volumes:
+      - uploads:/data/uploads
+      - backups:/data/backups
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/generate_env.py}
       POSTGRES_DB: ${POSTGRES_DB:-appointments}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    shm_size: 256mb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-appointments}"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+    logging: *logging
 
   redis:
     image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: ../infrastructure/docker/Dockerfile.backend
-    environment:
-      APP_ENV: staging
-      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
-      COOKIE_SECURE: "true"
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-appointments}
-      REDIS_URL: redis://redis:6379/0
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      STORAGE_LOCAL_PATH: /data/uploads
-      LOG_JSON: "true"
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
     volumes:
-      - uploads:/data/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    ports:
-      - "8000:8000"
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    secrets:
+      - metrics_token
+    ports: ["127.0.0.1:9090:9090"]   # reach it over an SSH tunnel; never public
+    logging: *logging
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: ../infrastructure/docker/Dockerfile.frontend
-    environment:
-      API_INTERNAL_URL: http://backend:8000
-      NEXT_PUBLIC_API_PREFIX: /api/v1
-    depends_on:
-      - backend
-    ports:
-      - "3000:3000"
+secrets:
+  metrics_token:
+    environment: METRICS_TOKEN
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET:-172.28.0.0/16}
 
 volumes:
   postgres_data:
   redis_data:
   uploads:
+  backups:
+  caddy_data:
+  caddy_config:
+  prometheus_data:

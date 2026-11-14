@@ -18,9 +18,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
 INSECURE_DEFAULT_SECRET = "change-me-to-a-random-string-of-at-least-32-bytes"  # nosec B105
 
 
+def _is_key32(value: str | None) -> bool:
+    try:
+        return bool(value) and len(base64.b64decode(value, validate=True)) == 32
+    except ValueError:
+        return False
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(BASE_DIR / ".env", BASE_DIR.parent / ".env"),
+        # backend/.env only. The repository-root .env belongs to Docker Compose (production values) and must never
+        # leak into a local development run.
+        env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -74,6 +83,7 @@ class Settings(BaseSettings):
     s3_endpoint_url: str | None = None
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
+    s3_prefix: str = ""  # optional folder inside the bucket, e.g. "clinic-prod"
 
     # --- booking defaults (overridable per organization) -------------------
     booking_hold_minutes: int = 10
@@ -124,6 +134,17 @@ class Settings(BaseSettings):
     metrics_token: str | None = None  # /metrics is disabled (404) unless this is set; scrape with "Authorization: Bearer <token>"
     sentry_dsn: str | None = None  # optional error tracking; personal data is scrubbed before sending
     sentry_traces_sample_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    # --- backups (python -m app.ops.backup) ---------------------------------
+    backup_dir: str | None = None  # default: <storage folder>/../backups
+    backup_encryption_key: str | None = None  # base64 of 32 random bytes; required in production
+    backup_at: str = "02:30"
+    backup_timezone: str = "Asia/Kolkata"
+    backup_keep_daily: int = Field(default=7, ge=1)
+    backup_keep_weekly: int = Field(default=4, ge=0)
+    backup_keep_monthly: int = Field(default=6, ge=0)
+    backup_s3_bucket: str | None = None
+    backup_s3_prefix: str = "backups/"
 
     # --- frontend ----------------------------------------------------------
     frontend_url: str = "http://localhost:3000"
@@ -176,7 +197,9 @@ class Settings(BaseSettings):
                 problems.append("WEBHOOK_ALLOW_PRIVATE_TARGETS must be unset or false")
             if not self.rate_limit_enabled:
                 problems.append("RATE_LIMIT_ENABLED must be true")
-        if self.metrics_token is not None and len(self.metrics_token) < 24:
+            if not _is_key32(self.backup_encryption_key):
+                problems.append("BACKUP_ENCRYPTION_KEY must be base64 of 32 random bytes (backups hold patient data)")
+        if self.metrics_token and len(self.metrics_token) < 24:
             problems.append("METRICS_TOKEN must be at least 24 random characters (or unset to disable /metrics)")
         if self.storage_backend == "s3" and not self.s3_bucket:
             problems.append("S3_BUCKET is required when STORAGE_BACKEND=s3")

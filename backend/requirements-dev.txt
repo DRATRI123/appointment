@@ -1,5 +1,7 @@
 # Development and CI tooling (not installed in production images).
 -r requirements.txt
+pytest>=8.2
+pytest-asyncio>=0.23
 pytest-cov>=7.0
 ruff>=0.17
 bandit>=1.9

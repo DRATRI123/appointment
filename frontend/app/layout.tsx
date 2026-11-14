@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
@@ -13,7 +14,10 @@ export const metadata: Metadata = {
     "Multi-tenant appointment booking for clinics, wellness centres and professionals with own UPI QR payments.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Reading the request makes every page render per request, which is what lets Next.js put this request's CSP
+  // nonce on its scripts (a page prerendered at build time could not carry it).
+  await headers();
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col font-sans">

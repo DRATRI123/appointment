@@ -10,8 +10,8 @@ test("platform admin sees worker, jobs, checks and backups on System health", as
   const problems = await watch(page);
   await page.goto("/login");
   await page.getByRole("tab", { name: "Email & password" }).click();
-  await page.getByLabel("Email").fill(email!);
-  await page.getByLabel("Password").fill(password!);
+  await page.getByLabel("Email", { exact: true }).fill(email!);
+  await page.getByLabel("Password", { exact: true }).fill(password!);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/super-admin/);
 

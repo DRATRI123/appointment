@@ -15,6 +15,9 @@ import time
 from dataclasses import dataclass
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
+
+log = get_logger(__name__)
 
 PREFIX = "ak_live_"
 
@@ -103,27 +106,66 @@ class _Window:
 
 
 class KeyRateLimiter:
-    """Fixed one-minute window per key, in process memory. Multi-instance deployments should front this with Redis."""
+    """Fixed one-minute window per API key.
 
-    def __init__(self) -> None:
+    With REDIS_URL set the counter lives in Redis, so every API process and container shares one limit per key.
+    Without Redis (or if Redis is unreachable) it counts in process memory: still a limit, just per process, and a
+    Redis outage never takes the API down."""
+
+    def __init__(self, redis_url: str | None = None) -> None:
         self._lock = threading.Lock()
         self._windows: dict[int, _Window] = {}
+        self._redis_url = redis_url
+        self._redis = None
+        self._redis_failed_at = 0.0
+
+    def _client(self):
+        if not self._redis_url:
+            return None
+        if self._redis is None and time.time() - self._redis_failed_at > 30:
+            import redis
+
+            self._redis = redis.Redis.from_url(self._redis_url, socket_timeout=0.5, socket_connect_timeout=0.5)
+        return self._redis
+
+    def _hit_redis(self, client, key_id: int, minute: int) -> int:
+        key = f"apikey-rate:{key_id}:{minute}"
+        pipe = client.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, 120)
+        return int(pipe.execute()[0])
 
     def hit(self, key_id: int, limit: int) -> tuple[bool, int]:
         """Returns (allowed, seconds until the window resets)."""
         now = time.time()
         minute = int(now // 60)
+        retry_after = 60 - int(now % 60)
+        if self._redis_url:
+            try:
+                client = self._client()
+                if client is not None:
+                    return self._hit_redis(client, key_id, minute) <= limit, retry_after
+            except Exception:
+                log.warning("api_keys.rate_limit_redis_unavailable")
+                self._redis, self._redis_failed_at = None, time.time()
         with self._lock:
             w = self._windows.get(key_id)
             if w is None or w.minute != minute:
                 w = _Window(minute, 0)
                 self._windows[key_id] = w
             w.count += 1
-            return w.count <= limit, 60 - int(now % 60)
+            return w.count <= limit, retry_after
 
     def reset(self) -> None:
         with self._lock:
             self._windows.clear()
+        if self._redis_url:
+            try:
+                client = self._client()
+                for key in client.scan_iter("apikey-rate:*") if client is not None else ():
+                    client.delete(key)
+            except Exception:
+                self._redis, self._redis_failed_at = None, time.time()
 
 
-limiter = KeyRateLimiter()
+limiter = KeyRateLimiter(get_settings().redis_url)

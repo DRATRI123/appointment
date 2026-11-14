@@ -14,4 +14,7 @@ limiter = Limiter(
     storage_uri=_settings.redis_url or "memory://",
     enabled=_settings.rate_limit_enabled,
     headers_enabled=True,
+    # If Redis is unreachable, keep limiting in process memory instead of failing every request.
+    in_memory_fallback_enabled=True,
+    swallow_errors=True,
 )

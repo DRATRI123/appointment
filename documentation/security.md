@@ -173,10 +173,8 @@ Known limits, not yet addressed:
 
 * Bank transactions are addressed by integer IDs in reconciliation URLs. Lookups are scoped to the
   organization (the sweep confirms it), but the IDs are guessable within a tenant.
-* `script-src` and `style-src` include `'unsafe-inline'` because Next.js hydration needs inline scripts.
-  Moving to per-request nonces is Phase 13 work.
-* Route rate limits use Redis when `REDIS_URL` is set (otherwise per process). The per-API-key limiter is
-  always in memory, so with several API processes each one counts separately (Phase 13).
+* `style-src` keeps `'unsafe-inline'` (component libraries set inline styles; styles cannot run code).
+  `script-src` no longer does: see Phase 13.
 
 ## Healthcare privacy
 
@@ -201,6 +199,24 @@ Known limits, not yet addressed:
 
 ## Backup and recovery
 
-* SQLite: `scripts/backup_sqlite.py` performs an online backup via the SQLite backup API.
-* PostgreSQL: `pg_dump` scheduled job in `infrastructure/deployment`, retention policy documented in
-  `deployment.md`.
+`python -m app.ops.backup` (Docker: the `backup` service, daily). One file per backup containing the database
+(SQLite online backup or `pg_dump` custom format), the uploads and a manifest of SHA-256 checksums. With
+`BACKUP_ENCRYPTION_KEY` the file is encrypted with AES-256-GCM in 1 MiB chunks whose nonces encode their position and
+whose last chunk is marked, so truncation, reordering or any altered byte makes the whole file fail rather than
+restore partially. Every backup is verified after writing; restore verifies again, refuses a backup for the other
+database kind, and keeps the previous data aside. Archive extraction uses Python's `data` filter (no absolute paths,
+`..` or links outside the folder). Retention: daily/weekly/monthly. Optional off-site copy to S3-compatible storage.
+Outcomes are recorded for the System health page and the `BackupMissing` alert. Details: `deployment.md` section 5.
+
+## Phase 13: production hardening
+
+| Area | Control | Test |
+|---|---|---|
+| Unsafe configuration | Staging/production refuse to start with default or short secrets, missing `DATA_ENCRYPTION_KEY`/`OTP_PEPPER`, `DEBUG`, wildcard CORS/hosts/proxies, non-HTTPS URLs, console OTP, rate limiting off, private webhook targets; all problems listed at once | `tests/test_production_config.py` |
+| Script injection | Per-request CSP nonce (`frontend/proxy.ts`): `script-src 'self' 'nonce-…' 'strict-dynamic'`, no `'unsafe-inline'`; every page renders per request so it can carry the nonce | `frontend/tests/unit/csp.test.ts`; `e2e/quality.spec.ts` fails on any violation |
+| Shared rate limits | API-key limits are counted in Redis when configured, so several API containers share one limit; Redis outages fall back to in-memory counting instead of failing requests (route limits likewise) | `tests/test_rate_limit_redis.py` (real Redis in CI) |
+| Images | `.dockerignore` keeps `.env`, databases, uploads and virtualenvs out of images (previously `COPY . .` could include them); non-root users; exec-form commands for clean shutdown | CI `docker` job checks the built image |
+| Network exposure | Only Caddy publishes ports; database, Redis, API and `/metrics` stay on the internal network; Caddy replaces client-supplied `X-Forwarded-For`; the API trusts forwarded IPs only from the Docker subnet | verified on the running stack: a spoofed `X-Forwarded-For` was ignored in audit logs |
+| Monitoring data | `/metrics` needs a bearer token and uses route templates, never raw paths, so IDs and personal data never become labels; Sentry events are stripped of bodies, cookies, auth headers, query strings, user and local variables | `tests/test_monitoring.py` |
+| Uploads in S3 | Private bucket, server-side encryption, keys validated against `..`; public files streamed by the API so no public bucket policy is needed | `tests/test_storage_s3.py` |
+| Configuration isolation | The backend reads only `backend/.env`; the root `.env` (Docker, production values) never applies to a local run | |

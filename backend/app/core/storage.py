@@ -1,12 +1,14 @@
-"""File storage abstraction: local disk now, S3-compatible later behind the same interface.
+"""File storage: local disk or any S3-compatible bucket (AWS S3, Cloudflare R2, Backblaze B2, MinIO), same interface.
 
 Public files (logos, photos, service images) live under ``public/`` and are served at ``/media``.
-Private files (payment screenshots, documents) live under ``private/`` and are only served through
-authenticated endpoints in later phases.
+Private files (payment screenshots, documents) live under ``private/`` and are only streamed through
+authenticated endpoints. With S3 the bucket stays private: ``/media`` is streamed by the API, so browsers never
+need bucket credentials or a public bucket policy.
 """
 from __future__ import annotations
 
 import hashlib
+import io
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
@@ -66,17 +68,12 @@ class LocalStorage:
         return path
 
     def save(self, *, scope: str, visibility: str, data: bytes, mime_type: str) -> StoredFile:
-        if visibility not in {"public", "private"}:
-            raise ValueError("visibility must be public or private")
-        digest = hashlib.sha256(data).hexdigest()
-        name = secrets.token_hex(16)
-        ext = EXTENSIONS.get(mime_type, "bin")
-        key = f"{visibility}/{scope}/{name[:2]}/{name}.{ext}"
+        key = _new_key(scope, visibility, mime_type)
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         url = f"{self.public_url_prefix}/{key[len('public/'):]}" if visibility == "public" else None
-        return StoredFile(key=key, url=url, mime_type=mime_type, size_bytes=len(data), sha256=digest)
+        return StoredFile(key=key, url=url, mime_type=mime_type, size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
 
     def open(self, key: str) -> BinaryIO:
         return self._path(key).open("rb")
@@ -85,6 +82,46 @@ class LocalStorage:
         path = self._path(key)
         if path.exists():
             path.unlink()
+
+
+def _new_key(scope: str, visibility: str, mime_type: str) -> str:
+    if visibility not in {"public", "private"}:
+        raise ValueError("visibility must be public or private")
+    name = secrets.token_hex(16)
+    return f"{visibility}/{scope}/{name[:2]}/{name}.{EXTENSIONS.get(mime_type, 'bin')}"
+
+
+class S3Storage:
+    """Objects in one private bucket under an optional prefix. Files are small (uploads are capped), so reads are
+    buffered in memory."""
+
+    def __init__(self, client, bucket: str, prefix: str = "", public_url_prefix: str = "/media"):
+        self.client = client
+        self.bucket = bucket
+        self.prefix = prefix.strip("/") + "/" if prefix.strip("/") else ""
+        self.public_url_prefix = public_url_prefix.rstrip("/")
+
+    def _key(self, key: str) -> str:
+        if ".." in key.split("/") or key.startswith("/"):
+            raise ValidationFailed("Invalid storage key.")
+        return self.prefix + key
+
+    def save(self, *, scope: str, visibility: str, data: bytes, mime_type: str) -> StoredFile:
+        key = _new_key(scope, visibility, mime_type)
+        self.client.put_object(Bucket=self.bucket, Key=self._key(key), Body=data, ContentType=mime_type,
+                               ServerSideEncryption="AES256")
+        url = f"{self.public_url_prefix}/{key[len('public/'):]}" if visibility == "public" else None
+        return StoredFile(key=key, url=url, mime_type=mime_type, size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+
+    def open(self, key: str) -> BinaryIO:
+        try:
+            body = self.client.get_object(Bucket=self.bucket, Key=self._key(key))["Body"].read()
+        except self.client.exceptions.NoSuchKey as exc:
+            raise FileNotFoundError(key) from exc
+        return io.BytesIO(body)
+
+    def delete(self, key: str) -> None:
+        self.client.delete_object(Bucket=self.bucket, Key=self._key(key))
 
 
 _storage: Storage | None = None
@@ -96,8 +133,12 @@ def get_storage() -> Storage:
         settings = get_settings()
         if settings.storage_backend == "local":
             _storage = LocalStorage(Path(settings.storage_local_path))
-        else:  # pragma: no cover - S3 adapter arrives with the production phase
-            raise NotImplementedError("S3 storage backend is configured in Phase 13.")
+        else:
+            import boto3
+
+            client = boto3.client("s3", region_name=settings.s3_region, endpoint_url=settings.s3_endpoint_url,
+                                  aws_access_key_id=settings.s3_access_key_id, aws_secret_access_key=settings.s3_secret_access_key)
+            _storage = S3Storage(client, settings.s3_bucket or "", settings.s3_prefix)
     return _storage
 
 
@@ -110,3 +151,21 @@ def validate_upload(data: bytes, *, allowed: set[str], max_mb: int) -> str:
     if mime is None or mime not in allowed:
         raise ValidationFailed("Unsupported file type. Allowed: " + ", ".join(sorted(allowed)), code="unsupported_file")
     return mime
+
+
+async def media_from_bucket(request):
+    """Serve ``public/<path>`` from the bucket at /media/<path> (S3 backend only). Nothing outside public/ is reachable."""
+    import mimetypes
+
+    from starlette.concurrency import run_in_threadpool
+    from starlette.responses import Response
+
+    path = request.path_params["path"]
+    if not path or ".." in path.split("/") or path.startswith("/"):
+        return Response(status_code=404)
+    try:
+        fh = await run_in_threadpool(get_storage().open, f"public/{path}")
+    except (FileNotFoundError, ValidationFailed):
+        return Response(status_code=404)
+    mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+    return Response(fh.read(), media_type=mime, headers={"Cache-Control": "public, max-age=86400"})

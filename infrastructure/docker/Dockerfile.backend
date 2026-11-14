@@ -1,12 +1,36 @@
-FROM python:3.12-slim AS base
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+# syntax=docker/dockerfile:1.7
+# One image for the API, the worker, the backup scheduler and the one-shot migrate step (different commands).
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+# PostgreSQL client tools for pg_dump / pg_restore (backups). Debian 13 ships client 17: use PostgreSQL 17 servers.
+# INSTALL_PG_CLIENT=false builds a smaller image for SQLite-only deployments.
+ARG INSTALL_PG_CLIENT=true
+# Package downloads use HTTPS mirrors. The optional build secret "extra_ca" is a CA bundle for building behind a
+# TLS-inspecting proxy; it is only mounted during the build and never kept in the image.
+RUN --mount=type=secret,id=extra_ca,required=false \
+    [ "$INSTALL_PG_CLIENT" != "true" ] && exit 0; \
+    sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+ && APT_CA=""; if [ -s /run/secrets/extra_ca ]; then APT_CA="-o Acquire::https::CAInfo=/run/secrets/extra_ca"; fi \
+ && apt-get $APT_CA update \
+ && apt-get $APT_CA install -y --no-install-recommends postgresql-client \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -s /run/secrets/extra_ca ]; then export PIP_CERT=/run/secrets/extra_ca; fi; \
+    pip install -r requirements.txt
+
 COPY . .
-RUN useradd -m appuser && mkdir -p /data/uploads && chown -R appuser:appuser /app /data
-USER appuser
+RUN useradd --create-home --uid 10001 app \
+ && mkdir -p /data/uploads /data/backups \
+ && chown -R app:app /data
+USER app
+
+ENV STORAGE_LOCAL_PATH=/data/uploads BACKUP_DIR=/data/backups LOG_JSON=true
 EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=5s CMD curl -fs http://127.0.0.1:8000/api/v1/health || exit 1
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+# Exec form so SIGTERM reaches uvicorn directly (graceful shutdown). Client IPs are resolved by the app itself
+# from FORWARDED_ALLOW_IPS, so uvicorn's own proxy-header handling is off.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-server-header", "--timeout-graceful-shutdown", "20"]

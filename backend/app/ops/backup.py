@@ -74,20 +74,20 @@ class BackupConfig:
 
 
 def config_from_settings() -> BackupConfig:
+    """From backend/.env or the environment (Docker passes the root .env as environment variables)."""
     from app.core.config import get_settings
 
     s = get_settings()
-    key = os.environ.get("BACKUP_ENCRYPTION_KEY") or None
     return BackupConfig(
         database_url=s.database_url,
         uploads_dir=Path(s.storage_local_path) if s.storage_backend == "local" else None,
-        backup_dir=Path(os.environ.get("BACKUP_DIR") or (Path(s.storage_local_path).parent / "backups")),
-        encryption_key=decode_key(key) if key else None,
-        keep_daily=int(os.environ.get("BACKUP_KEEP_DAILY", 7)),
-        keep_weekly=int(os.environ.get("BACKUP_KEEP_WEEKLY", 4)),
-        keep_monthly=int(os.environ.get("BACKUP_KEEP_MONTHLY", 6)),
-        s3_bucket=os.environ.get("BACKUP_S3_BUCKET") or None,
-        s3_prefix=os.environ.get("BACKUP_S3_PREFIX", "backups/"),
+        backup_dir=Path(s.backup_dir or (Path(s.storage_local_path).parent / "backups")),
+        encryption_key=decode_key(s.backup_encryption_key) if s.backup_encryption_key else None,
+        keep_daily=s.backup_keep_daily,
+        keep_weekly=s.backup_keep_weekly,
+        keep_monthly=s.backup_keep_monthly,
+        s3_bucket=s.backup_s3_bucket or None,
+        s3_prefix=s.backup_s3_prefix,
         s3_client_factory=_s3_client_from_settings,
     )
 
@@ -407,6 +407,61 @@ def _record(info: dict[str, Any]) -> None:
         print(f"warning: could not record backup status: {exc}", file=sys.stderr)
 
 
+def run_backup(cfg: BackupConfig) -> Path:
+    """Create, verify, prune and record the outcome (success or failure) for the status page and alerts."""
+    started = datetime.now(UTC)
+    try:
+        path = create(cfg)
+        manifest = verify(path, cfg.encryption_key)
+    except Exception as exc:
+        _record({"ok": False, "error": f"{type(exc).__name__}: {exc}"[:500]})
+        raise
+    removed = prune(cfg)
+    _record({"ok": True, "file": path.name, "size_bytes": path.stat().st_size, "encrypted": bool(cfg.encryption_key),
+             "offsite": bool(cfg.s3_bucket), "seconds": round((datetime.now(UTC) - started).total_seconds(), 1),
+             "pruned": len(removed), "row_counts": manifest["row_counts"]})
+    return path
+
+
+def next_run(now: datetime, at: str, tz: str) -> datetime:
+    """The next occurrence of local time ``at`` (HH:MM) in time zone ``tz`` strictly after ``now``."""
+    from datetime import time, timedelta
+    from zoneinfo import ZoneInfo
+
+    hour, minute = (int(x) for x in at.split(":"))
+    zone = ZoneInfo(tz)
+    local = now.astimezone(zone)
+    candidate = datetime.combine(local.date(), time(hour, minute), tzinfo=zone)
+    if candidate <= local:
+        candidate = datetime.combine(local.date() + timedelta(days=1), time(hour, minute), tzinfo=zone)
+    return candidate.astimezone(UTC)
+
+
+def schedule(cfg: BackupConfig, at: str, tz: str, *, max_runs: int | None = None, sleep=None) -> int:
+    """Run a backup every day at ``at`` local time until SIGTERM. A failed night is recorded and retried the next."""
+    import signal
+    import time as _time
+
+    sleep = sleep or _time.sleep
+    stopping = {"flag": False}
+    signal.signal(signal.SIGTERM, lambda *_: stopping.update(flag=True))
+    runs = 0
+    print(f"Backups scheduled daily at {at} ({tz}).", flush=True)
+    while not stopping["flag"] and (max_runs is None or runs < max_runs):
+        due = next_run(datetime.now(UTC), at, tz)
+        while not stopping["flag"] and datetime.now(UTC) < due:
+            sleep(min(30.0, max(0.0, (due - datetime.now(UTC)).total_seconds())))
+        if stopping["flag"]:
+            break
+        try:
+            path = run_backup(cfg)
+            print(f"Backup written and verified: {path.name}", flush=True)
+        except Exception as exc:  # recorded by run_backup; keep the schedule alive
+            print(f"Backup failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+        runs += 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.ops.backup", description="Create, verify, restore and prune backups.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -417,24 +472,20 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("file", type=Path)
     r.add_argument("--yes", action="store_true", help="confirm that the current data will be replaced")
     r.add_argument("--skip-uploads", action="store_true")
+    sc = sub.add_parser("schedule", help="stay running and back up once a day (for the Docker backup service)")
+    sc.add_argument("--at", default=None, help="local time HH:MM (default BACKUP_AT, 02:30; zone BACKUP_TIMEZONE, Asia/Kolkata)")
     sub.add_parser("prune", help="delete backups outside the retention policy")
     sub.add_parser("list", help="list local backups, newest first")
     args = parser.parse_args(argv)
     cfg = config_from_settings()
     try:
         if args.command == "create":
-            started = datetime.now(UTC)
-            try:
-                path = create(cfg)
-                manifest = verify(path, cfg.encryption_key)
-            except Exception as exc:
-                _record({"ok": False, "error": f"{type(exc).__name__}: {exc}"[:500]})
-                raise
-            removed = prune(cfg)
-            _record({"ok": True, "file": path.name, "size_bytes": path.stat().st_size, "encrypted": bool(cfg.encryption_key),
-                     "offsite": bool(cfg.s3_bucket), "seconds": round((datetime.now(UTC) - started).total_seconds(), 1),
-                     "row_counts": manifest["row_counts"]})
-            print(f"Backup written and verified: {path} ({path.stat().st_size:,} bytes); pruned {len(removed)} old backup(s).")
+            path = run_backup(cfg)
+            print(f"Backup written and verified: {path} ({path.stat().st_size:,} bytes).")
+        elif args.command == "schedule":
+            from app.core.config import get_settings
+
+            return schedule(cfg, args.at or get_settings().backup_at, get_settings().backup_timezone)
         elif args.command == "verify":
             manifest = verify(args.file, cfg.encryption_key)
             print(f"OK: {manifest['database']} backup from {manifest['created_at']}, schema {manifest['alembic_revision']}, "

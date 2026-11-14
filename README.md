@@ -39,7 +39,8 @@ appointment is confirmed.
 | 10 | Admin dashboard (KPIs vs previous period, daily trends, utilization, busiest times, needs-attention list), professional stats, 10 reports with CSV/Excel export (audit-logged), platform dashboard, subscription plans with enforced limits, organization detail, platform settings and announcement | ✅ done |
 | 11 | Developer portal: scoped API keys (hashed, IP allowlist, per-key rate limit, usage), signed webhooks with outbox delivery, retries, SSRF protection and delivery logs, API docs; platform API usage; trusted-proxy client IPs | ✅ done |
 | 12 | Security hardening and testing: security counters survive failed requests, cross-tenant sweep of every ID route, forwarded-IP spoofing fix, no input echo in errors, generic 500s, CSP and safe post-login redirects, accessibility (axe) and CSP checks in the browser suite, customer data erasure, bandit / pip-audit / npm audit / ruff / coverage gates in CI | ✅ done |
-| 13–14 | See roadmap in `documentation/architecture.md` | planned |
+| 13 | Production: Docker stack with automatic HTTPS (Caddy), PostgreSQL 17, Redis, worker and one-shot migrations; startup refuses unsafe settings; encrypted, verified, pruned daily backups with restore and off-site copy; S3-compatible uploads; System health page, Prometheus metrics and alert rules, optional Sentry (scrubbed); nonce-based CSP; shared Redis rate limits; deployment runbook | ✅ done |
+| 14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -223,12 +224,19 @@ message**.
 
 Calendar events and meetings are created by the worker, so keep it running.
 
-## Run with Docker (PostgreSQL + Redis)
+## Run in production (Docker, HTTPS, backups, monitoring)
+
+On a Linux server with Docker and a domain pointing at it:
 
 ```bash
-cp .env.example .env   # set SECRET_KEY and POSTGRES_PASSWORD
-docker compose up --build
+python3 scripts/generate_env.py --domain book.yourclinic.in
+docker compose up -d --build
+docker compose run --rm api python -m app.ops.platform_admin --email you@example.com
 ```
+
+That starts HTTPS (automatic certificates), the web app, API, background worker, daily encrypted and verified
+backups, PostgreSQL 17 and Redis. The full guide, including restore drills, updates, rollback and monitoring, is
+`documentation/deployment.md`.
 
 ## Database migrations
 
