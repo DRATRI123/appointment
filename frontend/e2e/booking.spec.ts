@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { bookAsGuest, randomMobile } from "./guest-booking";
 
 /** Seed an organization with a scheduled professional through the API from the signed-in browser. */
 async function seedClinic(page: Page) {
@@ -27,31 +28,18 @@ async function seedClinic(page: Page) {
   return { slug, orgName };
 }
 
-test("guest books through the wizard, sees the status page, staff sees it on the calendar", async ({ page, context }) => {
+test("guest books on the public page with a verified mobile, sees the status page, staff sees it on the calendar", async ({ page, context }) => {
   const { slug } = await seedClinic(page);
 
   // Guest in a fresh context (no cookies).
   const guest = await context.browser()!.newContext();
   const g = await guest.newPage();
-  await g.goto(`/o/${slug}`);
-  await g.getByTestId("book-now").click();
-  await g.getByTestId("pick-service").first().click();
-  // single branch auto-selected → professional step
-  await g.getByTestId("pick-professional").first().click();
-  await expect(g.getByTestId("slot-picker")).toBeVisible();
-  // pick first available day with slots then first slot
-  const slot = g.getByTestId("slot").first();
-  await expect(slot).toBeVisible({ timeout: 10_000 });
-  await slot.click();
-  await expect(g.getByTestId("hold-countdown")).toBeVisible();
-  await expect(g.getByTestId("pay-now")).toContainText("Nothing");
-  await g.getByLabel("Full name").fill("Guest Patient");
-  await g.getByLabel("Mobile number").fill("9898989898");
-  await g.getByRole("button", { name: "Confirm booking" }).click();
-  await g.waitForURL(/\/appointments\/APT-/);
+  const reference = await bookAsGuest(g, slug, {
+    name: "Guest Patient", mobile: randomMobile(),
+    onReview: async (p) => { await expect(p.getByTestId("price-block")).toContainText("Pay at the clinic"); },
+  });
   await expect(g.getByTestId("booking-heading")).toContainText("confirmed");
-  await expect(g.getByText("Dr. E2E")).toBeVisible();
-  const reference = g.url().match(/APT-[A-Z0-9-]+/)![0];
+  await expect(g.getByText("Dr. E2E").first()).toBeVisible();
   await guest.close();
 
   // Staff sees the appointment in the list and can check it in.

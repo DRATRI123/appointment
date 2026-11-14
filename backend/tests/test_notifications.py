@@ -69,7 +69,7 @@ def test_booking_payment_flow_emits_and_dispatches(client, db):
     rows = _rows(db, event="appointment.pending_payment")
     assert sorted(r.channel for r in rows) == ["email", "sms", "whatsapp"] and all(r.status == "pending" for r in rows)
     email = next(r for r in rows if r.channel == "email")
-    assert "₹500.00" in email.body and f"/o/{c.org['slug']}/appointments/{appt['reference']}?t=" in email.body and email.recipient_address == "guest@example.com"
+    assert "₹500.00" in email.body and f"/{c.org['slug']}/appointments/{appt['reference']}?t=" in email.body and email.recipient_address == "guest@example.com"
     assert email.subject.startswith("Complete your payment for Consultation")
     staff = _rows(db, event="staff.new_booking")
     assert [(r.channel, r.status) for r in staff] == [("in_app", "sent"), ("email", "pending")] and staff[1].recipient_address == "ntf-owner@example.com"

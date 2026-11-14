@@ -1,0 +1,149 @@
+{%- comment -%}
+  "Book an appointment" section for Online Store 2.0 themes. No Shopify app: it links to, or embeds, your booking page.
+  Add it in the theme editor (Add section → Appointment booking) and fill in the booking address and clinic name.
+  For "Embedded booking page", first add this store's address to the clinic's allowed websites
+  (Admin → Booking page & Shopify → Allowed websites), or browsers will refuse to show the page.
+{%- endcomment -%}
+{%- liquid
+  assign ab_base = section.settings.booking_url | default: '' | strip | split: '?' | first | split: '#' | first
+  assign ab_base = ab_base | remove: '"' | remove: "'" | remove: '<' | remove: '>' | remove: ' '
+  assign ab_last = ab_base | slice: -1, 1
+  if ab_last == '/'
+    assign ab_len = ab_base | size | minus: 1
+    assign ab_base = ab_base | slice: 0, ab_len
+  endif
+  assign ab_clinic = section.settings.clinic | default: '' | handleize
+  assign ab_service = section.settings.service | default: '' | handleize
+  assign ab_branch = section.settings.branch | default: '' | handleize
+  assign ab_doctor = section.settings.doctor | default: '' | handleize
+  assign ab_query = ''
+  if ab_service != ''
+    assign ab_query = ab_query | append: '&service=' | append: ab_service
+  endif
+  if ab_branch != ''
+    assign ab_query = ab_query | append: '&branch=' | append: ab_branch
+  endif
+  if ab_doctor != ''
+    assign ab_query = ab_query | append: '&doctor=' | append: ab_doctor
+  endif
+  if ab_query != ''
+    assign ab_query = ab_query | remove_first: '&' | prepend: '?'
+  endif
+  assign ab_scheme = ab_base | slice: 0, 8
+  assign ab_ready = false
+  if ab_scheme == 'https://' and ab_clinic != ''
+    assign ab_ready = true
+  endif
+  assign ab_frame_src = ab_base | append: '/embed/' | append: ab_clinic | append: ab_query
+-%}
+
+<section
+  class="ab-section ab-section--{{ section.settings.align }}"
+  style="--ab-color: {{ section.settings.button_color }}; --ab-ink: {{ section.settings.button_text_color }};"
+  aria-labelledby="ab-heading-{{ section.id }}"
+>
+  <div class="page-width">
+    {%- if section.settings.heading != blank -%}
+      <h2 id="ab-heading-{{ section.id }}" class="ab-section__heading">{{ section.settings.heading | escape }}</h2>
+    {%- endif -%}
+    {%- if section.settings.text != blank -%}
+      <div class="ab-section__text">{{ section.settings.text }}</div>
+    {%- endif -%}
+
+    {%- if ab_ready == false -%}
+      {%- if request.design_mode -%}
+        <p class="ab-section__setup">Set the booking address (https://…) and clinic name in this section's settings.</p>
+      {%- endif -%}
+    {%- elsif section.settings.mode == 'embed' -%}
+      <iframe
+        id="ab-frame-{{ section.id }}"
+        class="ab-section__frame"
+        src="{{ ab_frame_src | escape }}"
+        title="{{ section.settings.heading | default: 'Book an appointment' | escape }}"
+        loading="lazy"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allow="clipboard-write"
+        style="height: {{ section.settings.frame_height }}px"
+      ></iframe>
+      <p class="ab-section__fallback">
+        Trouble seeing the booking form?
+        <a href="{{ ab_base | append: '/' | append: ab_clinic | append: ab_query | escape }}" target="_blank" rel="noopener">Open it in a new tab</a>.
+      </p>
+      <script>
+        (function () {
+          var frame = document.getElementById('ab-frame-{{ section.id }}');
+          if (!frame) return;
+          var origin = new URL(frame.src).origin;
+          window.addEventListener('message', function (event) {
+            // Only the booking site may resize the frame, and only to a sensible height.
+            if (event.origin !== origin || !event.data || event.data.type !== 'appointment-booking:resize') return;
+            var h = parseInt(event.data.height, 10);
+            if (h > 300 && h < 8000) frame.style.height = h + 'px';
+          });
+        })();
+      </script>
+    {%- else -%}
+      <div class="ab-section__actions">
+        {%- render 'appointment-booking-button',
+          booking_url: section.settings.booking_url,
+          clinic: section.settings.clinic,
+          service: section.settings.service,
+          branch: section.settings.branch,
+          doctor: section.settings.doctor,
+          label: section.settings.button_label,
+          style: section.settings.button_style,
+          new_tab: section.settings.new_tab
+        -%}
+      </div>
+    {%- endif -%}
+  </div>
+</section>
+
+<style>
+  .ab-section { padding: 3rem 0; }
+  .ab-section--center { text-align: center; }
+  .ab-section__heading { margin: 0 0 .75rem; }
+  .ab-section__text { max-width: 42rem; margin: 0 0 1.5rem; }
+  .ab-section--center .ab-section__text { margin-inline: auto; }
+  .ab-section__frame { display: block; width: 100%; border: 0; border-radius: 16px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .ab-section__fallback { margin-top: .75rem; font-size: .875rem; opacity: .8; }
+  .ab-section__setup { padding: 1rem; border: 1px dashed #b91c1c; color: #b91c1c; }
+</style>
+
+{% schema %}
+{
+  "name": "Appointment booking",
+  "tag": "div",
+  "class": "section-appointment-booking",
+  "settings": [
+    { "type": "header", "content": "Booking page" },
+    { "type": "text", "id": "booking_url", "label": "Booking site address", "placeholder": "https://booking.mydomain.com", "info": "Must start with https://" },
+    { "type": "text", "id": "clinic", "label": "Clinic web address name", "placeholder": "akshar-clinic", "info": "The part after the booking site address, e.g. akshar-clinic" },
+    { "type": "select", "id": "mode", "label": "Show as", "default": "button", "options": [
+      { "value": "button", "label": "Book appointment button" },
+      { "value": "embed", "label": "Embedded booking page" }
+    ], "info": "For an embedded page, add this store's address under Allowed websites in your booking admin first." },
+    { "type": "header", "content": "Preselect (optional)" },
+    { "type": "text", "id": "service", "label": "Service", "placeholder": "consultation" },
+    { "type": "text", "id": "branch", "label": "Location", "placeholder": "navrangpura" },
+    { "type": "text", "id": "doctor", "label": "Doctor", "placeholder": "dr-meera-joshi" },
+    { "type": "header", "content": "Content" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Book an appointment" },
+    { "type": "richtext", "id": "text", "label": "Text", "default": "<p>Choose a time that suits you. You'll get a confirmation on your phone.</p>" },
+    { "type": "select", "id": "align", "label": "Alignment", "default": "center", "options": [
+      { "value": "left", "label": "Left" }, { "value": "center", "label": "Center" }
+    ] },
+    { "type": "header", "content": "Button" },
+    { "type": "text", "id": "button_label", "label": "Button text", "default": "Book appointment" },
+    { "type": "select", "id": "button_style", "label": "Button style", "default": "solid", "options": [
+      { "value": "solid", "label": "Solid" }, { "value": "outline", "label": "Outline" }
+    ] },
+    { "type": "color", "id": "button_color", "label": "Button colour", "default": "#0f5132" },
+    { "type": "color", "id": "button_text_color", "label": "Button text colour", "default": "#ffffff" },
+    { "type": "checkbox", "id": "new_tab", "label": "Open booking in a new tab", "default": false },
+    { "type": "header", "content": "Embedded page" },
+    { "type": "range", "id": "frame_height", "label": "Starting height", "min": 500, "max": 1600, "step": 50, "unit": "px", "default": 900, "info": "The frame then resizes itself to the booking page." }
+  ],
+  "presets": [{ "name": "Appointment booking" }]
+}
+{% endschema %}

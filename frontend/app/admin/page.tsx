@@ -96,7 +96,7 @@ function AdminDashboard() {
     <div className="mx-auto max-w-7xl space-y-6">
       <PageHeader title={org?.name ?? "Dashboard"} description="How the clinic is doing. Figures use the clinic's time zone."
         actions={<div className="flex gap-2">{hasPermission("reports:read") ? <Button asChild variant="outline"><Link href="/admin/reports"><FileSpreadsheet /> Reports</Link></Button> : null}
-          {org ? <Button asChild variant="ghost"><Link href={`/o/${org.slug}`} target="_blank">Public page <ArrowRight /></Link></Button> : null}</div>} />
+          {org ? <Button asChild variant="ghost"><Link href={`/${org.slug}`} target="_blank">Public page <ArrowRight /></Link></Button> : null}</div>} />
       <FiltersBar preset={preset} onPreset={setPreset} filters={filters} onChange={setFilters} />
       {dash.isError ? <EmptyState icon={BarChart3} title="Dashboard unavailable" body={errorMessage(dash.error)} /> : !d ? <Skeleton className="h-96" /> : (
         <div className="space-y-6" data-testid="dashboard">

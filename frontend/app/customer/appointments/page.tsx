@@ -46,7 +46,7 @@ export default function CustomerAppointmentsPage() {
                 <CardContent className="space-y-4">
                   <AppointmentSummary appt={a} />
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild size="sm" variant="outline"><Link href={`/o/${a.organization_slug}/appointments/${a.reference}`}>Open</Link></Button>
+                    <Button asChild size="sm" variant="outline"><Link href={`/${a.organization_slug}/appointments/${a.reference}`}>Open</Link></Button>
                     {a.can_reschedule ? <Button size="sm" variant="outline" onClick={() => setRescheduling(rescheduling?.id === a.id ? null : a)}>Reschedule</Button> : null}
                     {a.can_cancel ? <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm("Cancel this appointment?")) cancel.mutate(a.id); }}>Cancel</Button> : null}
                   </div>

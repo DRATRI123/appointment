@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fillDetailsAndVerify, pickFirstSlot, randomMobile } from "./guest-booking";
 
 async function seedClinic(page: Page) {
   await page.goto("/register");
@@ -35,15 +36,12 @@ test("admin turns on WhatsApp, a guest opts in, staff see the bell and the outbo
   await expect(page.getByTestId("reminder-chip")).toHaveCount(2);
 
   const guest = await (await context.browser()!.newContext()).newPage();
-  await guest.goto(`/o/${slug}/book`);
+  await guest.goto(`/${slug}`);
   await guest.getByTestId("pick-service").first().click();
-  await guest.getByTestId("pick-professional").first().click();
-  await guest.getByTestId("slot").first().click();
-  await guest.getByLabel("Full name").fill("Opted In Guest");
-  await guest.getByLabel("Mobile number").fill("9812399001");
-  await guest.getByLabel("Email (optional)").fill("optin@example.com");
+  await pickFirstSlot(guest);
   await guest.getByTestId("whatsapp-opt-in").check();
-  await guest.getByRole("button", { name: "Confirm booking" }).click();
+  await fillDetailsAndVerify(guest, { name: "Opted In Guest", mobile: randomMobile(), email: "optin@example.com" });
+  await guest.getByTestId("confirm-booking").click();
   await guest.waitForURL(/\/appointments\/APT-/);
   await guest.context().close();
 

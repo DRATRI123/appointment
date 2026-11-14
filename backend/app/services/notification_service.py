@@ -158,7 +158,7 @@ class NotificationService:
         branch = self.db.get(Branch, appt.branch_id)
         cust = self.db.get(Customer, appt.customer_id)
         token = (appt.metadata_ or {}).get("access_token")
-        link = f"{get_settings().frontend_url.rstrip('/')}/o/{self.org.slug}/appointments/{appt.reference}" + (f"?t={token}" if token else "")
+        link = f"{get_settings().frontend_url.rstrip('/')}/{self.org.slug}/appointments/{appt.reference}" + (f"?t={token}" if token else "")
         meeting = appt.meeting_link if appt.consultation_mode == "online" else ""
         return {
             "customer_name": cust.full_name if cust else "", "customer_mobile": (cust.mobile or "") if cust else "", "organization_name": self.org.name,

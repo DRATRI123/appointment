@@ -26,7 +26,7 @@ test("public, auth, booking and admin pages: no CSP violations, no console error
     await call("/upi-accounts", { display_name: "Main", upi_id: "clinic@okhdfcbank", merchant_name: "Quality Clinic" });
     return org.slug as string;
   });
-  for (const path of ["/admin", "/admin/appointments", "/admin/calendar", "/admin/payments/verification", "/admin/reports", "/admin/notifications", "/admin/developers", "/admin/settings", `/o/${slug}`, `/o/${slug}/book`]) {
+  for (const path of ["/admin", "/admin/appointments", "/admin/calendar", "/admin/payments/verification", "/admin/reports", "/admin/notifications", "/admin/developers", "/admin/settings", "/admin/booking-page", `/${slug}`, `/${slug}?service=consultation`, `/embed/${slug}`]) {
     await audit(page, path, problems);
   }
 });

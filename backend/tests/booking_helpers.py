@@ -30,7 +30,8 @@ def utc(dt: datetime) -> datetime:
 
 
 class Clinic:
-    def __init__(self, client, email="clinic-owner@example.com", name="Booking Clinic", payment_mode="full_advance", price=50000, duration=30):
+    def __init__(self, client, email="clinic-owner@example.com", name="Booking Clinic", payment_mode="full_advance", price=50000, duration=30,
+                 verify_mobile=False):
         self.client = client
         self.tokens = register(client, email, "Clinic Owner")
         client.cookies.clear()
@@ -46,6 +47,9 @@ class Clinic:
         self.put("/schedules", {"professional_id": self.pro["id"], "branch_id": self.branch["id"],
                                 "windows": [{"weekday": wd, "start_time": "09:00:00", "end_time": "12:00:00"} for wd in range(5)]})
         self.monday = next_weekday(0)
+        # Most tests are about something else; the mobile-code step has its own tests (test_public_booking.py).
+        if not verify_mobile:
+            self.put(f"/organizations/{self.org['id']}/settings/booking", {"values": {"require_mobile_verification": False}})
 
     def post(self, path, body, headers=None, expect=201):
         r = self.client.post(f"/api/v1{path}", json=body, headers=headers or self.h)

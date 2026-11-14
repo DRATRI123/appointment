@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { bookAsGuest, randomMobile } from "./guest-booking";
 
 async function seedClinic(page: Page) {
   await page.goto("/register");
@@ -35,14 +36,7 @@ test("statement import suggests a match, staff verify with bank evidence, then r
   const utr = String(400000000000 + Math.floor(Math.random() * 99999999999));
 
   const guest = await (await context.browser()!.newContext()).newPage();
-  await guest.goto(`/o/${slug}/book`);
-  await guest.getByTestId("pick-service").first().click();
-  await guest.getByTestId("pick-professional").first().click();
-  await guest.getByTestId("slot").first().click();
-  await guest.getByLabel("Full name").fill("Statement Guest");
-  await guest.getByLabel("Mobile number").fill("9812300001");
-  await guest.getByRole("button", { name: "Confirm booking" }).click();
-  await guest.waitForURL(/\/appointments\/APT-/);
+  await bookAsGuest(guest, slug, { name: "Statement Guest", mobile: randomMobile() });
   await guest.getByLabel("UTR / UPI reference number *").fill(utr);
   await guest.getByRole("button", { name: "Submit for verification" }).click();
   await expect(guest.getByTestId("payment-status")).toHaveText("Submitted");

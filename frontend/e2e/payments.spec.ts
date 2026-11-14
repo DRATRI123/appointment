@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { bookAsGuest, randomMobile } from "./guest-booking";
 
 /** Owner with a branch, a full-advance service, a scheduled professional and a UPI account. */
 async function seedClinic(page: Page) {
@@ -48,23 +49,19 @@ test("guest pays by UPI, submits the UTR, staff verify and the booking is confir
   });
 
   const guest = await (await context.browser()!.newContext()).newPage();
-  await guest.goto(`/o/${slug}/book`);
-  await guest.getByTestId("pick-service").first().click();
-  await guest.getByTestId("pick-professional").first().click();
-  await guest.getByLabel("Coupon code").fill("tenoff");
-  await guest.getByRole("button", { name: "Apply" }).click();
-  await expect(guest.getByTestId("pay-now")).toHaveText("₹450.00");
-  await guest.getByTestId("slot").first().click();
-  await guest.getByLabel("Full name").fill("Paying Guest");
-  await guest.getByLabel("Mobile number").fill("9812345678");
-  await guest.getByRole("button", { name: "Confirm booking" }).click();
-  await guest.waitForURL(/\/appointments\/APT-/);
+  await bookAsGuest(guest, slug, {
+    name: "Paying Guest", mobile: randomMobile(), coupon: "tenoff",
+    onReview: async (p) => {
+      await expect(p.getByTestId("pay-now")).toHaveText("Pay ₹450.00 now");
+      await expect(p.getByTestId("summary-total").first()).toHaveText("₹450.00");
+    },
+  });
 
   // Checkout: QR, UPI ID, amount.
   await expect(guest.getByTestId("upi-checkout")).toBeVisible();
   await expect(guest.getByTestId("upi-qr")).toBeVisible();
   await expect(guest.getByTestId("upi-id")).toContainText("clinic@okhdfcbank");
-  await expect(guest.getByText("Pay ₹450.00 by UPI")).toBeVisible();
+  await expect(guest.getByTestId("upi-checkout").getByText("Pay ₹450.00 by UPI")).toBeVisible();
   await guest.getByLabel("UTR / UPI reference number *").fill("412345678901");
   await guest.getByRole("button", { name: "Submit for verification" }).click();
   await expect(guest.getByTestId("booking-heading")).toContainText("Payment received for checking");

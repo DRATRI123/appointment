@@ -21,6 +21,8 @@ appointment is confirmed.
 * [Database design and ER diagram](documentation/database.md)
 * [Security architecture](documentation/security.md)
 * [API overview](documentation/api.md)
+* [Public booking API with example requests](documentation/public-booking-api.md)
+* [Shopify and website integration (no app needed)](documentation/shopify-integration.md)
 * [Deployment](documentation/deployment.md)
 
 ## Status
@@ -41,6 +43,7 @@ appointment is confirmed.
 | 12 | Security hardening and testing: security counters survive failed requests, cross-tenant sweep of every ID route, forwarded-IP spoofing fix, no input echo in errors, generic 500s, CSP and safe post-login redirects, accessibility (axe) and CSP checks in the browser suite, customer data erasure, bandit / pip-audit / npm audit / ruff / coverage gates in CI | ✅ done |
 | 13 | Production: Docker stack with automatic HTTPS (Caddy), PostgreSQL 17, Redis, worker and one-shot migrations; startup refuses unsafe settings; encrypted, verified, pruned daily backups with restore and off-site copy; S3-compatible uploads; System health page, Prometheus metrics and alert rules, optional Sentry (scrubbed); nonce-based CSP; shared Redis rate limits; deployment runbook | ✅ done |
 | 14 | PostgreSQL and performance: whole suite runs on PostgreSQL in CI; real concurrency races fixed with row locks (payments verified twice, refunds beyond the amount paid, coupon limits, double cancel) and proven by parallel tests; commit before the response is sent; SQLite → PostgreSQL migration tool with checksum verification; N+1 queries removed; indexes; multi-process API; load-tested to 150 simultaneous users on 2 cores (`documentation/performance.md`) | ✅ done |
+| 15 | Public booking page and Shopify: premium mobile-first booking at `/{clinic}` (doctor profiles, services with prices, branch choice, day strip and grouped times, mobile one-time code, review with server price, own UPI QR + UTR, clear success/pending/failed screens); preselection by URL (`?service=&branch=&doctor=&date=`), validated and never trusted for price; embeddable `/embed/{clinic}` with per-clinic allowed websites (`frame-ancestors`, fail closed) and auto-resize; Shopify Liquid button snippet and theme section; admin *Booking page & Shopify* screen with generated code (`documentation/shopify-integration.md`) | ✅ done |
 
 ## Repository layout
 

@@ -7,3 +7,4 @@ ruff>=0.17
 bandit>=1.9
 pip-audit>=2.10
 moto[s3]>=5.0
+python-liquid>=2.0  # renders the Shopify snippets in tests

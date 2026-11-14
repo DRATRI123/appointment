@@ -66,6 +66,8 @@ services:
         API_INTERNAL_URL: http://api:8000
         ENABLE_HSTS: ${ENABLE_HSTS:-true}
         NEXT_PUBLIC_APP_NAME: ${APP_NAME:-Appointment Platform}
+    environment:
+      API_INTERNAL_URL: http://api:8000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

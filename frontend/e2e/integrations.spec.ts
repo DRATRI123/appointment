@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { bookAsGuest, randomMobile } from "./guest-booking";
 
 async function seedClinic(page: Page) {
   await page.goto("/register");
@@ -40,14 +41,7 @@ test("manual video link reaches the customer, feeds and calendar files work, sta
   expect(feedUrl).toMatch(/\/api\/v1\/calendar-feeds\/.+\.ics$/);
 
   const guest = await (await context.browser()!.newContext()).newPage();
-  await guest.goto(`/o/${slug}/book`);
-  await guest.getByTestId("pick-service").first().click();
-  await guest.getByTestId("pick-professional").first().click();
-  await guest.getByTestId("slot").first().click();
-  await guest.getByLabel("Full name").fill("Video Guest");
-  await guest.getByLabel("Mobile number").fill("9812355001");
-  await guest.getByRole("button", { name: "Confirm booking" }).click();
-  await guest.waitForURL(/\/appointments\/APT-/);
+  await bookAsGuest(guest, slug, { name: "Video Guest", mobile: randomMobile() });
   await expect(guest.getByTestId("booking-heading")).toContainText("confirmed");
   await expect(guest.getByTestId("join-meeting")).toHaveAttribute("href", "https://meet.example.com/dr-video");
   const ics = await guest.getByRole("link", { name: "Add to calendar (.ics)" }).getAttribute("href");

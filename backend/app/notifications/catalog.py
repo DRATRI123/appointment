@@ -141,8 +141,8 @@ STAFF_RECIPIENT_PERMISSION = {
 SAMPLE_VALUES = {
     "customer_name": "Asha Patel", "customer_mobile": "+919812345678", "organization_name": "Sunrise Ayurveda", "organization_phone": "+91 80 4000 1234",
     "service_name": "Panchakarma consultation", "professional_name": "Dr. Mehta", "branch_name": "Indiranagar", "branch_address": "12, 100 Feet Road, Bengaluru",
-    "appointment_date": "Mon, 16 Nov 2026", "appointment_time": "10:30 am", "appointment_reference": "APT-SUNRISE-01JD8Q", "manage_link": "https://example.com/o/sunrise/appointments/APT-SUNRISE-01JD8Q",
-    "amount_due": "₹500.00", "amount_paid": "₹500.00", "payment_deadline": "Mon, 16 Nov 2026, 9:45 am", "payment_link": "https://example.com/o/sunrise/appointments/APT-SUNRISE-01JD8Q",
+    "appointment_date": "Mon, 16 Nov 2026", "appointment_time": "10:30 am", "appointment_reference": "APT-SUNRISE-01JD8Q", "manage_link": "https://example.com/sunrise/appointments/APT-SUNRISE-01JD8Q",
+    "amount_due": "₹500.00", "amount_paid": "₹500.00", "payment_deadline": "Mon, 16 Nov 2026, 9:45 am", "payment_link": "https://example.com/sunrise/appointments/APT-SUNRISE-01JD8Q",
     "utr": "412345678901", "reason": "No credit found for this UTR", "payment_reference": "PAY-SUNRISE-01JD8R", "refund_amount": "₹500.00",
     "refund_reference": "412399998888", "refund_method": "UPI", "refund_note": "A refund of ₹500.00 has been requested; you will be told when it is sent.",
     "previous_date": "Sun, 15 Nov 2026", "previous_time": "4:00 pm", "hours_before": "24", "meeting_link": "", "status": "pending payment",

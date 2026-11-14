@@ -1,11 +1,8 @@
-import { Suspense } from "react";
-import { AppointmentStatusPage } from "./status";
+import { redirectTo } from "../../redirect-to";
 
-export default async function Page({ params }: { params: Promise<{ reference: string }> }) {
-  const { reference } = await params;
-  return (
-    <Suspense>
-      <AppointmentStatusPage reference={reference} />
-    </Suspense>
-  );
+type Search = Record<string, string | string[] | undefined>;
+
+export default async function LegacyRedirect({ params, searchParams }: { params: Promise<{ slug: string; reference: string }>; searchParams: Promise<Search> }) {
+  const { slug, reference } = await params;
+  redirectTo(`/${encodeURIComponent(slug)}/appointments/${encodeURIComponent(reference)}`, await searchParams);
 }

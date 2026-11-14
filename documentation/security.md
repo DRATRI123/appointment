@@ -220,3 +220,17 @@ Outcomes are recorded for the System health page and the `BackupMissing` alert. 
 | Monitoring data | `/metrics` needs a bearer token and uses route templates, never raw paths, so IDs and personal data never become labels; Sentry events are stripped of bodies, cookies, auth headers, query strings, user and local variables | `tests/test_monitoring.py` |
 | Uploads in S3 | Private bucket, server-side encryption, keys validated against `..`; public files streamed by the API so no public bucket policy is needed | `tests/test_storage_s3.py` |
 | Configuration isolation | The backend reads only `backend/.env`; the root `.env` (Docker, production values) never applies to a local run | |
+
+## Public booking page, embedding and Shopify
+
+| Area | Control | Test |
+|---|---|---|
+| Fake bookings / OTP abuse | Online bookings need a one-time code for the customer's mobile (setting `booking.require_mobile_verification`, on by default). The token is a signed JWT bound to clinic, held slot, session key and number, valid 30 minutes. Per-IP limits (5/min, 20/h send; 10/min confirm), 60 s resend cooldown, 5 codes per number per hour, 5 wrong attempts lock the code; attempts persist even though the request fails | `tests/test_public_booking.py` |
+| Hold hijacking | Code requests and bookings must present the session key that created the hold | `test_codes_need_the_customers_own_live_reservation` |
+| URL parameters | `service`, `branch`, `doctor`, `date` are parsed against a strict pattern and matched to the real catalogue; unknown values are ignored; they never reach price or permission logic. The server recalculates price and ignores client amount fields | `frontend/tests/unit/booking-params.test.ts`, `test_prices_come_from_the_server_never_from_the_request` |
+| Click-jacking | Normal pages: `frame-ancestors 'none'` + `X-Frame-Options: DENY`. `/embed/{clinic}`: `frame-ancestors 'self'` plus the clinic's allowed websites (exact `https://` origins, max 20, validated server-side), fetched by the web server with a short cache; on any error the header is `'none'` (fail closed) | `frontend/tests/unit/csp.test.ts`, `frontend/e2e/public-booking.spec.ts` |
+| CORS | Unchanged: only the booking site's own origins. Shopify stores never call the API, so their domains must not be added | |
+| Shopify theme code | Contains only the public booking address. Every merchant value is cleaned separately (`handleize`), the link must be `https://`, output is escaped | `tests/test_shopify_liquid.py` (renders with python-liquid, injection cases) |
+| iframe messages | The embed page only posts `{type: "appointment-booking:resize", height}`; the generated listeners check `event.origin` and bound the height | `frontend/tests/unit/embed-code.test.ts` |
+| Slug squatting | Organization slugs cannot take top-level app routes (`admin`, `embed`, `api`, `login`, …) | `test_reserved_web_addresses_cannot_be_taken` |
+| Patient data in URLs | Public URLs carry only clinic/service/doctor slugs. The appointment page needs a reference and a random token, is `noindex`, and sends `Referrer-Policy: strict-origin-when-cross-origin` | |

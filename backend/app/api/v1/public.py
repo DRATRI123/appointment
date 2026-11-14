@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from pydantic import Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import DB
@@ -161,6 +162,66 @@ def public_hold(request: Request, response: Response, slug: str, payload: HoldCr
     return hold_read(db, service.create_hold(payload, session_key=payload.session_key, customer=customer))
 
 
+class MobileCodeRequest(APIModel):
+    mobile: str = Field(min_length=6, max_length=20)
+    hold_id: str = Field(max_length=64)
+    session_key: str = Field(min_length=8, max_length=64)
+
+
+class MobileCodeConfirm(MobileCodeRequest):
+    code: str = Field(min_length=4, max_length=8, pattern=r"^\d+$")
+
+
+class MobileCodeSent(APIModel):
+    detail: str
+    expires_in_seconds: int
+    resend_after_seconds: int
+    debug_code: str | None = Field(default=None, description="Only in development/test with the console SMS provider")
+
+
+class MobileVerified(APIModel):
+    verification_token: str
+    mobile: str
+    expires_in_seconds: int
+
+
+@router.post("/organizations/{slug}/verify-mobile", response_model=MobileCodeSent, summary="Send a one-time code to confirm the mobile number for a reserved slot")
+@limiter.limit("5/minute;20/hour")
+def send_mobile_code(request: Request, response: Response, slug: str, payload: MobileCodeRequest, db: DB, meta: Meta):
+    from app.core.config import get_settings
+    from app.services.booking_verification_service import BookingVerificationService
+
+    org, _ = _org(db, slug)
+    debug = BookingVerificationService(db, org, meta).request_code(mobile=payload.mobile, hold_id=payload.hold_id, session_key=payload.session_key)
+    s = get_settings()
+    return MobileCodeSent(detail="Code sent.", expires_in_seconds=s.otp_expire_seconds, resend_after_seconds=s.otp_resend_cooldown_seconds, debug_code=debug)
+
+
+@router.post("/organizations/{slug}/verify-mobile/confirm", response_model=MobileVerified, summary="Check the code; returns a token to send with the booking")
+@limiter.limit("10/minute")
+def confirm_mobile_code(request: Request, response: Response, slug: str, payload: MobileCodeConfirm, db: DB, meta: Meta):
+    from app.services.booking_verification_service import TOKEN_MINUTES, BookingVerificationService
+
+    org, _ = _org(db, slug)
+    token, mobile = BookingVerificationService(db, org, meta).confirm_code(mobile=payload.mobile, code=payload.code, hold_id=payload.hold_id,
+                                                                         session_key=payload.session_key)
+    return MobileVerified(verification_token=token, mobile=mobile, expires_in_seconds=TOKEN_MINUTES * 60)
+
+
+class EmbedPolicy(APIModel):
+    allowed_origins: list[str]
+    booking_page_enabled: bool
+
+
+@router.get("/organizations/{slug}/embed-policy", response_model=EmbedPolicy, summary="Websites allowed to show this booking page in an iframe")
+def embed_policy(slug: str, db: DB, response: Response):
+    org, _ = _org(db, slug)
+    settings = OrganizationService(db).get_settings(org)
+    response.headers["Cache-Control"] = "public, max-age=60"
+    return EmbedPolicy(allowed_origins=list(settings.get("embed", {}).get("allowed_origins") or []),
+                       booking_page_enabled=bool(settings.get("general", {}).get("booking_page_enabled", True)))
+
+
 @router.delete("/organizations/{slug}/holds/{hold_id}", response_model=dict)
 def public_release_hold(slug: str, hold_id: str, db: DB, meta: Meta, session_key: str):
     org, _ = _org(db, slug)
@@ -172,8 +233,11 @@ def public_release_hold(slug: str, hold_id: str, db: DB, meta: Meta, session_key
 @limiter.limit("20/minute")
 def public_book(request: Request, response: Response, slug: str, payload: AppointmentCreate, db: DB, meta: Meta, user: OptionalUser):
     from app.api.v1.appointments import appointment_detail
+    from app.services.booking_verification_service import BookingVerificationService
 
     org, _ = _org(db, slug)
+    BookingVerificationService(db, org, meta).check_booking(hold_id=payload.hold_id, customer_mobile=payload.customer.mobile,
+                                                           token=payload.mobile_verification_token, user=user)
     service = AppointmentService(db, org, user, meta)
     appt = service.create(payload, user=user, staff=False, session_key=payload.session_key)
     return appointment_detail(db, service.get(appt.public_id), include_token=True, service=service, viewer_is_customer=True)
@@ -233,9 +297,9 @@ def public_booking_form(slug: str, db: DB, service_id: str | None = None, branch
 
 @router.post("/organizations/{slug}/booking-form-files", summary="Upload a file for a booking-form file field (private storage)")
 @limiter.limit("20/minute")
-async def public_form_file(request: Request, response: Response, slug: str, db: DB, settings: AppSettings, file: UploadFile = File(...)):
+def public_form_file(request: Request, response: Response, slug: str, db: DB, settings: AppSettings, file: UploadFile = File(...)):
     org, _ = _org(db, slug)
-    data = await file.read()
+    data = file.file.read()
     mime = validate_upload(data, allowed=FORM_FILE_TYPES, max_mb=settings.max_upload_size_mb)
     stored = get_storage().save(scope=f"org/{org.public_id}/form-files", visibility="private", data=data, mime_type=mime)
     return {"key": stored.key, "name": (file.filename or "file")[:160], "mime_type": stored.mime_type, "size_bytes": stored.size_bytes}
@@ -268,7 +332,7 @@ def public_checkout(slug: str, reference: str, db: DB, user: OptionalUser, acces
 @router.post("/organizations/{slug}/appointments/{reference}/payment/submit", response_model=Checkout,
              summary="Submit the UTR (and optional screenshot) after paying. This never confirms the payment by itself.")
 @limiter.limit("10/minute")
-async def public_submit_payment(
+def public_submit_payment(
     request: Request, response: Response, slug: str, reference: str, db: DB, user: OptionalUser, meta: Meta,
     access_token: str | None = None,
     utr: str = Form(..., max_length=64), transaction_reference: str | None = Form(None, max_length=128), paid_at: _datetime | None = Form(None),
@@ -280,7 +344,7 @@ async def public_submit_payment(
         from app.core.exceptions import ConflictError
 
         raise ConflictError("Nothing is due for this appointment.", code="nothing_due")
-    data = await screenshot.read() if screenshot is not None else None
+    data = screenshot.file.read() if screenshot is not None else None
     svc.submit(payment, utr=utr, transaction_reference=transaction_reference, paid_at=paid_at, payer_upi_id=payer_upi_id, notes=notes, screenshot=data or None,
                submitted_ip=meta.ip_address)
     return svc.checkout(payment)

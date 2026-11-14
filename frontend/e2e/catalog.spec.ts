@@ -60,20 +60,23 @@ test("branch, category, service and professional appear on the public page", asy
 
   // Public page
   const slug = await page.evaluate(() => fetch("/api/v1/organizations", { credentials: "include" }).then((r) => r.json()).then((o) => o[0].slug));
-  await page.goto(`/o/${slug}`);
-  await expect(page.getByRole("link", { name: orgName })).toBeVisible();
-  await expect(page.getByTestId("public-branch")).toHaveCount(1);
-  await expect(page.getByTestId("public-service")).toHaveCount(1);
-  await expect(page.getByTestId("public-professional")).toHaveCount(1);
-  await page.getByTestId("public-professional").click();
-  await expect(page.getByRole("heading", { name: "Dr. Kavya Nair" })).toBeVisible();
-  await expect(page.getByText("Koramangala")).toBeVisible();
-  await page.getByRole("link", { name: "Acne consultation" }).click();
-  await expect(page.getByRole("heading", { name: "Acne consultation" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Choose date/ })).toBeVisible();
+  await page.goto(`/${slug}`);
+  await expect(page.getByRole("heading", { level: 1, name: orgName })).toBeVisible();
+  await expect(page.getByTestId("pick-service")).toHaveCount(1);
+  await expect(page.getByTestId("pick-service")).toContainText("Acne consultation");
+  await page.getByTestId("pick-service").click();
+  // One branch and one doctor: both are chosen automatically and shown in the summary.
+  const summary = page.getByRole("complementary", { name: "Booking summary" });
+  await expect(summary.getByText("Dr. Kavya Nair")).toBeVisible();
+  await expect(summary.getByText("Koramangala")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pick a date and time" })).toBeVisible();
+
+  // Old links keep working.
+  await page.goto(`/o/${slug}/book`);
+  await expect(page).toHaveURL(new RegExp(`/${slug}$`));
 });
 
 test("unknown organization slug shows a not-found state", async ({ page }) => {
-  await page.goto("/o/this-org-does-not-exist");
-  await expect(page.getByText("Organization not found")).toBeVisible();
+  await page.goto("/this-org-does-not-exist");
+  await expect(page.getByText("We couldn't find this booking page")).toBeVisible();
 });

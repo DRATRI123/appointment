@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * slipped past React's escaping. Styles keep 'unsafe-inline' (component libraries set inline styles; styles cannot
  * run code).
  */
-export function buildCsp(nonce: string, { dev = false, apiOrigin = "" }: { dev?: boolean; apiOrigin?: string } = {}) {
+export function buildCsp(nonce: string, { dev = false, apiOrigin = "", frameAncestors = [] }: { dev?: boolean; apiOrigin?: string; frameAncestors?: string[] } = {}) {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
@@ -15,7 +15,8 @@ export function buildCsp(nonce: string, { dev = false, apiOrigin = "" }: { dev?:
     "font-src 'self' data:",
     `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}${dev ? " ws:" : ""}`,
     "frame-src 'self'",
-    "frame-ancestors 'none'",
+    // Only /embed/<clinic> pages may be framed, and only by the websites that clinic listed (plus this site itself).
+    frameAncestors.length ? `frame-ancestors 'self' ${frameAncestors.join(" ")}` : "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",
@@ -30,15 +31,52 @@ function apiOrigin() {
   }
 }
 
-export function proxy(request: NextRequest) {
+const ORIGIN = /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/;
+const EMBED_PATH = /^\/embed\/([a-z0-9][a-z0-9-]{0,79})(?:\/|$)/;
+const policyCache = new Map<string, { origins: string[]; at: number }>();
+const FRESH_MS = 60_000;
+const STALE_MS = 10 * 60_000;
+
+/** Websites this clinic allows to show its booking page in an iframe (fail closed: none if unknown). */
+export async function embedOrigins(slug: string, fetcher: typeof fetch = fetch, now = Date.now()): Promise<string[]> {
+  const cached = policyCache.get(slug);
+  if (cached && now - cached.at < FRESH_MS) return cached.origins;
+  const api = (process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+  try {
+    const r = await fetcher(`${api}/api/v1/public/organizations/${slug}/embed-policy`, { signal: AbortSignal.timeout(2000), cache: "no-store" });
+    if (r.status === 404) {
+      policyCache.set(slug, { origins: [], at: now });
+      return [];
+    }
+    if (!r.ok) throw new Error(`embed policy ${r.status}`);
+    const body = (await r.json()) as { allowed_origins?: unknown };
+    // Re-validate: anything that is not a bare origin must never reach the header.
+    const origins = Array.isArray(body.allowed_origins) ? body.allowed_origins.filter((o): o is string => typeof o === "string" && ORIGIN.test(o)) : [];
+    policyCache.set(slug, { origins, at: now });
+    return origins;
+  } catch {
+    // API briefly unreachable: keep the last known list for a while, otherwise refuse framing.
+    return cached && now - cached.at < STALE_MS ? cached.origins : [];
+  }
+}
+
+export function clearEmbedPolicyCache() {
+  policyCache.clear();
+}
+
+export async function proxy(request: NextRequest) {
   const nonce = btoa(crypto.randomUUID());
-  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", apiOrigin: apiOrigin() });
+  const embed = EMBED_PATH.exec(request.nextUrl.pathname);
+  const frameAncestors = embed ? await embedOrigins(embed[1]) : [];
+  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", apiOrigin: apiOrigin(), frameAncestors });
   // Next.js reads the nonce from the request's CSP header and stamps it on every script it renders.
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers } });
   response.headers.set("Content-Security-Policy", csp);
+  // Old browsers ignore frame-ancestors; X-Frame-Options keeps every non-embed page out of frames for them too.
+  if (!embed) response.headers.set("X-Frame-Options", "DENY");
   return response;
 }
 

@@ -33,7 +33,7 @@ export default function CustomerPaymentsPage() {
                   <p className="text-xs text-muted-foreground">{p.verified_at ? `Verified ${formatDateTime(p.verified_at)}` : p.submitted_at ? `Submitted ${formatDateTime(p.submitted_at)}` : `Requested ${formatDateTime(p.created_at)}`}{p.latest_utr ? ` · UTR ${p.latest_utr}` : ""}{p.rejection_reason ? ` · ${p.rejection_reason}` : ""}</p>
                 </div>
                 <PaymentStatusBadge status={p.status} />
-                {p.appointment_reference && p.organization_slug && ["awaiting_payment", "rejected"].includes(p.status) ? <Link className="text-sm font-medium text-primary underline" href={`/o/${p.organization_slug}/appointments/${p.appointment_reference}`}>Pay now</Link> : null}
+                {p.appointment_reference && p.organization_slug && ["awaiting_payment", "rejected"].includes(p.status) ? <Link className="text-sm font-medium text-primary underline" href={`/${p.organization_slug}/appointments/${p.appointment_reference}`}>Pay now</Link> : null}
               </CardContent>
             </Card>
           ))}

@@ -15,7 +15,37 @@ from app.repositories.organizations import MembershipRepository, OrganizationRep
 from app.schemas.organization import DomainCreate, OrganizationCreate, OrganizationUpdate
 from app.services.audit_service import RequestMeta, record_audit
 
-SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy"}
+SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed"}
+
+# The public booking page lives at /<slug>, next to the app's own pages. These can never be a clinic's slug.
+RESERVED_SLUGS = frozenset({
+    "about", "admin", "api", "app", "auth", "book", "booking", "contact", "customer", "docs", "embed", "favicon-ico",
+    "forgot-password", "health", "help", "login", "logout", "media", "metrics", "o", "onboarding", "pricing", "privacy",
+    "professional", "redoc", "refund-policy", "register", "reset-password", "robots-txt", "settings", "signup", "sitemap-xml",
+    "static", "super-admin", "support", "terms", "verify-email", "www",
+})
+EMBED_ORIGIN_RE = re.compile(r"^https://[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?::\d{1,5})?$")
+DEV_EMBED_ORIGIN_RE = re.compile(r"^http://(?:localhost|127\.0\.0\.1|[a-z0-9-]+\.localhost|[a-z0-9.-]+\.test)(?::\d{1,5})?$")
+
+
+def validate_embed_origins(value: Any) -> list[str]:
+    """Exact origins (scheme://host[:port]) allowed to show the booking page in an iframe. HTTPS only, no wildcards;
+    plain http is accepted only for local development hosts outside production."""
+    from app.core.config import get_settings
+
+    if not isinstance(value, list) or len(value) > 20:
+        raise ValidationFailed("allowed_origins must be a list of at most 20 web addresses.", code="invalid_embed_origins")
+    dev = get_settings().app_env in {"development", "test"}
+    out: list[str] = []
+    for raw in value:
+        origin = str(raw).strip().lower().rstrip("/")
+        if not (EMBED_ORIGIN_RE.fullmatch(origin) or (dev and DEV_EMBED_ORIGIN_RE.fullmatch(origin))):
+            raise ValidationFailed(f"{raw!r} is not an allowed origin. Use the exact https:// address of your shop, e.g. "
+                                   "https://www.yourclinic.com or https://your-store.myshopify.com (no paths, no wildcards).",
+                                   code="invalid_embed_origin")
+        if origin not in out:
+            out.append(origin)
+    return out
 
 DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     "booking": {
@@ -26,7 +56,11 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "payment_window_minutes": 30,
         "allow_any_professional": True,
         "default_slot_minutes": 15,
+        # Guests confirm their mobile number with a one-time code before an online booking is accepted.
+        "require_mobile_verification": True,
     },
+    # Websites (e.g. a Shopify store) allowed to show the booking page inside an iframe.
+    "embed": {"allowed_origins": []},
     "cancellation": {
         "customer_can_cancel": True,
         "cancel_before_hours": 4,
@@ -87,6 +121,10 @@ class OrganizationService:
         if not owner.is_platform_admin and not platform_settings(self.db).allow_organization_signup:
             raise PermissionDenied("New organizations are not being accepted right now. Contact the platform team.", code="signup_closed")
         slug = payload.slug or slugify(payload.name)
+        if slug in RESERVED_SLUGS:
+            if payload.slug:
+                raise ConflictError("This web address is reserved. Please choose another.", code="slug_reserved")
+            slug = f"{slug}-{secrets.token_hex(2)}"
         if self.orgs.get_by_slug(slug):
             if payload.slug:
                 raise ConflictError("This URL slug is already taken.", code="slug_taken")
@@ -210,6 +248,8 @@ class OrganizationService:
         if namespace not in SETTING_NAMESPACES:
             raise NotFoundError("Unknown settings namespace.")
         before = self.get_settings(org, namespace)[namespace]
+        if namespace == "embed" and "allowed_origins" in values:
+            values = {**values, "allowed_origins": validate_embed_origins(values["allowed_origins"])}
         for key, value in values.items():
             if not re.fullmatch(r"[a-z][a-z0-9_]{0,95}", key):
                 raise ValidationFailed(f"Invalid setting key: {key}", code="invalid_setting_key")

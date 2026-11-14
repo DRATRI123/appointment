@@ -65,6 +65,10 @@ export const publicBooking = {
   hold: (slug: string, body: Body) => api.post<Hold>(`/public/organizations/${slug}/holds`, body),
   releaseHold: (slug: string, id: string, session_key: string) => api.delete<ApiErrorBody>(`/public/organizations/${slug}/holds/${id}`, { searchParams: { session_key } }),
   book: (slug: string, body: Body) => api.post<AppointmentDetail>(`/public/organizations/${slug}/appointments`, body),
+  sendMobileCode: (slug: string, body: { mobile: string; hold_id: string; session_key: string }) =>
+    api.post<{ detail: string; expires_in_seconds: number; resend_after_seconds: number; debug_code: string | null }>(`/public/organizations/${slug}/verify-mobile`, body),
+  confirmMobileCode: (slug: string, body: { mobile: string; code: string; hold_id: string; session_key: string }) =>
+    api.post<{ verification_token: string; mobile: string; expires_in_seconds: number }>(`/public/organizations/${slug}/verify-mobile/confirm`, body),
   status: (slug: string, reference: string, access_token?: string | null) =>
     api.get<AppointmentDetail>(`/public/organizations/${slug}/appointments/${reference}`, { searchParams: { access_token: access_token ?? undefined } }),
   cancel: (slug: string, reference: string, access_token: string | null, reason?: string) =>

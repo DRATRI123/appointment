@@ -10,6 +10,7 @@ import {
   Code2,
   CreditCard,
   FileSpreadsheet,
+  Globe,
   Home,
   KeyRound,
   Landmark,
@@ -37,6 +38,7 @@ const groups = [
       { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
       { href: "/admin/appointments", label: "Appointments", icon: ClipboardList },
       { href: "/admin/waitlist", label: "Waitlist", icon: ListPlus },
+      { href: "/admin/booking-page", label: "Booking page & Shopify", icon: Globe },
     ],
   },
   {

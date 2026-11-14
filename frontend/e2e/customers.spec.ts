@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fillDetailsAndVerify, pickFirstSlot, randomMobile } from "./guest-booking";
 
 async function ownerWithOrg(page: Page) {
   const email = `cu-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
@@ -73,18 +74,19 @@ test("a published booking form is required during public booking", async ({ page
 
   // Guest sees the form; submitting without required answers shows field errors.
   const guest = await (await context.browser()!.newContext()).newPage();
-  await guest.goto(`/o/${slug}/book`);
+  await guest.goto(`/${slug}`);
   await guest.getByTestId("pick-service").first().click();
-  await guest.getByTestId("pick-professional").first().click();
-  await guest.getByTestId("slot").first().click();
+  await pickFirstSlot(guest);
   await expect(guest.getByTestId("booking-form-section")).toBeVisible();
-  await guest.getByLabel("Full name").fill("Form Guest");
-  await guest.getByLabel("Mobile number").fill("9822222222");
-  await guest.getByRole("button", { name: "Confirm booking" }).click();
+  await fillDetailsAndVerify(guest, { name: "Form Guest", mobile: randomMobile() });
+  await guest.getByTestId("confirm-booking").click();
+  // The server checks the answers and sends the visitor back to the form with the problems marked.
   await expect(guest.getByText("Reason for visit is required.")).toBeVisible();
+  await expect(guest.getByTestId("mobile-verified")).toBeVisible(); // no second code needed
   await guest.getByLabel(/Reason for visit/).fill("Persistent cough");
   await guest.getByText("No", { exact: true }).click();
-  await guest.getByRole("button", { name: "Confirm booking" }).click();
+  await guest.getByTestId("details-continue").click();
+  await guest.getByTestId("confirm-booking").click();
   await guest.waitForURL(/\/appointments\/APT-/);
   await guest.context().close();
 
