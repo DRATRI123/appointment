@@ -43,6 +43,9 @@ class MembershipService:
         return branch
 
     def invite(self, org: Organization, payload: MemberInvite, actor: User, actor_role_code: str | None) -> OrganizationMembership:
+        from app.services.platform_service import check_limit
+
+        check_limit(self.db, org, "staff")
         role = self._resolve_role(org, payload.role_code)
         self._guard_owner_assignment(role.code, actor_role_code, actor)
         branch = self._resolve_branch(org, payload.branch_id)

@@ -36,7 +36,8 @@ appointment is confirmed.
 | 7 | Refunds (request → approve → record the transfer you sent, with proof and maker-checker option) and bank statement reconciliation (CSV import with bank presets or custom column mapping, UTR/reference/amount matching suggestions, unmatched report with CSV export) | ✅ done |
 | 8 | Notifications: email (SMTP), SMS (MSG91, Twilio), WhatsApp (Meta Cloud API, Twilio), in-app bell; outbox with retries and backoff; reminders; editable templates with live preview; per-event channel settings; customer message preferences and WhatsApp opt-in; OTP delivery | ✅ done |
 | 9 | Google Calendar per professional (events, Google Meet links, busy time blocks slots), Zoom meetings (Server-to-Server OAuth), manual video links, background sync with retries, .ics downloads and private calendar feeds, Join / Add-to-calendar for customers | ✅ done |
-| 10–14 | See roadmap in `documentation/architecture.md` | planned |
+| 10 | Admin dashboard (KPIs vs previous period, daily trends, utilization, busiest times, needs-attention list), professional stats, 10 reports with CSV/Excel export (audit-logged), platform dashboard, subscription plans with enforced limits, organization detail, platform settings and announcement | ✅ done |
+| 11–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 

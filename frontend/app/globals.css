@@ -3,6 +3,22 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Data visualisation (validated palette: 3 categorical slots, blue sequential ramp) */
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+  --viz-muted: #898781;
+  --viz-seq-0: #f0efec;
+  --viz-seq-1: #cde2fb;
+  --viz-seq-2: #9ec5f4;
+  --viz-seq-3: #5598e7;
+  --viz-seq-4: #256abf;
+  --viz-seq-5: #104281;
+  --viz-up-good: #006300;
+  --viz-down-bad: #d03b3b;
+
   --radius: 0.75rem;
   --background: oklch(0.99 0.002 90);
   --foreground: oklch(0.17 0.02 260);
@@ -31,6 +47,21 @@
 }
 
 .dark {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-grid: #2c2c2a;
+  --viz-axis: #383835;
+  --viz-muted: #898781;
+  --viz-seq-0: #2c2c2a;
+  --viz-seq-1: #104281;
+  --viz-seq-2: #1c5cab;
+  --viz-seq-3: #2a78d6;
+  --viz-seq-4: #5598e7;
+  --viz-seq-5: #9ec5f4;
+  --viz-up-good: #0ca30c;
+  --viz-down-bad: #e66767;
+
   --background: oklch(0.15 0.015 260);
   --foreground: oklch(0.96 0.005 260);
   --card: oklch(0.19 0.015 260);

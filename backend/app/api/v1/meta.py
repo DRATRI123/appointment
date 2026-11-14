@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.deps import AppSettings
+from app.api.deps import DB, AppSettings
 from app.core.enums import AppointmentStatus, PaymentStatus, SystemRole
 from app.security.permissions import PERMISSIONS
 
@@ -29,3 +29,10 @@ def enums() -> dict:
         "system_roles": [r.value for r in SystemRole],
         "permissions": sorted(PERMISSIONS),
     }
+
+
+@router.get("/platform", summary="Public platform settings: name, support email, sign-up switch and announcement")
+def platform(db: DB) -> dict:
+    from app.services.platform_service import public_platform
+
+    return public_platform(db).model_dump()

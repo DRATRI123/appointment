@@ -16,6 +16,7 @@ from app.api.v1 import (
     public,
     reconciliation,
     refunds,
+    reports,
     scheduling,
     uploads,
     users,
@@ -45,6 +46,7 @@ api_router.include_router(notifications.me_router)
 api_router.include_router(integrations.router)
 api_router.include_router(integrations.appointments_router)
 api_router.include_router(integrations.feeds_router)
+api_router.include_router(reports.router)
 api_router.include_router(uploads.router)
 api_router.include_router(public.router)
 api_router.include_router(platform.router)

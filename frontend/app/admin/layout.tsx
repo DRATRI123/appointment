@@ -32,7 +32,7 @@ import { RequireAuth } from "@/components/auth/require-auth";
 const groups = [
   {
     items: [
-      { href: "/admin", label: "Overview", icon: Home },
+      { href: "/admin", label: "Dashboard", icon: Home },
       { href: "/admin/calendar", label: "Calendar", icon: CalendarDays },
       { href: "/admin/appointments", label: "Appointments", icon: ClipboardList },
       { href: "/admin/waitlist", label: "Waitlist", icon: ListPlus },
@@ -66,7 +66,7 @@ const groups = [
     items: [
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
       { href: "/admin/integrations", label: "Integrations", icon: Plug },
-      { href: "/admin/reports", label: "Reports", icon: BarChart3, phase: 10 },
+      { href: "/admin/reports", label: "Reports", icon: BarChart3 },
       { href: "/admin/staff", label: "Staff", icon: UsersRound },
       { href: "/admin/roles", label: "Roles & permissions", icon: KeyRound },
       { href: "/admin/settings", label: "Organization settings", icon: Settings },

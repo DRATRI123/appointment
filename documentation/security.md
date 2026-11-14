@@ -116,6 +116,15 @@ double-submit, session revocation check, tenant resolution, permission guards),
 * External API calls never run inside a booking request: a provider outage delays a calendar event, never a
   booking, and failures are retried with exponential backoff and shown under Sync problems.
 
+## Reports and exports
+
+* Reports check every permission they need (e.g. the appointments report needs `appointments:read`
+  as well as `reports:read`); exports also need `reports:export` and are audit-logged with filters, row
+  count, format and whether the report contains personal data.
+* CSV cells starting with `=`, `+`, `-`, `@`, tab or carriage return are prefixed with `'`; Excel text cells
+  are written as strings so they never become formulas.
+* Professionals without `reports:read` only ever see their own numbers; the server forces the filter.
+
 ## Healthcare privacy
 
 * Customer notes and documents are restricted to clinical roles (`customers:clinical_read`).

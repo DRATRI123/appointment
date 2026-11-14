@@ -10,11 +10,11 @@ const groups = [
       { href: "/super-admin", label: "Overview", icon: Home },
       { href: "/super-admin/organizations", label: "Organizations", icon: Building2 },
       { href: "/super-admin/users", label: "Users", icon: Users },
-      { href: "/super-admin/subscriptions", label: "Subscriptions", icon: CreditCard, phase: 10 },
+      { href: "/super-admin/subscriptions", label: "Subscriptions", icon: CreditCard },
       { href: "/super-admin/usage", label: "Usage & API", icon: Gauge, phase: 11 },
       { href: "/super-admin/health", label: "System health", icon: Activity, phase: 13 },
       { href: "/super-admin/audit-logs", label: "Platform audit logs", icon: ScrollText },
-      { href: "/super-admin/settings", label: "Platform settings", icon: Settings2, phase: 10 },
+      { href: "/super-admin/settings", label: "Platform settings", icon: Settings2 },
     ],
   },
 ];

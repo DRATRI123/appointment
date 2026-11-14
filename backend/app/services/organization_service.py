@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import MembershipStatus, OrganizationStatus, SystemRole
-from app.core.exceptions import ConflictError, NotFoundError, ValidationFailed
+from app.core.exceptions import ConflictError, NotFoundError, PermissionDenied, ValidationFailed
 from app.core.time import utcnow
 from app.models import Organization, OrganizationDomain, OrganizationMembership, OrganizationSetting, User
 from app.repositories.organizations import MembershipRepository, OrganizationRepository, RoleRepository
@@ -82,6 +82,10 @@ class OrganizationService:
 
     # ------------------------------------------------------------- create
     def create(self, payload: OrganizationCreate, owner: User) -> Organization:
+        from app.services.platform_service import platform_settings
+
+        if not owner.is_platform_admin and not platform_settings(self.db).allow_organization_signup:
+            raise PermissionDenied("New organizations are not being accepted right now. Contact the platform team.", code="signup_closed")
         slug = payload.slug or slugify(payload.name)
         if self.orgs.get_by_slug(slug):
             if payload.slug:
@@ -126,6 +130,9 @@ class OrganizationService:
             self.db, action="organization.created", actor=owner, organization_id=org.id,
             entity_type="organization", entity_id=org.public_id, after={"name": org.name, "slug": org.slug}, meta=self.meta,
         )
+        from app.services.platform_service import start_default_trial
+
+        start_default_trial(self.db, org)
         return org
 
     def _unique_code(self, name: str) -> str:

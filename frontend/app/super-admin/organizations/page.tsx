@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -41,7 +42,7 @@ export default function PlatformOrganizationsPage() {
             {orgs.data?.data.map((o) => (
               <TableRow key={o.id}>
                 <TableCell>
-                  <p className="font-medium">{o.name}</p>
+                  <Link href={`/super-admin/organizations/${o.id}`} className="font-medium underline-offset-2 hover:underline" data-testid="org-link">{o.name}</Link>
                   <p className="text-xs text-muted-foreground">{o.slug} · {o.code}</p>
                 </TableCell>
                 <TableCell className="text-muted-foreground">{o.business_type ?? "—"}</TableCell>

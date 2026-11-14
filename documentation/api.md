@@ -402,3 +402,39 @@ professional-scoped endpoints for their own profile.
 
 `AppointmentRead.meeting_link` carries the video link; new notification event `appointment.meeting_link`.
 
+## Phase 10: dashboards, reports and platform administration
+
+### Organization analytics and reports
+
+Filters (all optional): `from`, `to` (dates, clinic time zone; default last 30 days; at most one year),
+`branch_id`, `professional_id`, `service_id`.
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/analytics/dashboard?…&mine` | `reports:read`, or a professional's own data | KPIs with previous-period values, daily series, breakdowns by service/professional/branch/source/payment method, weekday×hour heatmap, today's agenda, needs-attention counts. Members without `reports:read` (or with `mine=true`) get their own professional profile only |
+| GET | `/reports` | member | Reports the member may run, with column definitions |
+| GET | `/reports/{key}?…&page&page_size` | per report | Preview rows (paged), totals, row count |
+| GET | `/reports/{key}/export?…&format=csv|xlsx` | `reports:export` + report permissions | Audit-logged (`report.exported`, with filters, row count and a personal-data flag); 50,000-row cap |
+
+Reports: `appointments`, `payments`, `refunds`, `daily_summary`, `professionals`, `services`, `customers`,
+`cancellations`, `tax_summary` (billing summary by month, a working summary for an accountant, not a tax
+filing), `coupons`. Definitions: money received = payments verified in the period (by verification time)
+minus refunds sent; booked value = total of non-cancelled appointments; no-show rate = no-shows /
+(completed + no-shows); utilization = booked minutes / scheduled minutes (ranges up to 92 days).
+
+### Platform (super admin)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/platform/dashboard?days=7..365` | Totals, daily appointments and sign-ups, top organizations, plan mix |
+| GET/PUT | `/platform/settings` | Platform name, support email, sign-up switch, default plan and trial days, announcement |
+| GET/PUT | `/platform/plans` | Plan catalogue: code, name, price, cycle, limits (`branches`, `professionals`, `staff`, `appointments_per_month`; null = unlimited) |
+| GET | `/platform/subscriptions?search&plan&status&over_limit` | Organizations with current plan, usage and limit breaches |
+| GET | `/platform/organizations/{id}/overview` · `/subscriptions` | Detail with usage and recent activity · plan history |
+| PUT | `/platform/organizations/{id}/subscription` | Record a plan change (no payment is taken); limits apply immediately |
+| GET | `/platform/exports/organizations?format=csv|xlsx` | Audit-logged |
+| GET | `/meta/platform` | Public: platform name, support email, sign-up switch, announcement |
+
+Limits: adding a branch, professional or staff member beyond the plan returns 409 `plan_limit`. With
+sign-ups closed, `POST /organizations` returns 403 `signup_closed` for everyone except platform admins.
+

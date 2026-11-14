@@ -2,6 +2,7 @@
 
 import { Logo } from "./logo";
 import { HeaderUser } from "@/components/auth/header-user";
+import { AnnouncementBanner } from "@/components/layout/announcement-banner";
 import { SidebarNav, type NavGroup } from "./sidebar-nav";
 
 export type { NavGroup, NavItem } from "./sidebar-nav";
@@ -40,6 +41,7 @@ export function DashboardShell({
           </div>
           <HeaderUser showOrgSwitcher={showOrgSwitcher} />
         </header>
+        <AnnouncementBanner />
         <main className="flex-1 p-4 md:p-8">{children}</main>
       </div>
     </div>

@@ -13,6 +13,10 @@ import { StatusBadge } from "@/components/booking/appointment-summary";
 import { AppointmentSheet } from "@/components/appointments/appointment-sheet";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatTime, toISODate } from "@/lib/format";
+import { analyticsService } from "@/services/analytics";
+import { presetRange } from "@/components/analytics/filters-bar";
+import { StatTile } from "@/components/analytics/stat-tile";
+import { compactNumber, percent } from "@/lib/numbers";
 
 export default function ProfessionalToday() {
   const { currentOrganizationId: orgId, user } = useAuth();
@@ -28,6 +32,7 @@ export default function ProfessionalToday() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader title={`Today, ${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}`} description={`Your queue, ${user?.full_name ?? ""}. Tap a patient to check in, start or complete.`} />
+      <MyMonth orgId={orgId} />
       {appts.isError ? <Alert variant="info"><AlertDescription>Your account is not linked to a professional profile yet. Ask an administrator to link it under Professionals → Account.</AlertDescription></Alert> : null}
       {appts.isLoading ? <Skeleton className="h-48" /> : appts.data?.length === 0 ? <EmptyState icon={CalendarDays} title="No appointments today" body="Enjoy the quiet, or check the calendar for the week ahead." /> : (
         <div className="space-y-2">
@@ -46,3 +51,18 @@ export default function ProfessionalToday() {
     </div>
   );
 }
+
+function MyMonth({ orgId }: { orgId: string | null }) {
+  const stats = useQuery({ queryKey: ["dashboard", "mine", orgId], queryFn: () => analyticsService.dashboard(presetRange("30d"), true), enabled: !!orgId, retry: false });
+  const k = stats.data?.kpis;
+  if (!k || stats.data?.scope !== "professional") return null;
+  const pro = stats.data.by_professional[0];
+  return (
+    <div className="mb-6 grid gap-3 sm:grid-cols-3" data-testid="my-stats">
+      <StatTile label="Appointments, last 30 days" value={compactNumber(k.appointments.value)} current={k.appointments.value} previous={k.appointments.previous} comparison="previous 30 days" />
+      <StatTile label="No-show rate" value={percent(k.no_show_rate.value)} current={k.no_show_rate.value} previous={k.no_show_rate.previous} upIsGood={false} format={(n) => percent(n)} comparison="previous 30 days" />
+      <StatTile label="Schedule booked" value={percent(pro?.utilization ?? null)} hint={pro?.available_minutes ? `${(pro.booked_minutes / 60).toFixed(1)} of ${(pro.available_minutes / 60).toFixed(1)} scheduled hours` : "No schedule in this period"} />
+    </div>
+  );
+}
+

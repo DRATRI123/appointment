@@ -113,6 +113,9 @@ class CatalogService:
         return self._branch(public_id)
 
     def create_branch(self, payload: BranchCreate) -> Branch:
+        from app.services.platform_service import check_limit
+
+        check_limit(self.db, self.org, "branches")
         data = payload.model_dump(exclude={"slug"})
         data["code"] = data["code"].upper()
         if self.db.scalar(select(Branch.id).where(Branch.organization_id == self.org.id, Branch.code == data["code"], Branch.deleted_at.is_(None))):
@@ -441,6 +444,9 @@ class CatalogService:
         return self._professional(public_id)
 
     def create_professional(self, payload: ProfessionalCreate) -> Professional:
+        from app.services.platform_service import check_limit
+
+        check_limit(self.db, self.org, "professionals")
         data = payload.model_dump(exclude={"slug", "user_id", "branches", "services"})
         slug = payload.slug or self._unique_slug(Professional, payload.display_name)
         if payload.slug:

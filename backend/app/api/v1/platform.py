@@ -1,9 +1,11 @@
 """Platform super-admin endpoints."""
 from __future__ import annotations
 
+from datetime import date as _date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy import func, select
 
 from app.api.deps import DB, Meta, PlatformAdmin
@@ -14,9 +16,11 @@ from app.models import AuditLog, User
 from app.schemas.audit import AuditLogRead
 from app.schemas.common import APIModel
 from app.schemas.organization import OrganizationRead, OrganizationStatusUpdate
+from app.schemas.platform import OrgOverview, OrgSummary, Plan, PlatformDashboard, PlatformSettings, SubscriptionRead, SubscriptionUpdate
 from app.schemas.user import UserRead
 from app.services.audit_service import record_audit
 from app.services.organization_service import OrganizationService
+from app.services.platform_service import PlatformService, plans, platform_settings
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 
@@ -114,3 +118,81 @@ def platform_audit_logs(db: DB, _: PlatformAdmin, params: Annotated[PageParams, 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(AuditLog.id.desc()).offset(params.offset).limit(params.page_size)).all()
     return Page(data=[AuditLogRead.model_validate(r) for r in rows], meta=PageMeta(page=params.page, page_size=params.page_size, total=int(total)))
+
+
+# ---------------------------------------------------------------- dashboard, plans, subscriptions
+
+
+@router.get("/dashboard", response_model=PlatformDashboard, summary="Platform KPIs and trends")
+def platform_dashboard(db: DB, admin: PlatformAdmin, days: Annotated[int, Query(ge=7, le=365)] = 30):
+    return PlatformService(db, admin).dashboard(days)
+
+
+@router.get("/settings", response_model=PlatformSettings)
+def get_platform_settings(db: DB, _: PlatformAdmin):
+    return platform_settings(db)
+
+
+@router.put("/settings", response_model=PlatformSettings)
+def put_platform_settings(payload: PlatformSettings, db: DB, admin: PlatformAdmin, meta: Meta):
+    return PlatformService(db, admin, meta).save_settings(payload)
+
+
+@router.get("/plans", response_model=list[Plan])
+def get_plans(db: DB, _: PlatformAdmin):
+    return plans(db)
+
+
+@router.put("/plans", response_model=list[Plan], summary="Replace the plan catalogue")
+def put_plans(payload: list[Plan], db: DB, admin: PlatformAdmin, meta: Meta):
+    return PlatformService(db, admin, meta).save_plans(payload)
+
+
+@router.get("/subscriptions", response_model=list[OrgSummary], summary="Organizations with their current plan, usage and limit breaches")
+def subscriptions(db: DB, admin: PlatformAdmin, search: Annotated[str | None, Query(max_length=100)] = None, plan: str | None = None,
+                  status: str | None = None, over_limit: bool = False):
+    return PlatformService(db, admin).summaries(search=search, plan=plan, status=status, over_limit=over_limit)
+
+
+@router.get("/organizations/{organization_id}/overview", response_model=OrgOverview)
+def organization_overview(organization_id: str, db: DB, admin: PlatformAdmin):
+    svc = PlatformService(db, admin)
+    return svc.overview(svc.org(organization_id))
+
+
+@router.get("/organizations/{organization_id}/subscriptions", response_model=list[SubscriptionRead])
+def subscription_history(organization_id: str, db: DB, admin: PlatformAdmin):
+    svc = PlatformService(db, admin)
+    return svc.history(svc.org(organization_id))
+
+
+@router.put("/organizations/{organization_id}/subscription", response_model=OrgSummary, summary="Record a plan change (no payment is taken)")
+def set_subscription(organization_id: str, payload: SubscriptionUpdate, db: DB, admin: PlatformAdmin, meta: Meta):
+    svc = PlatformService(db, admin, meta)
+    org = svc.org(organization_id)
+    svc.set_subscription(org, payload)
+    return svc.summary(org)
+
+
+@router.get("/exports/organizations", summary="Organizations with plan and usage as CSV or Excel")
+def export_organizations(db: DB, admin: PlatformAdmin, meta: Meta, format: Annotated[str, Query(pattern=r"^(csv|xlsx)$")] = "csv"):  # noqa: A002
+    from app.services.report_service import Column, ReportDef, to_csv, to_xlsx
+
+    rows = []
+    for s in PlatformService(db, admin).summaries(search=None, plan=None, status=None, over_limit=False):
+        sub = s.subscription
+        rows.append({"name": s.name, "slug": s.slug, "status": s.status, "created": s.created_at.date(), "plan": sub.plan_name if sub else "", "plan_status": sub.status if sub else "",
+                     "branches": s.usage.branches, "professionals": s.usage.professionals, "staff": s.usage.staff, "customers": s.usage.customers,
+                     "appointments_30d": s.usage.appointments_30d, "receipts_30d": s.usage.verified_receipts_30d_paise, "over_limit": ", ".join(s.over_limit)})
+    report = ReportDef("organizations", "Organizations", "All organizations with plan and 30-day usage.", [
+        Column("name", "Organization"), Column("slug", "Slug"), Column("status", "Status"), Column("created", "Created", "date"), Column("plan", "Plan"),
+        Column("plan_status", "Plan status"), Column("branches", "Branches", "int"), Column("professionals", "Professionals", "int"), Column("staff", "Staff", "int"),
+        Column("customers", "Customers", "int"), Column("appointments_30d", "Appointments (30 days)", "int"), Column("receipts_30d", "Verified receipts (30 days)", "money"),
+        Column("over_limit", "Over limit")], lambda ctx: iter(()), totals=("appointments_30d", "receipts_30d"))
+    record_audit(db, action="platform.organizations_exported", actor=admin, entity_type="report", entity_id="organizations", after={"format": format, "rows": len(rows)}, meta=meta)
+    stamp = _date.today().isoformat()
+    headers = {"Content-Disposition": f'attachment; filename="organizations_{stamp}.{format}"', "Cache-Control": "no-store"}
+    if format == "csv":
+        return Response(to_csv(report, rows), media_type="text/csv; charset=utf-8", headers=headers)
+    return Response(to_xlsx(report, rows, owner="Platform", period=f"as of {stamp}", filters_label="", truncated=False),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
