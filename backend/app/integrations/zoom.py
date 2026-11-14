@@ -12,7 +12,8 @@ from typing import Any
 from app.core.time import utcnow
 from app.integrations.http import IntegrationAPIError, check, request
 
-TOKEN_URL = "https://zoom.us/oauth/token"
+# bandit B105 false positive: public OAuth endpoint URL
+TOKEN_URL = "https://zoom.us/oauth/token"  # nosec B105
 API = "https://api.zoom.us/v2"
 
 

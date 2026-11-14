@@ -12,7 +12,8 @@ from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
 from app.core.time import utcnow
 
-ACCESS_TOKEN_TYPE = "access"
+# bandit B105 false positive: token type name, not a secret
+ACCESS_TOKEN_TYPE = "access"  # nosec B105
 
 
 def create_access_token(*, user_public_id: str, session_public_id: str, extra: dict[str, Any] | None = None) -> str:

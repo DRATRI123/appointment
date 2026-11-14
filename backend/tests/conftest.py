@@ -58,7 +58,21 @@ def client(db: Session) -> Generator[TestClient, None, None]:
     app = create_app()
 
     def _override() -> Generator[Session, None, None]:
-        yield db
+        """Mirror production get_db: each request runs in a SAVEPOINT that is rolled back on error (unless the error
+        asks for its changes to persist), so tests see exactly what a real request would have saved."""
+        savepoint = db.begin_nested()
+        try:
+            yield db
+        except Exception as exc:
+            if savepoint.is_active:
+                if getattr(exc, "persist_changes", False):
+                    savepoint.commit()
+                else:
+                    savepoint.rollback()
+            raise
+        else:
+            if savepoint.is_active:
+                savepoint.commit()
 
     app.dependency_overrides[get_db] = _override
     with TestClient(app) as c:

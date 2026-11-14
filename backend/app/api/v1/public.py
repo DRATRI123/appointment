@@ -107,7 +107,8 @@ def _strip_private(data: ProfessionalRead) -> ProfessionalRead:
 # ------------------------------------------------------------ booking flow
 from datetime import date as _date  # noqa: E402
 
-from fastapi import Depends, Query, Request, Response, status as _status  # noqa: E402
+from fastapi import Query, Request, Response  # noqa: E402
+from fastapi import status as _status  # noqa: E402
 
 from app.api.deps import Meta, OptionalUser  # noqa: E402
 from app.schemas.appointment import AppointmentCreate, AppointmentDetail, HoldCreate, HoldRead, PriceQuote, RescheduleRequest, StatusAction  # noqa: E402

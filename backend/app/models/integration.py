@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import IntegrationStatus, WebhookDeliveryStatus
@@ -31,7 +31,7 @@ class Integration(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     last_error: Mapped[str | None] = mapped_column(Text)
 
-    logs: Mapped[list["IntegrationLog"]] = relationship(
+    logs: Mapped[list[IntegrationLog]] = relationship(
         back_populates="integration", cascade="all, delete-orphan"
     )
 
@@ -68,7 +68,7 @@ class WebhookEndpoint(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base)
     disabled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
-    deliveries: Mapped[list["WebhookEvent"]] = relationship(
+    deliveries: Mapped[list[WebhookEvent]] = relationship(
         back_populates="endpoint", cascade="all, delete-orphan"
     )
 

@@ -58,7 +58,7 @@ def test_every_rate_limited_route_declares_a_response_parameter():
 
 
 def test_public_booking_routes_work_with_limiter_enabled(limited_client):
-    from tests.booking_helpers import Clinic, ist, iso
+    from tests.booking_helpers import Clinic, ist
 
     c = Clinic(limited_client, email="rl-owner@example.com", name="RL Clinic", payment_mode="pay_at_clinic")
     hold = c.public_hold(ist(c.monday, 9))

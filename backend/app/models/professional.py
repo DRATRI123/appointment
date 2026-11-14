@@ -36,10 +36,10 @@ class Professional(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDele
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", nullable=True)
 
-    branches: Mapped[list["ProfessionalBranch"]] = relationship(
+    branches: Mapped[list[ProfessionalBranch]] = relationship(
         back_populates="professional", cascade="all, delete-orphan"
     )
-    services: Mapped[list["ProfessionalService"]] = relationship(
+    services: Mapped[list[ProfessionalService]] = relationship(
         back_populates="professional", cascade="all, delete-orphan"
     )
 

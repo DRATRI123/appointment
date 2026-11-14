@@ -30,7 +30,7 @@ class Branch(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMixi
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     organization: Mapped[Organization] = relationship(back_populates="branches")
-    settings: Mapped[list["BranchSetting"]] = relationship(
+    settings: Mapped[list[BranchSetting]] = relationship(
         back_populates="branch", cascade="all, delete-orphan"
     )
 

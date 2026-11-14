@@ -5,8 +5,8 @@ from fastapi import APIRouter, Request, Response, status
 from app.api.deps import (
     ACCESS_COOKIE,
     CSRF_COOKIE,
-    REFRESH_COOKIE,
     DB,
+    REFRESH_COOKIE,
     AppSettings,
     CurrentUser,
     Meta,

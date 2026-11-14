@@ -9,12 +9,10 @@ from sqlalchemy.orm import Session
 from app.api.deps import DB, Meta, TenantContext, require_permission
 from app.models import Branch, Organization, Professional, Service, ServiceCategory, ServicePackage
 from app.schemas.catalog import (
-    CategoryBase,
-    ProfessionalBase,
-    ServiceBase,
     BranchCreate,
     BranchRead,
     BranchUpdate,
+    CategoryBase,
     CategoryCreate,
     CategoryRead,
     CategoryUpdate,
@@ -22,11 +20,13 @@ from app.schemas.catalog import (
     PackageItemRead,
     PackageRead,
     PackageUpdate,
+    ProfessionalBase,
     ProfessionalBranchRead,
     ProfessionalCreate,
     ProfessionalRead,
     ProfessionalServiceRead,
     ProfessionalUpdate,
+    ServiceBase,
     ServiceCreate,
     ServicePricingRead,
     ServiceRead,

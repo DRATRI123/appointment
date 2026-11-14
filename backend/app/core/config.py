@@ -13,7 +13,8 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
-INSECURE_DEFAULT_SECRET = "change-me-to-a-random-string-of-at-least-32-bytes"
+# bandit B105 false positive: placeholder; rejected at startup outside development
+INSECURE_DEFAULT_SECRET = "change-me-to-a-random-string-of-at-least-32-bytes"  # nosec B105
 
 
 class Settings(BaseSettings):
@@ -129,7 +130,7 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def _validate_security(self) -> "Settings":
+    def _validate_security(self) -> Settings:
         if self.app_env not in {"development", "test"}:
             if self.secret_key == INSECURE_DEFAULT_SECRET or len(self.secret_key) < 32:
                 raise ValueError(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import ACTIVE_APPOINTMENT_STATUSES, AppointmentSource, AppointmentStatus, HoldStatus
@@ -90,7 +90,7 @@ class Appointment(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", nullable=True)
 
-    status_history: Mapped[list["AppointmentStatusHistory"]] = relationship(
+    status_history: Mapped[list[AppointmentStatusHistory]] = relationship(
         back_populates="appointment", cascade="all, delete-orphan", order_by="AppointmentStatusHistory.id"
     )
 

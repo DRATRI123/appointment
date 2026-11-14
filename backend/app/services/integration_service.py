@@ -49,10 +49,10 @@ from app.schemas.integration import (
     IntegrationLogRead,
     IntegrationRead,
     IntegrationsOverview,
+    IntegrationUpdate,
     MeetingPreference,
     ProfessionalConnections,
     SyncIssue,
-    IntegrationUpdate,
     ZoomConnect,
 )
 from app.security.crypto import decrypt_text, encrypt_text

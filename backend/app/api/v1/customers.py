@@ -5,9 +5,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 
-from app.api.deps import DB, AppSettings, CurrentUser, Meta, TenantContext, get_tenant_context, require_permission
-from app.core.exceptions import PermissionDenied
+from app.api.deps import DB, AppSettings, CurrentUser, Meta, TenantContext, require_permission
+from app.core.enums import OrganizationStatus
+from app.core.exceptions import NotFoundError, PermissionDenied, ValidationFailed
 from app.core.pagination import Page, PageMeta, PageParams, page_params
 from app.models import Customer, Organization
 from app.schemas.common import Message
@@ -80,6 +83,20 @@ def delete_customer(customer_id: str, db: DB, ctx: WriteCust, meta: Meta):
     svc = _svc(db, ctx, meta)
     svc.delete(svc.get(customer_id))
     return Message(detail="Customer deleted.")
+
+
+class EraseRequest(BaseModel):
+    reason: str = Field(min_length=5, max_length=500, description="Why the data is being erased (e.g. the customer's written request).")
+    confirm: bool = Field(description="Must be true: erasure cannot be undone.")
+
+
+@router.post("/{customer_id}/anonymize", response_model=Message, summary="Erase a customer's personal data (cannot be undone)")
+def anonymize_customer(customer_id: str, payload: EraseRequest, db: DB, ctx: Annotated[TenantContext, Depends(require_permission("customers:erase"))], meta: Meta):
+    if not payload.confirm:
+        raise ValidationFailed("Confirm that this erasure cannot be undone.", code="confirmation_required")
+    svc = _svc(db, ctx, meta)
+    svc.anonymize(svc.get(customer_id), payload.reason)
+    return Message(detail="Customer data erased. Financial records are kept without personal details.")
 
 
 # --------------------------------------------------------------- dependents
@@ -171,9 +188,17 @@ def delete_document(customer_id: str, document_id: str, db: DB, ctx: ClinicalWri
 self_router = APIRouter(prefix="/customer", tags=["customer"])
 
 
-def _own(db, user, org_public_id: str) -> tuple[Organization, Customer, CustomerManagementService]:
+def _own(db, user, org_public_id: str, *, create: bool = True) -> tuple[Organization, Customer | None, CustomerManagementService]:
+    """The signed-in user's own customer record at this organization.
+
+    Reads never create a record (otherwise merely opening a clinic's booking page would add the visitor to that
+    clinic's patient list). A write may create one, but only at an organization that is open for business."""
     org = OrganizationService(db).get_or_404(org_public_id)
-    customer = CustomerService(db, org).for_user(user)
+    customer = db.scalar(select(Customer).where(Customer.organization_id == org.id, Customer.user_id == user.id, Customer.deleted_at.is_(None)))
+    if customer is None and create:
+        if org.status != OrganizationStatus.ACTIVE:
+            raise NotFoundError("Organization not found.")
+        customer = CustomerService(db, org).for_user(user)
     if not bool(OrganizationService(db).get_settings(org, "privacy")["privacy"].get("allow_customer_self_update", True)):
         raise PermissionDenied("This organization does not allow profile self-service.", code="self_update_disabled")
     return org, customer, CustomerManagementService(db, org, user)
@@ -181,7 +206,9 @@ def _own(db, user, org_public_id: str) -> tuple[Organization, Customer, Customer
 
 @self_router.get("/organizations/{organization_id}/profile", response_model=CustomerRead, summary="My record in this organization")
 def my_profile(organization_id: str, db: DB, user: CurrentUser):
-    _, customer, svc = _own(db, user, organization_id)
+    _, customer, svc = _own(db, user, organization_id, create=False)
+    if customer is None:
+        raise NotFoundError("You have no record with this organization yet.", code="no_customer_record")
     return svc.to_read(customer, with_stats=True)
 
 
@@ -193,7 +220,9 @@ def update_my_profile(organization_id: str, payload: SelfProfileUpdate, db: DB, 
 
 @self_router.get("/organizations/{organization_id}/dependents", response_model=list[DependentRead])
 def my_dependents(organization_id: str, db: DB, user: CurrentUser):
-    _, customer, svc = _own(db, user, organization_id)
+    _, customer, svc = _own(db, user, organization_id, create=False)
+    if customer is None:
+        return []
     return [svc.dependent_read(d, customer) for d in svc.list_dependents(customer)]
 
 

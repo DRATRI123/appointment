@@ -34,6 +34,17 @@ test("staff add a customer, a family member and an encrypted note", async ({ pag
   await page.getByPlaceholder("Write a note…").fill("Allergic to penicillin");
   await page.getByRole("button", { name: "Add note" }).click();
   await expect(page.getByTestId("note")).toContainText("Allergic to penicillin");
+
+  // The customer asks for their data to be erased: confirmation and a reason are required.
+  await page.getByRole("button", { name: "Erase personal data" }).click();
+  const dialog = page.getByRole("dialog");
+  const eraseButton = dialog.getByRole("button", { name: "Erase data" });
+  await dialog.getByLabel("Reason").fill("Written request from the customer");
+  await expect(eraseButton).toBeDisabled();
+  await dialog.getByLabel("I understand this permanently erases the data above.").check();
+  await eraseButton.click();
+  await page.waitForURL(/\/admin\/customers$/);
+  await expect(page.getByTestId("customer-row")).toHaveCount(0);
 });
 
 test("a published booking form is required during public booking", async ({ page, context }) => {

@@ -37,6 +37,8 @@
   --destructive: oklch(0.58 0.22 27);
   --destructive-foreground: oklch(0.99 0 0);
   --success: oklch(0.6 0.15 150);
+  --success-ink: oklch(0.45 0.12 150); /* status text on tinted backgrounds (WCAG AA) */
+  --destructive-ink: oklch(0.5 0.2 27);
   --warning: oklch(0.78 0.16 75);
   --border: oklch(0.91 0.01 260);
   --input: oklch(0.91 0.01 260);
@@ -79,6 +81,8 @@
   --destructive: oklch(0.65 0.2 27);
   --destructive-foreground: oklch(0.99 0 0);
   --success: oklch(0.7 0.15 150);
+  --success-ink: oklch(0.82 0.14 150);
+  --destructive-ink: oklch(0.78 0.15 27);
   --warning: oklch(0.8 0.15 75);
   --border: oklch(0.28 0.01 260);
   --input: oklch(0.3 0.01 260);
@@ -106,6 +110,8 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
+  --color-success-ink: var(--success-ink);
+  --color-destructive-ink: var(--destructive-ink);
   --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -136,4 +142,15 @@
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "cv11", "ss01";
   }
+}
+
+
+/* FullCalendar (breezy theme): darker emerald and labels so text meets WCAG AA contrast. */
+.app-calendar {
+  --fc-breezy-primary: #047857;
+  --fc-breezy-primary-over: #065f46;
+  --fc-breezy-faint-foreground: #6b7280;
+}
+.dark .app-calendar {
+  --fc-breezy-faint-foreground: #a8a29e;
 }

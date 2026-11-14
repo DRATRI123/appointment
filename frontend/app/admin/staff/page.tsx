@@ -77,7 +77,7 @@ export default function StaffPage() {
                   <TableCell className="text-muted-foreground">{m.user.email ?? m.user.mobile}</TableCell>
                   <TableCell>
                     {canWrite && !isSelf ? (
-                      <NativeSelect className="h-8 w-44 text-xs" value={m.role_code} onChange={(e) => updateRole.mutate({ id: m.id, role_code: e.target.value })}>
+                      <NativeSelect aria-label={`Role of ${m.user.full_name}`} className="h-8 w-44 text-xs" value={m.role_code} onChange={(e) => updateRole.mutate({ id: m.id, role_code: e.target.value })}>
                         {assignableRoles.map((r) => (
                           <option key={r.code} value={r.code}>{r.name}</option>
                         ))}

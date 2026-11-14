@@ -35,6 +35,7 @@ PERMISSIONS: dict[str, str] = {
     "customers:clinical_read": "Read clinical notes and documents",
     "customers:clinical_write": "Write clinical notes and upload documents",
     "customers:export": "Export customer data",
+    "customers:erase": "Permanently erase a customer's personal data on request",
     # appointments
     "appointments:read": "View appointments",
     "appointments:write": "Create, reschedule and cancel appointments",
@@ -127,4 +128,5 @@ ROLE_LABELS: dict[SystemRole, str] = {
 
 for _role, _perms in ROLE_PERMISSIONS.items():
     _unknown = set(_perms) - set(PERMISSIONS)
-    assert not _unknown, f"Unknown permissions for {_role}: {_unknown}"
+    if _unknown:  # fail fast at import time; never silently grant an undefined permission
+        raise RuntimeError(f"Unknown permissions for {_role}: {_unknown}")

@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.models import BookingHold
 from app.services.appointment_service import expire_unpaid_appointments
-from tests.booking_helpers import Clinic, ist, iso, utc
+from tests.booking_helpers import Clinic, iso, ist, utc
 from tests.helpers import bearer, otp_login
 
 
@@ -221,7 +221,7 @@ def test_waitlist_and_unpaid_expiry_job(client, db):
     c = Clinic(client)
     w = c.post("/waitlist", {"customer": {"full_name": "Waiting", "mobile": "9666666661"}, "professional_id": c.pro["id"], "preferred_date": iso(ist(c.monday, 9))})
     assert w["status"] == "waiting" and len(c.get("/waitlist")) == 1
-    client.post("/api/v1/waitlist", json={"customer": {"full_name": "Waiting", "mobile": "9666666661"}, "professional_id": c.pro["id"], "preferred_date": iso(ist(c.monday, 9))}, headers=c.h).status_code == 409
+    assert client.post("/api/v1/waitlist", json={"customer": {"full_name": "Waiting", "mobile": "9666666661"}, "professional_id": c.pro["id"], "preferred_date": iso(ist(c.monday, 9))}, headers=c.h).status_code == 409
     client.delete(f"/api/v1/waitlist/{w['id']}", headers=c.h)
     assert c.get("/waitlist") == []
 

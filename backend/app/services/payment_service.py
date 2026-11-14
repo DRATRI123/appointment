@@ -206,7 +206,7 @@ class PaymentService:
             self._log(payment, "duplicate_utr_attempt", payment.status, payment.status, reason="UTR already used for another payment", details=details)
             if other is not None:
                 self._log(other, "duplicate_utr_attempt", other.status, other.status, reason="Same UTR submitted for another payment", details={"utr": utr_n, "other_payment": payment.reference})
-            raise DuplicateUTR("This UTR has already been submitted for another payment. Check the reference in your UPI app or contact the clinic.")
+            raise DuplicateUTR("This UTR has already been submitted for another payment. Check the reference in your UPI app or contact the clinic.", persist=True)
 
         stored = None
         if screenshot:

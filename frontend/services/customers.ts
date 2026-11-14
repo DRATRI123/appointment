@@ -12,6 +12,7 @@ export const customersService = {
   create: (body: Body) => api.post<Customer>("/customers", body),
   update: (id: string, body: Body) => api.patch<Customer>(`/customers/${id}`, body),
   remove: (id: string) => api.delete<ApiErrorBody>(`/customers/${id}`),
+  anonymize: (id: string, reason: string) => api.post<ApiErrorBody>(`/customers/${id}/anonymize`, { reason, confirm: true }),
   exportUrl: () => `${apiBase}/customers/export.csv`,
   dependents: (id: string) => api.get<Dependent[]>(`/customers/${id}/dependents`),
   addDependent: (id: string, body: Body) => api.post<Dependent>(`/customers/${id}/dependents`, body),

@@ -1,0 +1,6 @@
+# Development and CI tooling (not installed in production images).
+-r requirements.txt
+pytest-cov>=7.0
+ruff>=0.17
+bandit>=1.9
+pip-audit>=2.10

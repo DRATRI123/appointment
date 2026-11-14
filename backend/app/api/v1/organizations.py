@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import func, select
 
-from app.api.deps import DB, CurrentUser, Meta, Tenant, TenantContext, require_permission
+from app.api.deps import DB, CurrentUser, Meta, TenantContext, require_permission
 from app.core.pagination import Page, PageMeta, PageParams, page_params
+from app.models import AuditLog
 from app.schemas.audit import AuditLogRead
 from app.schemas.common import Message
 from app.schemas.membership import MemberInvite, MemberRead, MemberUpdate
@@ -23,9 +25,6 @@ from app.schemas.user import UserRead
 from app.services.membership_service import MembershipService
 from app.services.organization_service import OrganizationService
 from app.services.role_service import RoleService, role_to_read
-from sqlalchemy import func, select
-
-from app.models import AuditLog
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 

@@ -111,7 +111,7 @@ class AuthService:
             record.attempts += 1
             self.db.flush()
             remaining = record.max_attempts - record.attempts
-            raise AuthenticationError(f"Incorrect code. {remaining} attempts left.", code="otp_incorrect")
+            raise AuthenticationError(f"Incorrect code. {remaining} attempts left.", code="otp_incorrect", persist=True)
 
         record.verified_at = now
         record.consumed_at = now
@@ -182,7 +182,7 @@ class AuthService:
                     user.failed_login_attempts = 0
                     record_audit(self.db, action="auth.lockout", actor=user, entity_type="user", entity_id=user.public_id, meta=self.meta)
                 self.db.flush()
-            raise AuthenticationError("Invalid email or password.", code="invalid_credentials")
+            raise AuthenticationError("Invalid email or password.", code="invalid_credentials", persist=True)
         self._ensure_user_active(user)
         if needs_rehash(user.password_hash or ""):
             user.password_hash = hash_password(password)
@@ -320,7 +320,7 @@ class AuthService:
                     s.revoked_reason = "token_reuse"
             self.db.flush()
             log.warning("auth.refresh_reuse_detected", family=session.family_id, user_id=session.user_id)
-            raise AuthenticationError("Session is no longer valid. Please sign in again.", code="refresh_reused")
+            raise AuthenticationError("Session is no longer valid. Please sign in again.", code="refresh_reused", persist=True)
         if session.expires_at < now:
             session.revoked_at = now
             session.revoked_reason = "expired"

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models import User
 from app.repositories.organizations import MembershipRepository
-from app.schemas.user import MeResponse, MembershipSummary, OrganizationSummary, UserRead, UserUpdate
+from app.schemas.user import MembershipSummary, MeResponse, OrganizationSummary, UserRead, UserUpdate
 from app.security.permissions import PERMISSIONS
 
 

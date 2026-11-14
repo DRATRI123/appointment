@@ -22,7 +22,7 @@ class ServiceCategory(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftD
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    services: Mapped[list["Service"]] = relationship(back_populates="category")
+    services: Mapped[list[Service]] = relationship(back_populates="category")
 
 
 class Service(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMixin, Base):
@@ -75,7 +75,7 @@ class Service(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMix
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", nullable=True)
 
     category: Mapped[ServiceCategory | None] = relationship(back_populates="services")
-    pricing: Mapped[list["ServicePricing"]] = relationship(
+    pricing: Mapped[list[ServicePricing]] = relationship(
         back_populates="service", cascade="all, delete-orphan"
     )
 
@@ -109,7 +109,7 @@ class ServicePackage(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDe
     validity_days: Mapped[int | None] = mapped_column(Integer)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    items: Mapped[list["ServicePackageItem"]] = relationship(
+    items: Mapped[list[ServicePackageItem]] = relationship(
         back_populates="package", cascade="all, delete-orphan"
     )
 

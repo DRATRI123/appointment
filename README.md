@@ -38,7 +38,8 @@ appointment is confirmed.
 | 9 | Google Calendar per professional (events, Google Meet links, busy time blocks slots), Zoom meetings (Server-to-Server OAuth), manual video links, background sync with retries, .ics downloads and private calendar feeds, Join / Add-to-calendar for customers | ✅ done |
 | 10 | Admin dashboard (KPIs vs previous period, daily trends, utilization, busiest times, needs-attention list), professional stats, 10 reports with CSV/Excel export (audit-logged), platform dashboard, subscription plans with enforced limits, organization detail, platform settings and announcement | ✅ done |
 | 11 | Developer portal: scoped API keys (hashed, IP allowlist, per-key rate limit, usage), signed webhooks with outbox delivery, retries, SSRF protection and delivery logs, API docs; platform API usage; trusted-proxy client IPs | ✅ done |
-| 12–14 | See roadmap in `documentation/architecture.md` | planned |
+| 12 | Security hardening and testing: security counters survive failed requests, cross-tenant sweep of every ID route, forwarded-IP spoofing fix, no input echo in errors, generic 500s, CSP and safe post-login redirects, accessibility (axe) and CSP checks in the browser suite, customer data erasure, bandit / pip-audit / npm audit / ruff / coverage gates in CI | ✅ done |
+| 13–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -57,7 +58,7 @@ appointment-platform/
 ## Run locally on Windows 10
 
 Prerequisites: [Python 3.11+](https://www.python.org/downloads/windows/) (tick "Add to PATH"),
-[Node.js 20+](https://nodejs.org/), Git. Open **PowerShell**.
+[Node.js 22 LTS](https://nodejs.org/) (22.12 or newer), Git. Open **PowerShell**.
 
 ### 1. Clone
 
@@ -129,16 +130,26 @@ Open http://localhost:3000. The frontend proxies `/api/*` to the backend
 ```powershell
 cd backend
 .\.venv\Scripts\Activate.ps1
-python -m pytest
+pip install -r requirements-dev.txt
+python -m pytest --cov=app
+ruff check app tests
+bandit -q -r app
+pip-audit -r requirements.txt
 ```
 
 ```powershell
 cd frontend
 npm run lint
 npm run typecheck
+npm test
+npm audit --audit-level=high
 npx playwright install chromium
 npm run test:e2e
 ```
+
+`npm test` runs fast unit tests (Vitest). `npm run test:e2e` drives a real browser through booking, payments,
+refunds and the admin pages, and fails on any Content-Security-Policy violation, console error or serious
+accessibility problem (axe, WCAG 2.1 AA rules).
 
 The end-to-end suite registers several accounts in quick succession, so start the backend it talks to
 with rate limiting off (`RATE_LIMIT_ENABLED=false` in `backend/.env`, or set it for that terminal

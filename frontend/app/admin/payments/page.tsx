@@ -32,8 +32,8 @@ export default function PaymentsPage() {
       <PaymentStatsRow orgId={orgId} />
       <div className="grid gap-2 sm:grid-cols-3">
         <Input placeholder="Search reference, UTR, customer, mobile" value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} />
-        <NativeSelect value={status} onChange={(e) => { setPage(1); setStatus(e.target.value); }}><option value="">All statuses</option>{Object.entries(PAYMENT_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</NativeSelect>
-        <NativeSelect value={method} onChange={(e) => { setPage(1); setMethod(e.target.value); }}><option value="">All methods</option>{(["upi_qr", "cash", "bank_transfer"] as const).map((k) => <option key={k} value={k}>{METHOD_LABEL[k]}</option>)}</NativeSelect>
+        <NativeSelect aria-label="Status" value={status} onChange={(e) => { setPage(1); setStatus(e.target.value); }}><option value="">All statuses</option>{Object.entries(PAYMENT_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</NativeSelect>
+        <NativeSelect aria-label="Method" value={method} onChange={(e) => { setPage(1); setMethod(e.target.value); }}><option value="">All methods</option>{(["upi_qr", "cash", "bank_transfer"] as const).map((k) => <option key={k} value={k}>{METHOD_LABEL[k]}</option>)}</NativeSelect>
       </div>
       {payments.isLoading ? <Skeleton className="h-64" /> : payments.data?.data.length === 0 ? (
         <EmptyState icon={CreditCard} title="No payments match" body="Payment requests appear here as soon as a booking needs an advance." />

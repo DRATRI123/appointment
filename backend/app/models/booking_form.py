@@ -27,7 +27,7 @@ class BookingForm(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDelet
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     settings: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
 
-    fields: Mapped[list["BookingFormField"]] = relationship(
+    fields: Mapped[list[BookingFormField]] = relationship(
         back_populates="form", cascade="all, delete-orphan", order_by="BookingFormField.sort_order"
     )
 

@@ -25,7 +25,7 @@ export default function FamilyPage() {
   if (!orgs.data?.length) return <EmptyState icon={Users} title="No clinic yet" body="Family members and preferences are kept per clinic. Book an appointment first and come back here." />;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader title="Family & preferences" description="Family members you book for and how each clinic may contact you." actions={orgs.data.length > 1 ? <NativeSelect className="w-56" value={orgId} onChange={(e) => setChosen(e.target.value)}>{orgs.data.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</NativeSelect> : null} />
+      <PageHeader title="Family & preferences" description="Family members you book for and how each clinic may contact you." actions={orgs.data.length > 1 ? <NativeSelect aria-label="Clinic" className="w-56" value={orgId} onChange={(e) => setChosen(e.target.value)}>{orgs.data.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</NativeSelect> : null} />
       {orgId ? <><Dependents key={orgId} orgId={orgId} /><Preferences key={`${orgId}-p`} orgId={orgId} /></> : null}
     </div>
   );

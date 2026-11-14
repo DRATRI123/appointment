@@ -18,7 +18,8 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.enums import AppointmentStatus, NotificationStatus as S
+from app.core.enums import AppointmentStatus
+from app.core.enums import NotificationStatus as S
 from app.core.exceptions import NotFoundError, ValidationFailed
 from app.core.logging import get_logger
 from app.core.time import utcnow

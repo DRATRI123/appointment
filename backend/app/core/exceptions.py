@@ -12,14 +12,22 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
+from app.core.logging import get_logger
+
+_log = get_logger("app.errors")
+
 
 class AppError(Exception):
     status_code: int = status.HTTP_400_BAD_REQUEST
     code: str = "bad_request"
 
-    def __init__(self, detail: str | None = None, *, code: str | None = None, errors: Any = None, headers: dict[str, str] | None = None):
+    def __init__(self, detail: str | None = None, *, code: str | None = None, errors: Any = None, headers: dict[str, str] | None = None,
+                 persist: bool = False):
         self.detail = detail or self.__class__.__name__
         self.headers = headers
+        # Security bookkeeping (failed-login counters, OTP attempts, duplicate-UTR flags) must survive the error:
+        # the request session commits instead of rolling back when this is set.
+        self.persist_changes = persist
         if code:
             self.code = code
         self.errors = errors
@@ -86,9 +94,11 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # Never echo the submitted value back: it may be a password, OTP, UTR or other personal data.
+        errors = [{k: v for k, v in err.items() if k not in ("input", "ctx", "url")} for err in exc.errors()]
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            content=_payload("Validation failed", "validation_failed", jsonable_encoder(exc.errors()), request),
+            content=_payload("Validation failed", "validation_failed", jsonable_encoder(errors), request),
         )
 
     @app.exception_handler(IntegrityError)
@@ -96,4 +106,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
             content=_payload("Resource conflict", "integrity_error", None, request),
+        )
+
+    @app.exception_handler(Exception)
+    async def _unexpected(request: Request, exc: Exception) -> JSONResponse:
+        # Log the full traceback server-side; the client only gets a request id to quote to support.
+        _log.exception("request.unhandled_error", path=request.url.path, error=type(exc).__name__)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=_payload("Something went wrong. Please try again.", "internal_error", None, request),
         )

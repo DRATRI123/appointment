@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.models import CustomerNote
 from app.security.crypto import is_encrypted
-from tests.booking_helpers import Clinic, ist, iso
+from tests.booking_helpers import Clinic, iso, ist
 from tests.helpers import bearer, otp_login
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
@@ -109,7 +109,7 @@ def test_documents_upload_download_retention_and_purge(client, db, tmp_path):
         doc = r.json()
         assert doc["mime_type"] == "image/png" and doc["retention_until"] is not None and doc["uploaded_by_name"] == "Clinic Owner"
         # Not served from the public /media mount.
-        assert not (tmp_path / "public").rglob("*.png").__next__ if False else True
+        assert not list((tmp_path / "public").rglob("*.png"))
         r = client.get(f"/api/v1/customers/{cust['id']}/documents/{doc['id']}/download", params={"purpose": "review"}, headers=c.h)
         assert r.status_code == 200 and r.content == PNG and r.headers["cache-control"] == "private, no-store"
         logs = client.get(f"/api/v1/organizations/{c.org['id']}/audit-logs", params={"action": "customer.document_downloaded"}, headers=c.h).json()
@@ -137,12 +137,15 @@ def test_dependents_and_dependent_booking_via_customer_self_service(client):
     user = otp_login(client, "9888888881", "Parent")
     client.cookies.clear()
     hu = bearer(user)
-    # Customer record appears once the user books or touches their profile.
+    # Reading never creates a customer record; the first write (or a booking) does.
     r = client.get(f"/api/v1/customer/organizations/{c.org['id']}/profile", headers=hu)
-    assert r.status_code == 200 and r.json()["is_guest"] is False
+    assert r.status_code == 404 and r.json()["code"] == "no_customer_record"
+    assert client.get(f"/api/v1/customer/organizations/{c.org['id']}/dependents", headers=hu).json() == []
+    assert c.get("/customers")["meta"]["total"] == 0
     r = client.post(f"/api/v1/customer/organizations/{c.org['id']}/dependents", json={"full_name": "Little One", "relationship_label": "child", "date_of_birth": "2019-05-01"}, headers=hu)
     assert r.status_code == 201, r.text
     dep = r.json()
+    assert client.get(f"/api/v1/customer/organizations/{c.org['id']}/profile", headers=hu).json()["is_guest"] is False
     assert client.patch(f"/api/v1/customer/organizations/{c.org['id']}/profile", json={"communication_preferences": {"sms": True, "whatsapp": False}, "consent": {"data_processing": True}}, headers=hu).json()["consent"] == {"data_processing": True}
 
     # Book for the dependent.
@@ -261,3 +264,48 @@ def test_booking_forms_permissions(client):
     hr = {**bearer(rec), "X-Organization-Id": c.org["id"]}
     assert client.get("/api/v1/booking-forms", headers=hr).status_code == 200
     assert client.post("/api/v1/booking-forms", json={"name": "Nope"}, headers=hr).status_code == 403
+
+
+def test_customer_erasure_removes_personal_data_but_keeps_financial_records(client, db, tmp_path):
+    from app.models import AuditLog, Customer, CustomerDocument, CustomerNote, Notification
+    from tests.test_payments import _verifier
+
+    storage_module = _storage(tmp_path)
+    try:
+        c = Clinic(client, email="erase-owner@example.com", name="Erase Clinic", payment_mode="pay_at_clinic")
+        appt = c.staff_book(ist(c.monday, 9), customer={"full_name": "Asha Patel", "mobile": "9812345678", "email": "asha@example.com"})
+        cust_id = c.get("/customers", {"search": "Asha"})["data"][0]["id"]
+        c.post(f"/customers/{cust_id}/notes", {"body": "Allergic to penicillin", "note_type": "allergy"})
+        c.post(f"/customers/{cust_id}/dependents", {"full_name": "Little Patel", "relationship_label": "child"})
+        doc = client.post(f"/api/v1/customers/{cust_id}/documents", files={"file": ("r.png", io.BytesIO(PNG), "image/png")}, data={"title": "Blood report"}, headers=c.h).json()
+        assert list(tmp_path.rglob("*.png"))
+
+        # Only owners/admins may erase; it must be confirmed; upcoming visits block it.
+        rec = _verifier(client, c, role="receptionist", mobile="9600000071")
+        body = {"reason": "Written request from the customer", "confirm": True}
+        assert client.post(f"/api/v1/customers/{cust_id}/anonymize", json=body, headers=rec).status_code == 403
+        assert client.post(f"/api/v1/customers/{cust_id}/anonymize", json={**body, "confirm": False}, headers=c.h).json()["code"] == "confirmation_required"
+        assert client.post(f"/api/v1/customers/{cust_id}/anonymize", json=body, headers=c.h).json()["code"] == "has_upcoming"
+        assert client.post(f"/api/v1/appointments/{appt['id']}/status", json={"action": "cancel"}, headers=c.h).status_code == 200
+
+        r = client.post(f"/api/v1/customers/{cust_id}/anonymize", json=body, headers=c.h)
+        assert r.status_code == 200, r.text
+        assert client.get(f"/api/v1/customers/{cust_id}", headers=c.h).status_code == 404
+        assert c.get("/customers", {"search": "9812345678"})["meta"]["total"] == 0
+
+        db.expire_all()
+        row = db.scalars(select(Customer).where(Customer.public_id == cust_id)).one()
+        assert (row.full_name, row.mobile, row.email, row.user_id) == ("Erased customer", None, None, None)
+        assert db.scalars(select(CustomerNote).where(CustomerNote.customer_id == row.id)).all() == []
+        assert all(d.full_name == "Erased" and d.deleted_at for d in row.dependents)
+        assert db.scalars(select(CustomerDocument).where(CustomerDocument.public_id == doc["id"])).one().deleted_at is not None
+        assert not list(tmp_path.rglob("*.png"))  # the file itself is gone
+        for n in db.scalars(select(Notification).where(Notification.recipient_customer_id == row.id)).all():
+            assert n.recipient_address is None and "Asha" not in n.body
+        # The appointment (and its money trail) is kept, attached to the anonymous record.
+        kept = c.get(f"/appointments/{appt['id']}")
+        assert kept["status"] == "cancelled" and "Asha" not in str(kept)
+        audit = db.scalars(select(AuditLog).where(AuditLog.action == "customer.anonymized")).one()
+        assert audit.purpose == body["reason"] and "Asha" not in str(audit.before) + str(audit.after)
+    finally:
+        storage_module._storage = None

@@ -58,8 +58,11 @@ def get_db() -> Generator[Session, None, None]:
     try:
         yield db
         db.commit()
-    except Exception:
-        db.rollback()
+    except Exception as exc:
+        if getattr(exc, "persist_changes", False):
+            db.commit()  # e.g. a failed-login counter: the error is the answer, the counter must still be saved
+        else:
+            db.rollback()
         raise
     finally:
         db.close()
@@ -72,8 +75,11 @@ def session_scope() -> Iterator[Session]:
     try:
         yield db
         db.commit()
-    except Exception:
-        db.rollback()
+    except Exception as exc:
+        if getattr(exc, "persist_changes", False):
+            db.commit()  # e.g. a failed-login counter: the error is the answer, the counter must still be saved
+        else:
+            db.rollback()
         raise
     finally:
         db.close()

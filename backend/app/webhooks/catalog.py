@@ -46,8 +46,9 @@ def appointment_data(db: Session, appt) -> dict[str, Any]:
 
 
 def payment_data(db: Session, payment) -> dict[str, Any]:
-    from app.models import Appointment, PaymentSubmission
     from sqlalchemy import select
+
+    from app.models import Appointment, PaymentSubmission
 
     appt = db.get(Appointment, payment.appointment_id) if payment.appointment_id else None
     utr = db.scalar(select(PaymentSubmission.utr).where(PaymentSubmission.payment_id == payment.id, PaymentSubmission.is_superseded.is_(False)).order_by(PaymentSubmission.id.desc()))

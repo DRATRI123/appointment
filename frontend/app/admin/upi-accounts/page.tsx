@@ -67,7 +67,7 @@ export default function UPIAccountsPage() {
       {canWrite && services.data?.length && active.length > 1 ? (
         <Card>
           <CardHeader><CardTitle>Service-specific accounts</CardTitle><CardDescription>Route a service&apos;s payments to a particular account, for example a separate account for therapies.</CardDescription></CardHeader>
-          <CardContent><ul className="divide-y">{services.data.map((s) => <li key={s.id} className="flex items-center justify-between gap-3 py-2 text-sm"><span>{s.name}</span><NativeSelect className="w-64" defaultValue="" onChange={(e) => assign.mutate({ service_id: s.id, account: e.target.value || null })}><option value="">Branch / organization default</option>{active.map((a) => <option key={a.id} value={a.id}>{a.display_name}</option>)}</NativeSelect></li>)}</ul></CardContent>
+          <CardContent><ul className="divide-y">{services.data.map((s) => <li key={s.id} className="flex items-center justify-between gap-3 py-2 text-sm"><span>{s.name}</span><NativeSelect aria-label={`UPI account for ${s.name}`} className="w-64" defaultValue="" onChange={(e) => assign.mutate({ service_id: s.id, account: e.target.value || null })}><option value="">Branch / organization default</option>{active.map((a) => <option key={a.id} value={a.id}>{a.display_name}</option>)}</NativeSelect></li>)}</ul></CardContent>
         </Card>
       ) : null}
       {editing ? <AccountSheet account={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); invalidate(); }} /> : null}

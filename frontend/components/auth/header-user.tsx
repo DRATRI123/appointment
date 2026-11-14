@@ -59,8 +59,9 @@ export function HeaderUser({ showOrgSwitcher = true }: { showOrgSwitcher?: boole
       ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary" aria-label="Account menu">
-            {initials(user.full_name) || <UserRound className="size-4" />}
+          <button className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+            {initials(user.full_name) || <UserRound className="size-4" aria-hidden />}
+            <span className="sr-only">, account menu for {user.full_name}</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">

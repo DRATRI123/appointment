@@ -9,11 +9,26 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.enums import AppointmentStatus
+from app.core.enums import AppointmentStatus, PaymentStatus, RefundStatus
 from app.core.exceptions import ConflictError, NotFoundError, ValidationFailed
+from app.core.logging import get_logger
 from app.core.storage import get_storage, validate_upload
 from app.core.time import utcnow
-from app.models import Appointment, Branch, Customer, CustomerDependent, CustomerDocument, CustomerNote, Organization, Professional, User
+from app.models import (
+    Appointment,
+    BookingFormResponse,
+    Branch,
+    Customer,
+    CustomerDependent,
+    CustomerDocument,
+    CustomerNote,
+    Notification,
+    Organization,
+    Payment,
+    PaymentRefund,
+    Professional,
+    User,
+)
 from app.schemas.customer import (
     CustomerCreate,
     CustomerRead,
@@ -32,6 +47,8 @@ from app.security.identifiers import normalize_email, normalize_mobile
 from app.services.audit_service import RequestMeta, record_audit
 from app.services.catalog_service import ids_to_public
 from app.services.organization_service import OrganizationService
+
+log = get_logger(__name__)
 
 DOCUMENT_TYPES = {"image/png", "image/jpeg", "image/webp", "application/pdf"}
 
@@ -107,9 +124,9 @@ class CustomerManagementService:
                     self.db.add(customer)
                     self.db.flush()
                 break
-            except IntegrityError:
+            except IntegrityError as exc:
                 if attempt == 2:
-                    raise ConflictError("Could not allocate a customer code. Try again.")
+                    raise ConflictError("Could not allocate a customer code. Try again.") from exc
         self._audit("customer.created", "customer", customer.public_id, after={"name": customer.full_name})
         return customer
 
@@ -152,6 +169,56 @@ class CustomerManagementService:
         customer.deleted_at = utcnow()
         self.db.flush()
         self._audit("customer.deleted", "customer", customer.public_id)
+
+    def anonymize(self, customer: Customer, reason: str) -> None:
+        """Erase a customer's personal and clinical data at their request.
+
+        Removed: name, contact details, date of birth, address and other profile fields; family members; clinical notes;
+        uploaded documents (files deleted from storage); booking-form answers; free-text appointment notes; the copies
+        of their details held in notification records; and the link to their login account.
+        Kept, because the clinic must be able to account for money: appointments (date, service, amount, status),
+        payments, UTRs, verification logs and refunds - now attached to an anonymous record. The audit log records
+        that an erasure happened, by whom and why, but not the erased values."""
+        if self.db.scalar(select(func.count()).select_from(Appointment).where(Appointment.customer_id == customer.id, Appointment.status.in_(["confirmed", "pending_payment", "pending_verification", "checked_in"]))):
+            raise ConflictError("Cancel the customer's upcoming appointments before erasing their data.", code="has_upcoming")
+        open_money = self.db.scalar(
+            select(func.count()).select_from(Payment).where(Payment.customer_id == customer.id, Payment.status.in_(
+                [PaymentStatus.SUBMITTED, PaymentStatus.UNDER_REVIEW, PaymentStatus.REFUND_REQUESTED]))
+        ) or self.db.scalar(
+            select(func.count()).select_from(PaymentRefund).join(Payment, Payment.id == PaymentRefund.payment_id)
+            .where(Payment.customer_id == customer.id, PaymentRefund.status.in_([RefundStatus.REQUESTED, RefundStatus.APPROVED]))
+        )
+        if open_money:
+            raise ConflictError("Finish verifying this customer's payments and refunds before erasing their data.", code="has_open_payments")
+
+        now = utcnow()
+        storage = get_storage()
+        for doc in self.db.scalars(select(CustomerDocument).where(CustomerDocument.customer_id == customer.id)).all():
+            try:
+                storage.delete(doc.storage_path)
+            except Exception as exc:  # pragma: no cover - the row is retired even if the file is already gone
+                log.warning("customer.erase_file_failed", document_id=doc.public_id, error=type(exc).__name__)
+            doc.title, doc.deleted_at = "Erased", doc.deleted_at or now
+        for note in self.db.scalars(select(CustomerNote).where(CustomerNote.customer_id == customer.id)).all():
+            self.db.delete(note)
+        for dep in self.db.scalars(select(CustomerDependent).where(CustomerDependent.customer_id == customer.id)).all():
+            dep.full_name, dep.mobile, dep.notes, dep.date_of_birth, dep.gender = "Erased", None, None, None, None
+            dep.deleted_at = dep.deleted_at or now
+        for resp in self.db.scalars(select(BookingFormResponse).where(BookingFormResponse.customer_id == customer.id)).all():
+            resp.answers, resp.attachments = {}, None
+        for appt in self.db.scalars(select(Appointment).where(Appointment.customer_id == customer.id)).all():
+            appt.customer_notes = None
+        for n in self.db.scalars(select(Notification).where(Notification.recipient_customer_id == customer.id)).all():
+            n.recipient_address, n.subject, n.body, n.payload = None, None, "[erased]", None
+
+        customer.full_name = "Erased customer"
+        customer.mobile = customer.email = customer.date_of_birth = customer.gender = customer.address = None
+        customer.profile_photo_url = customer.blood_group = customer.communication_preferences = customer.consent = None
+        customer.tags = customer.saved_professional_ids = customer.saved_branch_ids = customer.metadata_ = None
+        customer.user_id = None
+        customer.deleted_at = now
+        self.db.flush()
+        self._audit("customer.anonymized", "customer", customer.public_id, purpose=reason)
 
     # -------------------------------------------------------------- stats
     def stats(self, customer: Customer) -> CustomerStats:
@@ -330,8 +397,8 @@ def purge_expired_documents(db: Session) -> int:
     for row in rows:
         try:
             storage.delete(row.storage_path)
-        except Exception:  # pragma: no cover - best effort file removal
-            pass
+        except Exception as exc:  # pragma: no cover - best effort file removal; the row is still retired
+            log.warning("customer.document_purge_file_failed", document_id=row.public_id, error=type(exc).__name__)
         row.deleted_at = utcnow()
         record_audit(db, action="customer.document_purged", actor=None, organization_id=row.organization_id, entity_type="customer_document", entity_id=row.public_id, purpose="retention policy")
     db.flush()

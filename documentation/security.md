@@ -147,6 +147,37 @@ double-submit, session revocation check, tenant resolution, permission guards),
   backoff for about two days, and an endpoint is switched off after 50 consecutive failures. Payloads carry
   public ids only and never clinical notes, form answers, documents or payment screenshots.
 
+## Phase 12 hardening and testing
+
+What changed, and the test that keeps each fix in place (`backend/tests/test_security.py` unless noted):
+
+| Area | Control | Regression test |
+|---|---|---|
+| Brute force | Failed-login counters, OTP attempt counts, refresh-token reuse revocation and duplicate-UTR flags are committed even though the request ends in an error (`AppError(persist=True)`); every other error still rolls back | `test_security_counters_survive_the_failing_request`, `test_unrelated_errors_still_roll_back` |
+| Tenant isolation | Every GET route that takes an ID is swept with another tenant's credentials (generated from the OpenAPI schema, so new routes are covered automatically); the tenant header cannot be pointed at another organization | `test_every_id_route_refuses_another_tenants_resources` |
+| Patient lists | Reading your own profile or family at a clinic no longer creates a customer record there (opening a booking page used to add the visitor to that clinic's patient list) | same sweep, `test_dependents_and_dependent_booking_via_customer_self_service` |
+| Tokens | `alg=none`, wrong key, expired, wrong token type and forged-subject tokens are rejected | `test_tampered_access_tokens_are_rejected`, `test_token_for_another_user_signed_correctly_still_needs_a_live_session` |
+| CSRF | Header must equal the cookie; missing or forged values fail. Logout is deliberately exempt so a broken session can always sign out (SameSite=Lax already blocks cross-site POSTs) | `test_csrf_token_must_match_cookie` |
+| Client IP | `X-Forwarded-For` is read right-to-left from a trusted proxy, skipping our own proxies; the client-controlled left-most entries are ignored, invalid entries fall back to the proxy address | `test_client_ip_cannot_be_spoofed_through_forwarded_for` |
+| Mass assignment | `is_platform_admin`, verification and lockout fields cannot be set through register or profile updates; customers cannot choose the payable amount or payment status | `test_privileged_fields_cannot_be_set_by_users`, `test_payment_amount_cannot_be_chosen_by_the_customer` |
+| Error responses | 422 responses never echo the submitted value (passwords, OTPs, UTRs); unexpected errors return a generic message with a request id and log the traceback server-side; caller-supplied `X-Request-ID` is accepted only if short and plain, so it cannot forge log lines | `test_validation_errors_do_not_echo_submitted_values`, `test_unexpected_errors_return_a_generic_message_with_request_id`, `test_request_id_header_is_sanitised` |
+| Headers | API responses carry `nosniff`, `DENY`, `frame-ancestors 'none'` CSP and Referrer-Policy, including on errors; the `/media` mount serves only public files | `test_api_responses_carry_security_headers`, `test_media_mount_does_not_serve_private_files` |
+| Web app | Content-Security-Policy, COOP, Permissions-Policy and optional HSTS on every page (`frontend/next.config.ts`); post-login `?next=` accepts same-site paths only | `frontend/tests/unit/safe-redirect.test.ts`; `e2e/quality.spec.ts` fails on any CSP violation |
+| Accessibility | Admin, booking and auth pages are scanned with axe (WCAG 2.1 A/AA); serious or critical issues fail the build | `e2e/quality.spec.ts` |
+
+Automated gates in CI (`.github/workflows/ci.yml`): ruff, bandit (no findings; the five `nosec` markers are
+documented false positives), pip-audit, npm audit (high and above), backend coverage at least 88 %, Vitest
+unit tests, production build, and the full Playwright suite against real servers.
+
+Known limits, not yet addressed:
+
+* Bank transactions are addressed by integer IDs in reconciliation URLs. Lookups are scoped to the
+  organization (the sweep confirms it), but the IDs are guessable within a tenant.
+* `script-src` and `style-src` include `'unsafe-inline'` because Next.js hydration needs inline scripts.
+  Moving to per-request nonces is Phase 13 work.
+* Route rate limits use Redis when `REDIS_URL` is set (otherwise per process). The per-API-key limiter is
+  always in memory, so with several API processes each one counts separately (Phase 13).
+
 ## Healthcare privacy
 
 * Customer notes and documents are restricted to clinical roles (`customers:clinical_read`).
@@ -156,7 +187,16 @@ double-submit, session revocation check, tenant resolution, permission guards),
   written to `audit_logs` with the stated purpose. Retention: `privacy.document_retention_days` drives the
   `purge_expired_documents` job.
 * Access to customer records is written to `audit_logs` with purpose.
-* Retention: `organization_settings.retention_days_*` drive scheduled purge jobs (Phase 12).
+* Retention: `privacy.document_retention_days` drives the `purge_expired_documents` job. Other data has no
+  automatic expiry yet; the clinic decides when to erase a customer (below).
+* Erasure on request: owners and admins (`customers:erase`) can erase a customer from their profile page
+  (`POST /customers/{id}/anonymize`, reason and confirmation required). It removes the name, contact details,
+  date of birth, address, family members, clinical notes, uploaded document files, booking-form answers,
+  appointment notes, the personal details held in notification records, and the link to the login account. It
+  keeps appointments, payments, UTRs, verification logs and refunds, attached to an anonymous record, so the
+  accounts still reconcile. It is refused while the customer has upcoming visits or payments/refunds awaiting
+  staff action. The audit log records who erased whom and why, not the erased values. Whether this meets a
+  particular legal obligation needs your own legal review.
 * Consent flags captured at booking (`customers.consent_json`).
 
 ## Backup and recovery

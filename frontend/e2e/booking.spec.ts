@@ -66,7 +66,7 @@ test("guest books through the wizard, sees the status page, staff sees it on the
   // Calendar renders the event.
   await page.goto("/admin/calendar");
   await expect(page.getByTestId("calendar")).toBeVisible();
-  await expect(page.getByTestId("calendar").getByRole("button", { name: /this week/i })).toBeVisible();
+  await expect(page.getByTestId("calendar").getByRole("button", { name: "Today", exact: true })).toBeVisible();
 });
 
 test("the same slot cannot be held twice", async ({ page, request }) => {

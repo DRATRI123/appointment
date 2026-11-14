@@ -47,7 +47,7 @@ export default function CustomersPage() {
       } />
       <div className="mb-4 grid gap-2 sm:grid-cols-3">
         <Input placeholder="Search name, mobile, email or code" value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} />
-        <NativeSelect value={segment} onChange={(e) => { setPage(1); setSegment(e.target.value); }}>{SEGMENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</NativeSelect>
+        <NativeSelect aria-label="Customer segment" value={segment} onChange={(e) => { setPage(1); setSegment(e.target.value); }}>{SEGMENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</NativeSelect>
         <Input placeholder="Filter by tag" value={tag} onChange={(e) => { setPage(1); setTag(e.target.value); }} />
       </div>
       {customers.isLoading ? <Skeleton className="h-64" /> : customers.data?.data.length === 0 ? (

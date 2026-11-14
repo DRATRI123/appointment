@@ -66,7 +66,7 @@ test("statement import suggests a match, staff verify with bank evidence, then r
   await expect(row).toContainText("Suggested");
   await expect(row).toContainText("Statement Guest");
   await row.getByTestId("confirm-suggestion").click();
-  await page.getByRole("tab", { name: "All" }).click();
+  await page.getByRole("button", { name: "All", exact: true }).click();
   await expect(page.getByTestId("bank-row").filter({ hasText: utr })).toContainText("Matched");
 
   // The unrelated credit can be ignored with a reason.

@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Segmented } from "@/components/ui/segmented";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadPrivateFile } from "@/lib/download";
 import { errorMessage } from "@/lib/errors";
@@ -90,7 +91,7 @@ export default function ReconciliationPage() {
         <TabsContent value="transactions" className="space-y-4 pt-4">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-full overflow-x-auto">
-              <Tabs value={filter} onValueChange={(v) => { setPage(1); setFilter(v); }}><TabsList>{FILTERS.map(([v, l]) => <TabsTrigger key={l} value={v}>{l}</TabsTrigger>)}</TabsList></Tabs>
+              <Segmented label="Show" value={filter} onChange={(v) => { setPage(1); setFilter(v); }} options={FILTERS} />
             </div>
             <Input className="lg:w-80" placeholder="Search UTR, narration or amount" value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} />
           </div>

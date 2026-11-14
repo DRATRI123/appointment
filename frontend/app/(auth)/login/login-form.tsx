@@ -1,5 +1,6 @@
 "use client";
 
+import { safeNextPath } from "@/lib/safe-redirect";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -33,7 +34,7 @@ export function LoginForm() {
   async function finishLogin() {
     const me = await usersService.me();
     queryClient.setQueryData(ME_QUERY_KEY, me);
-    router.replace(next && next.startsWith("/") ? next : defaultDestination(me));
+    router.replace(safeNextPath(next) ?? defaultDestination(me));
   }
 
   return (

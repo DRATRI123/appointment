@@ -39,7 +39,7 @@ class ScheduleSet(APIModel):
             by_day.setdefault(w.weekday, []).append(w)
         for day, ws in by_day.items():
             ws.sort(key=lambda w: w.start_time)
-            for a, b in zip(ws, ws[1:]):
+            for a, b in zip(ws, ws[1:], strict=False):
                 if b.start_time < a.end_time:
                     raise ValueError(f"Overlapping windows on weekday {day}")
         return self

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.types import UTCDateTime
@@ -46,7 +46,7 @@ class Customer(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMi
     last_visit_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", nullable=True)
 
-    dependents: Mapped[list["CustomerDependent"]] = relationship(
+    dependents: Mapped[list[CustomerDependent]] = relationship(
         back_populates="customer", cascade="all, delete-orphan"
     )
 

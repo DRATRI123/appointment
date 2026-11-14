@@ -51,7 +51,7 @@ export default function BookingFormsPage() {
       {canWrite && services.data?.length ? (
         <Card>
           <CardHeader><CardTitle>Which form does each service use?</CardTitle><CardDescription>Service-specific form → branch form → organization default. Leave blank to inherit.</CardDescription></CardHeader>
-          <CardContent><ul className="divide-y">{services.data.map((s) => <li key={s.id} className="flex items-center justify-between gap-3 py-2 text-sm"><span>{s.name}</span><NativeSelect className="w-64" defaultValue="" onChange={(e) => assign.mutate({ service_id: s.id, form_id: e.target.value || null })}><option value="">Inherit default</option>{published.map((f) => <option key={f.id} value={f.id}>{f.name} (v{f.version})</option>)}</NativeSelect></li>)}</ul></CardContent>
+          <CardContent><ul className="divide-y">{services.data.map((s) => <li key={s.id} className="flex items-center justify-between gap-3 py-2 text-sm"><span>{s.name}</span><NativeSelect aria-label={`Booking form for ${s.name}`} className="w-64" defaultValue="" onChange={(e) => assign.mutate({ service_id: s.id, form_id: e.target.value || null })}><option value="">Inherit default</option>{published.map((f) => <option key={f.id} value={f.id}>{f.name} (v{f.version})</option>)}</NativeSelect></li>)}</ul></CardContent>
         </Card>
       ) : null}
       {creating ? <NewFormDialog onClose={() => setCreating(false)} /> : null}

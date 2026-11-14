@@ -4,7 +4,7 @@
 
 See the root `README.md` for the exact PowerShell commands. Summary:
 
-1. Install Python 3.11+ and Node.js 20+.
+1. Install Python 3.11+ and Node.js 22 LTS (22.12 or newer; Node 20 is end-of-life).
 2. `backend`: create a venv, `pip install -r requirements.txt`, copy `.env.example` to `.env`,
    `alembic upgrade head`, `uvicorn app.main:app --reload`.
 3. `frontend`: `npm install`, copy `.env.example` to `.env.local`, `npm run dev`.
@@ -34,6 +34,10 @@ environment (already defaulted in the compose file).
 - Set `FORWARDED_ALLOW_IPS` to the address (or network) of whatever sits in front of the API (the Next.js
   server, nginx, the load balancer). Only those peers may set `X-Forwarded-For`; otherwise every user would
   share the proxy's rate-limit bucket, or clients could spoof IPs past API-key allowlists.
+- Behind HTTPS, set `ENABLE_HSTS=true` for the Next.js server (adds `Strict-Transport-Security`; the API adds it
+  itself when `COOKIE_SECURE=true`). Only turn it on once every subdomain is served over HTTPS.
+- After upgrading to a release that adds permissions (Phase 12 adds `customers:erase`), run
+  `python ../scripts/seed.py` once from `backend/`. It is idempotent and grants new permissions to the built-in roles.
 - Leave `WEBHOOK_ALLOW_PRIVATE_TARGETS` unset in production so webhooks cannot reach internal addresses.
 - Run the worker (`python -m app.workers.runner --interval 20`): it delivers notifications and webhooks and
   syncs calendars.

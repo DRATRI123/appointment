@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import MembershipStatus, UserStatus
@@ -29,10 +29,10 @@ class User(PKMixin, PublicIdMixin, TimestampMixin, SoftDeleteMixin, Base):
     locked_until: Mapped[datetime | None] = mapped_column(UTCDateTime)
     preferences: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
 
-    sessions: Mapped[list["UserSession"]] = relationship(
+    sessions: Mapped[list[UserSession]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    memberships: Mapped[list["OrganizationMembership"]] = relationship(
+    memberships: Mapped[list[OrganizationMembership]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         foreign_keys="OrganizationMembership.user_id",
@@ -94,7 +94,7 @@ class Role(PKMixin, TimestampMixin, Base):
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     scope: Mapped[str] = mapped_column(String(16), default="organization", nullable=False)
 
-    permissions: Mapped[list["Permission"]] = relationship(
+    permissions: Mapped[list[Permission]] = relationship(
         secondary="role_permissions", back_populates="roles"
     )
 
@@ -138,5 +138,5 @@ class OrganizationMembership(PKMixin, PublicIdMixin, TimestampMixin, Base):
 
     user: Mapped[User] = relationship(back_populates="memberships", foreign_keys=[user_id])
     role: Mapped[Role] = relationship()
-    organization: Mapped["Organization"] = relationship(foreign_keys=[organization_id])  # noqa: F821
-    branch: Mapped["Branch | None"] = relationship(foreign_keys=[branch_id])  # noqa: F821
+    organization: Mapped[Organization] = relationship(foreign_keys=[organization_id])  # noqa: F821
+    branch: Mapped[Branch | None] = relationship(foreign_keys=[branch_id])  # noqa: F821

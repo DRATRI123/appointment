@@ -11,9 +11,16 @@ asyncio_default_fixture_loop_scope = "function"
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]
-line-length = 110
+line-length = 200  # import formatting only; E501 is not enforced (see below)
 target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N"]
-ignore = ["B008", "N805"]
+# Security lint is bandit's job (run separately in CI), so ruff's "S" rules are not duplicated here.
+# B008: FastAPI's Depends()/Query() in defaults. N805: pydantic validators. N818: domain errors such as DuplicateUTR.
+# E501: the code keeps one statement per line (dense query builders, table-like test assertions) by choice.
+ignore = ["B008", "N805", "N818", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: a sessionmaker named Session and a short module alias are deliberate.
+"tests/**" = ["N803", "N806", "N812"]

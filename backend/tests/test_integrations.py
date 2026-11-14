@@ -14,7 +14,7 @@ from app.integrations import http as integration_http
 from app.integrations.ics import IcsEvent, calendar
 from app.models import Appointment, AppointmentExternalEvent, Integration, IntegrationLog, Notification
 from app.services.integration_service import pull_all_busy, sync_external
-from tests.booking_helpers import Clinic, ist, iso, utc
+from tests.booking_helpers import Clinic, iso, ist, utc
 from tests.helpers import otp_login
 from tests.test_payments import _verifier
 
@@ -239,7 +239,7 @@ def test_zoom_meetings(client, db, fake):
     assert sync_external(db, commit=False)["synced"] == 1
     mid, meeting = next(iter(fake.meetings.items()))
     assert meeting["topic"] == "Zoom Clinic: Consultation" and meeting["settings"]["waiting_room"] is True and meeting["start_time"].endswith("Z")
-    assert any(f"/users/dr@clinic.test/meetings" in u or "/users/dr%40clinic.test/meetings" in u for _, u in fake.calls)
+    assert any("/users/dr@clinic.test/meetings" in u or "/users/dr%40clinic.test/meetings" in u for _, u in fake.calls)
     assert c.get(f"/appointments/{appt['id']}")["meeting_link"] == f"https://zoom.us/j/{mid}?pwd=x"
     # Every online appointment gets its own meeting; in-person ones get none.
     c.staff_book(ist(c.monday, 10), customer={"full_name": "Second Online", "mobile": "9811188102"}, consultation_mode="online")

@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Segmented } from "@/components/ui/segmented";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/forms/field";
 import { errorMessage } from "@/lib/errors";
@@ -43,9 +43,7 @@ export function TemplateEditor({ event, templates, onClose }: { event: EventInfo
           <SheetDescription>{event.description}</SheetDescription>
         </SheetHeader>
         <div className="max-w-full shrink-0 overflow-x-auto">
-          <Tabs value={channel} onValueChange={(v) => setChannel(v as Channel)}>
-            <TabsList>{channels.map((c) => <TabsTrigger key={c} value={c}>{CHANNEL_LABEL[c]}{templates.find((t) => t.channel === c)?.is_custom ? " •" : ""}</TabsTrigger>)}</TabsList>
-          </Tabs>
+          <Segmented label="Channel" value={channel} onChange={setChannel} options={channels.map((c) => [c, `${CHANNEL_LABEL[c]}${templates.find((t) => t.channel === c)?.is_custom ? " •" : ""}`] as const)} />
         </div>
         <ChannelForm key={channel} event={event} template={templates.find((t) => t.channel === channel)!} />
       </SheetContent>

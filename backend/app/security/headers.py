@@ -1,6 +1,7 @@
 """Security headers and request-id middleware."""
 from __future__ import annotations
 
+import re
 import uuid
 
 import structlog
@@ -10,10 +11,14 @@ from starlette.responses import Response
 
 from app.core.config import get_settings
 
+_REQUEST_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        # A caller-supplied id is kept for tracing only if it is short and plain; anything else could forge log lines.
+        supplied = request.headers.get("X-Request-ID", "")
+        request_id = supplied if _REQUEST_ID.fullmatch(supplied) else uuid.uuid4().hex
         request.state.request_id = request_id
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id, path=request.url.path)

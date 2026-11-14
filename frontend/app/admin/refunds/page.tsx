@@ -14,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Segmented } from "@/components/ui/segmented";
 import { formatDateTime } from "@/lib/format";
 import { formatPaise } from "@/lib/utils";
 
@@ -46,9 +46,7 @@ export default function RefundsPage() {
       </div>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-full overflow-x-auto">
-          <Tabs value={status} onValueChange={(v) => { setPage(1); setStatus(v); }}>
-            <TabsList>{TABS.map(([v, label]) => <TabsTrigger key={label} value={v}>{label}</TabsTrigger>)}</TabsList>
-          </Tabs>
+          <Segmented label="Show" value={status} onChange={(v) => { setPage(1); setStatus(v); }} options={TABS} />
         </div>
         <Input className="lg:w-80" placeholder="Search refund, payment, UTR, customer" value={search} onChange={(e) => { setPage(1); setSearch(e.target.value); }} />
       </div>

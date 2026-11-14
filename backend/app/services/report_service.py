@@ -51,7 +51,7 @@ class ReportDef:
     title: str
     description: str
     columns: list[Column]
-    rows: Callable[["ReportContext"], Iterable[dict[str, Any]]]
+    rows: Callable[[ReportContext], Iterable[dict[str, Any]]]
     permissions: tuple[str, ...] = ("reports:read",)
     totals: tuple[str, ...] = field(default_factory=tuple)
     contains_personal_data: bool = False

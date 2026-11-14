@@ -49,16 +49,19 @@ export default function CalendarPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader title="Calendar" description="Day, week and month views across professionals and branches. Click an appointment for details and actions." actions={
         <div className="flex flex-wrap gap-2">
-          <NativeSelect className="w-44" value={branchId} onChange={(e) => setBranchId(e.target.value)}><option value="">All branches</option>{branches.data?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</NativeSelect>
-          <NativeSelect className="w-52" value={professionalId} onChange={(e) => setProfessionalId(e.target.value)}><option value="">All professionals</option>{professionals.data?.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</NativeSelect>
+          <NativeSelect aria-label="Branch" className="w-44" value={branchId} onChange={(e) => setBranchId(e.target.value)}><option value="">All branches</option>{branches.data?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</NativeSelect>
+          <NativeSelect aria-label="Professional" className="w-52" value={professionalId} onChange={(e) => setProfessionalId(e.target.value)}><option value="">All professionals</option>{professionals.data?.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</NativeSelect>
           {hasPermission("appointments:write") ? <Button onClick={() => setCreating({})}><Plus /> New appointment</Button> : null}
         </div>
       } />
-      <div className="rounded-xl border bg-card p-3 text-sm" data-testid="calendar">
+      <div className="app-calendar rounded-xl border bg-card p-3 text-sm" data-testid="calendar">
         <FullCalendar
           plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin, breezyTheme]}
           initialView="timeGridWeek"
           headerToolbar={{ left: "prev,next today", center: "title", right: "timeGridDay,timeGridWeek,dayGridMonth" }}
+          todayText="Today"
+          todayHint="Today"
+          viewHint={(text: string) => `${text} view`}
           slotMinTime="07:00:00"
           slotMaxTime="22:00:00"
           allDaySlot={false}

@@ -18,7 +18,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.enums import AppointmentStatus as A, PaymentStatus
+from app.core.enums import AppointmentStatus as A
+from app.core.enums import PaymentStatus
 from app.core.exceptions import ValidationFailed
 from app.core.time import utcnow
 from app.models import Appointment, Branch, Organization, Payment, PaymentRefund, Professional, ProfessionalBranch, Service
@@ -44,7 +45,7 @@ class Filters:
         self.end = datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=self.tz)
         self.branch_id, self.professional_id, self.service_id = branch_id, professional_id, service_id
 
-    def previous(self, org: Organization) -> "Filters":
+    def previous(self, org: Organization) -> Filters:
         days = (self.to_date - self.from_date).days + 1
         return Filters(org, self.from_date - timedelta(days=days), self.from_date - timedelta(days=1), branch_id=self.branch_id,
                        professional_id=self.professional_id, service_id=self.service_id)

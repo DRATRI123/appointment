@@ -31,7 +31,7 @@ def job(name: str) -> Callable[[JobFunc], JobFunc]:
 def get_job(name: str) -> JobFunc:
     try:
         return _REGISTRY[name]
-    except KeyError as exc:  # pragma: no cover - programming error
+    except KeyError as exc:
         raise LookupError(f"Unknown job: {name}") from exc
 
 

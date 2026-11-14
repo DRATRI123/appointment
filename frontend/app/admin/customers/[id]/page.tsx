@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/booking/appointment-summary";
 import { AppointmentSheet } from "@/components/appointments/appointment-sheet";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { EraseCustomerDialog } from "@/components/customers/erase-dialog";
 import { errorMessage } from "@/lib/errors";
 import { formatDate, formatDateTime, formatTime } from "@/lib/format";
 import { formatPaise } from "@/lib/utils";
@@ -39,7 +40,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   return (
     <div className="mx-auto max-w-6xl">
       <Link href="/admin/customers" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Customers</Link>
-      <PageHeader title={c.full_name} description={[c.customer_code, c.mobile, c.email].filter(Boolean).join(" · ")} actions={<div className="flex gap-2">{c.is_guest ? <Badge variant="outline">guest</Badge> : <Badge variant="success">registered</Badge>}{c.tags.map((t) => <Badge key={t} variant="secondary">{t}</Badge>)}</div>} />
+      <PageHeader title={c.full_name} description={[c.customer_code, c.mobile, c.email].filter(Boolean).join(" · ")} actions={<div className="flex flex-wrap items-center gap-2">{c.is_guest ? <Badge variant="outline">guest</Badge> : <Badge variant="success">registered</Badge>}{c.tags.map((t) => <Badge key={t} variant="secondary">{t}</Badge>)}{hasPermission("customers:erase") ? <EraseCustomerDialog customerId={c.id} name={c.full_name} /> : null}</div>} />
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
         <Stat label="Appointments" value={c.stats?.total_appointments ?? 0} />
         <Stat label="Upcoming" value={c.stats?.upcoming_appointments ?? 0} />

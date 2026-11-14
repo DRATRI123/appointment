@@ -14,7 +14,8 @@ from app.core.time import utcnow
 from app.integrations.http import IntegrationAPIError, check, request
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-TOKEN_URL = "https://oauth2.googleapis.com/token"
+# bandit B105 false positive: public OAuth endpoint URL
+TOKEN_URL = "https://oauth2.googleapis.com/token"  # nosec B105
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 API = "https://www.googleapis.com/calendar/v3"

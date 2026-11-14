@@ -88,7 +88,7 @@ def test_refund_lifecycle_requires_approval_reference_and_confirmation(client, d
         detail = client.get(f"/api/v1/payments/{pid}", headers=acc).json()
         assert detail["status"] == "verified" and detail["refund"]["refunded_paise"] == 20000 and detail["refund"]["refundable_paise"] == 30000
         assert c.get(f"/appointments/{appt['id']}")["paid_amount_paise"] == 30000
-        assert [l["action"] for l in detail["logs"]][-3:] == ["refund_requested", "refund_approved", "refund_processed"]
+        assert [log["action"] for log in detail["logs"]][-3:] == ["refund_requested", "refund_approved", "refund_processed"]
 
         # Proof is private and audit-logged.
         r = client.post(f"/api/v1/refunds/{refund['id']}/proof", files={"file": ("p.png", io.BytesIO(PNG), "image/png")}, headers=acc)

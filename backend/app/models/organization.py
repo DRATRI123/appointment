@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import OrganizationStatus, SubscriptionStatus
@@ -36,13 +36,13 @@ class Organization(PKMixin, PublicIdMixin, TimestampMixin, SoftDeleteMixin, Base
     )
     owner_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
 
-    settings: Mapped[list["OrganizationSetting"]] = relationship(
+    settings: Mapped[list[OrganizationSetting]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
-    domains: Mapped[list["OrganizationDomain"]] = relationship(
+    domains: Mapped[list[OrganizationDomain]] = relationship(
         back_populates="organization", cascade="all, delete-orphan"
     )
-    branches: Mapped[list["Branch"]] = relationship(back_populates="organization")
+    branches: Mapped[list[Branch]] = relationship(back_populates="organization")
 
 
 class OrganizationSetting(PKMixin, TimestampMixin, Base):

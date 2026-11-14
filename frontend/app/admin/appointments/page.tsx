@@ -41,8 +41,8 @@ export default function AppointmentsPage() {
       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" />
         <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" />
-        <NativeSelect value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All statuses</option>{Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</NativeSelect>
-        <NativeSelect value={professionalId} onChange={(e) => setProfessionalId(e.target.value)}><option value="">All professionals</option>{professionals.data?.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</NativeSelect>
+        <NativeSelect aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">All statuses</option>{Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</NativeSelect>
+        <NativeSelect aria-label="Professional" value={professionalId} onChange={(e) => setProfessionalId(e.target.value)}><option value="">All professionals</option>{professionals.data?.map((p) => <option key={p.id} value={p.id}>{p.display_name}</option>)}</NativeSelect>
         <Input placeholder="Search name, mobile, reference" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
       {appts.isLoading ? <Skeleton className="h-64" /> : appts.data?.length === 0 ? (

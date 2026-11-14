@@ -158,7 +158,7 @@ def test_submission_never_confirms_and_only_verifiers_approve(client, db, tmp_pa
         assert r.status_code == 200, r.text
         done = r.json()
         assert done["status"] == "verified" and done["verified_amount_paise"] == 50000
-        assert [l["action"] for l in done["logs"]] == ["created", "requested", "submitted", "review_started", "verified"]
+        assert [log["action"] for log in done["logs"]] == ["created", "requested", "submitted", "review_started", "verified"]
         assert done["logs"][-1]["bank_credit_confirmed"] is True and done["logs"][-1]["actor_name"] == "accountant user"
         status = client.get(f"/api/v1/public/organizations/{c.org['slug']}/appointments/{appt['reference']}", params={"access_token": appt["access_token"]}).json()
         assert status["status"] == "confirmed" and status["paid_amount_paise"] == 50000

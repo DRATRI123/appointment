@@ -46,7 +46,8 @@ class OTPPurpose(StrEnum):
     REGISTER = "register"
     VERIFY_MOBILE = "verify_mobile"
     VERIFY_EMAIL = "verify_email"
-    PASSWORD_RESET = "password_reset"
+    # bandit B105 false positive: enum value, not a secret
+    PASSWORD_RESET = "password_reset"  # nosec B105
     BOOKING = "booking"
 
 

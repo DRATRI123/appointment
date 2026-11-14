@@ -72,6 +72,6 @@ test("admin turns on WhatsApp, a guest opts in, staff see the bell and the outbo
   await expect(page.frameLocator("[data-testid=email-preview]").getByText("Asha Patel").first()).toBeVisible();
   await page.getByTestId("save-template").click();
   await expect(page.getByText("Customised for your clinic")).toBeVisible();
-  await page.getByRole("tab", { name: "SMS" }).click();
+  await page.getByRole("button", { name: "SMS", exact: true }).click();
   await expect(page.getByTestId("text-preview")).toContainText("SMS part");
 });

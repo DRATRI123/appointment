@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import NotificationStatus
@@ -62,7 +62,7 @@ class Notification(PKMixin, PublicIdMixin, TimestampMixin, Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     dedupe_key: Mapped[str | None] = mapped_column(String(128), unique=True)
 
-    logs: Mapped[list["NotificationLog"]] = relationship(
+    logs: Mapped[list[NotificationLog]] = relationship(
         back_populates="notification", cascade="all, delete-orphan"
     )
 
