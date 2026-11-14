@@ -203,3 +203,28 @@ def api_usage(db: DB, _: PlatformAdmin, days: Annotated[int, Query(ge=1, le=90)]
     from app.services.developer_service import platform_usage
 
     return [u.model_dump() for u in platform_usage(db, days)]
+
+
+@router.get("/system-status", summary="Worker, background jobs, backlog, backups and readiness checks")
+def system_status_view(db: DB, _: PlatformAdmin):
+    from sqlalchemy import text as _text
+
+    from app.core.config import get_settings
+    from app.core.observability import migration_head, storage_writable
+    from app.services.ops_service import system_status
+
+    settings = get_settings()
+    status = system_status(db)
+    current = db.execute(_text("SELECT version_num FROM alembic_version")).scalar()
+    head = migration_head()
+    status["checks"] = {
+        "database": {"ok": True, "detail": "sqlite" if settings.is_sqlite else "postgresql"},
+        "migrations": {"ok": current == head, "detail": f"at {current}" + ("" if current == head else f", release needs {head}")},
+        "storage": {"ok": storage_writable(settings), "detail": settings.storage_backend},
+        "error_tracking": {"ok": True, "detail": "Sentry on" if settings.sentry_dsn else "off (set SENTRY_DSN to enable)"},
+        "metrics": {"ok": True, "detail": "on" if settings.metrics_token else "off (set METRICS_TOKEN to enable /metrics)"},
+    }
+    if not status["checks"]["migrations"]["ok"]:
+        status["status"] = "attention"
+        status["attention"].append("Database migrations are pending: run `alembic upgrade head`.")
+    return status

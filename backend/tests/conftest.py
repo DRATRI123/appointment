@@ -34,6 +34,16 @@ def engine(db_path: Path):
         dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
     Base.metadata.create_all(eng)
+    # Equivalent of `alembic stamp head`: the schema above is the current release (test_seed_and_migrations checks the
+    # real migrations separately), so the readiness probe's migration check sees an up-to-date database.
+    from sqlalchemy import text
+
+    from app.core.observability import migration_head
+
+    with eng.begin() as conn:
+        conn.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"))
+        conn.execute(text("DELETE FROM alembic_version"))
+        conn.execute(text("INSERT INTO alembic_version VALUES (:v)"), {"v": migration_head()})
     yield eng
     eng.dispose()
 

@@ -2,7 +2,7 @@ import { api } from "@/lib/api-client";
 import type { Page } from "@/types/api";
 import { apiBase } from "@/lib/env";
 import type { AuditLog, Organization, PlatformStats, User } from "@/types/auth";
-import type { OrgOverview, OrgSummary, Plan, PlatformDashboard, PlatformSettings, PublicPlatform, Subscription } from "@/types/platform";
+import type { OrgOverview, OrgSummary, Plan, PlatformDashboard, PlatformSettings, PublicPlatform, Subscription, SystemStatus } from "@/types/platform";
 
 export const platformService = {
   stats: () => api.get<PlatformStats>("/platform/stats"),
@@ -26,4 +26,5 @@ export const platformService = {
     api.put<OrgSummary>(`/platform/organizations/${id}/subscription`, body),
   exportUrl: (format: "csv" | "xlsx") => `${apiBase}/platform/exports/organizations?format=${format}`,
   publicInfo: () => api.get<PublicPlatform>("/meta/platform"),
+  systemStatus: () => api.get<SystemStatus>("/platform/system-status"),
 };

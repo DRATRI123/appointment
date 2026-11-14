@@ -5,6 +5,7 @@ hard-coded. The app refuses to start outside development with an insecure ``SECR
 """
 from __future__ import annotations
 
+import base64
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
 
     # --- redis / jobs ------------------------------------------------------
     redis_url: str | None = None
-    job_backend: Literal["inline", "arq"] = "inline"
+    job_backend: Literal["inline"] = "inline"  # jobs run in the worker process (python -m app.workers.runner)
 
     # --- storage -----------------------------------------------------------
     storage_backend: Literal["local", "s3"] = "local"
@@ -119,6 +120,11 @@ class Settings(BaseSettings):
     calendar_sync_days_ahead: int = 60
     integration_http_timeout_seconds: int = 20
 
+    # --- monitoring --------------------------------------------------------
+    metrics_token: str | None = None  # /metrics is disabled (404) unless this is set; scrape with "Authorization: Bearer <token>"
+    sentry_dsn: str | None = None  # optional error tracking; personal data is scrubbed before sending
+    sentry_traces_sample_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+
     # --- frontend ----------------------------------------------------------
     frontend_url: str = "http://localhost:3000"
 
@@ -131,14 +137,51 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_security(self) -> Settings:
-        if self.app_env not in {"development", "test"}:
-            if self.secret_key == INSECURE_DEFAULT_SECRET or len(self.secret_key) < 32:
-                raise ValueError(
-                    "SECRET_KEY must be set to a random value of at least 32 characters "
-                    "outside development."
-                )
-            if not self.cookie_secure:
-                raise ValueError("COOKIE_SECURE must be true outside development.")
+        """Refuse to start a staging or production server with settings that are only safe on a laptop.
+
+        Every problem is reported at once so a deployment can be fixed in one pass."""
+        if self.app_env in {"development", "test"}:
+            return self
+        problems: list[str] = []
+        if self.secret_key == INSECURE_DEFAULT_SECRET or len(self.secret_key) < 32:
+            problems.append("SECRET_KEY must be a random value of at least 32 characters")
+        if not self.cookie_secure:
+            problems.append("COOKIE_SECURE must be true (cookies only over HTTPS)")
+        if self.debug:
+            problems.append("DEBUG must be false")
+        if not self.data_encryption_key:
+            problems.append("DATA_ENCRYPTION_KEY must be set (clinical notes are encrypted with it)")
+        else:
+            try:
+                if len(base64.b64decode(self.data_encryption_key, validate=True)) != 32:
+                    raise ValueError
+            except ValueError:
+                problems.append("DATA_ENCRYPTION_KEY must be base64 of exactly 32 random bytes")
+        if len(self.otp_pepper) < 16:
+            problems.append("OTP_PEPPER must be a random value of at least 16 characters")
+        if "*" in self.cors_origins:
+            problems.append("CORS_ORIGINS must list your real web addresses, not *")
+        if "*" in self.forwarded_allow_ips:
+            problems.append("FORWARDED_ALLOW_IPS must list your proxy addresses, not * (clients could fake their IP)")
+        if self.app_env == "production":
+            if self.trusted_hosts == ["*"] or "*" in self.trusted_hosts:
+                problems.append("TRUSTED_HOSTS must list your domain names, not *")
+            if not self.frontend_url.startswith("https://"):
+                problems.append("FRONTEND_URL must start with https://")
+            if any(not o.startswith("https://") for o in self.cors_origins):
+                problems.append("CORS_ORIGINS must all start with https://")
+            if self.otp_provider == "console":
+                problems.append("OTP_PROVIDER cannot be console (login codes would only be written to the server log)")
+            if self.webhook_allow_private_targets:
+                problems.append("WEBHOOK_ALLOW_PRIVATE_TARGETS must be unset or false")
+            if not self.rate_limit_enabled:
+                problems.append("RATE_LIMIT_ENABLED must be true")
+        if self.metrics_token is not None and len(self.metrics_token) < 24:
+            problems.append("METRICS_TOKEN must be at least 24 random characters (or unset to disable /metrics)")
+        if self.storage_backend == "s3" and not self.s3_bucket:
+            problems.append("S3_BUCKET is required when STORAGE_BACKEND=s3")
+        if problems:
+            raise ValueError(f"Unsafe {self.app_env} configuration:\n  - " + "\n  - ".join(problems))
         return self
 
     @property

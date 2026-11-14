@@ -60,7 +60,8 @@ class LocalStorage:
 
     def _path(self, key: str) -> Path:
         path = (self.root / key).resolve()
-        if not str(path).startswith(str(self.root.resolve())):
+        # is_relative_to, not a string prefix: "/data/uploads2" must not count as inside "/data/uploads".
+        if not path.is_relative_to(self.root.resolve()):
             raise ValidationFailed("Invalid storage key.")
         return path
 

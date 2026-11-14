@@ -4,6 +4,7 @@ from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 
 from app.api.deps import DB, AppSettings
+from app.core.observability import migration_head, storage_writable
 from app.schemas.common import HealthStatus
 
 router = APIRouter(tags=["health"])
@@ -18,17 +19,24 @@ def health(settings: AppSettings) -> HealthStatus:
 
 @router.get("/health/ready", response_model=HealthStatus, summary="Readiness probe")
 def readiness(db: DB, settings: AppSettings, response: Response) -> HealthStatus:
+    """Ready to serve traffic: database reachable, schema migrated to this release, upload storage writable.
+
+    Worker, backlog and backup problems do not make the API unready (it can still take bookings); they are reported
+    by /metrics and the platform System status page instead."""
     checks: dict[str, str] = {}
     try:
-        db.execute(text("SELECT 1"))
+        current = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
         checks["database"] = "ok"
-        overall = "ok"
-    except Exception as exc:  # pragma: no cover - only when the database is down
+        head = migration_head()
+        checks["migrations"] = "ok" if current == head else f"pending: database at {current}, release needs {head}"
+    except Exception as exc:  # database down, or never migrated
         checks["database"] = f"error: {exc.__class__.__name__}"
-        overall = "degraded"
+    checks["storage"] = "ok" if storage_writable(settings) else "error: upload folder is not writable"
+    healthy = all(v == "ok" for v in checks.values())
+    if not healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return HealthStatus(
-        status=overall,
+        status="ok" if healthy else "degraded",
         app=settings.app_name,
         version=settings.app_version,
         environment=settings.app_env,

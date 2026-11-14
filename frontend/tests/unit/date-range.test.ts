@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { presetRange } from "@/components/analytics/filters-bar";
-import { addDays, titleCase, toISODate } from "@/lib/format";
+import { addDays, timeAgo, titleCase, toISODate } from "@/lib/format";
 
 const now = new Date(2026, 2, 15, 10, 30); // 15 March 2026, local time
 
@@ -27,5 +27,18 @@ describe("date helpers", () => {
   it("title-cases enum values", () => {
     expect(titleCase("under_review")).toBe("Under Review");
     expect(titleCase("no-show")).toBe("No Show");
+  });
+});
+
+describe("timeAgo", () => {
+  const now = new Date("2026-11-14T12:00:00Z");
+  it("reads naturally at every scale", () => {
+    expect(timeAgo(null, now)).toBe("never");
+    expect(timeAgo("2026-11-14T11:59:30Z", now)).toBe("just now");
+    expect(timeAgo("2026-11-14T11:56:00Z", now)).toBe("4 min ago");
+    expect(timeAgo("2026-11-14T09:00:00Z", now)).toBe("3 h ago");
+    expect(timeAgo("2026-11-13T12:00:00Z", now)).toBe("24 h ago");
+    expect(timeAgo("2026-11-12T12:00:00Z", now)).toBe("2 days ago");
+    expect(timeAgo("2026-11-14T12:05:00Z", now)).toBe("just now"); // clock skew never shows negative times
   });
 });

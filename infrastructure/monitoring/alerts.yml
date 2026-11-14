@@ -1,0 +1,78 @@
+# Alert rules. Each alert says what is wrong in clinic terms and what to do first.
+groups:
+  - name: appointment-platform
+    rules:
+      - alert: ApiDown
+        expr: up{job="appointment-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "The booking API is not responding"
+          action: "Check `docker compose ps` and `docker compose logs backend`; then /api/v1/health/ready."
+
+      - alert: StatusUnreadable
+        expr: app_ops_status_up == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "The API cannot read its own database"
+          action: "Check the database container and disk space."
+
+      - alert: WorkerSilent
+        expr: app_worker_heartbeat_age_seconds > 300 or app_worker_heartbeat_age_seconds < 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "Background worker stopped: reminders, messages, calendar sync and webhooks are not running"
+          action: "`docker compose logs worker`, then `docker compose restart worker`."
+
+      - alert: JobFailing
+        expr: app_job_consecutive_failures >= 3
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Background job {{ $labels.job }} has failed {{ $value }} times in a row"
+          action: "The last error is on Super admin → System status. Usually a provider credential or network problem."
+
+      - alert: MessagesPilingUp
+        expr: app_backlog{kind="notifications_pending"} > 200
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $value }} messages are waiting to be sent"
+          action: "Check the email/SMS/WhatsApp provider status and the dispatch_notifications job."
+
+      - alert: PaymentsWaitingTooLong
+        expr: app_backlog{kind="oldest_unverified_payment_minutes"} > 240
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "A submitted UPI payment has waited over 4 hours for staff verification"
+          action: "Ask the clinic's accountant to open Payments → Verification. Payments are never auto-approved."
+
+      - alert: BackupMissing
+        expr: app_backup_last_ok == 0
+        for: 30m
+        labels: {severity: critical}
+        annotations:
+          summary: "No successful backup in the last 26 hours"
+          action: "`docker compose logs backup`; run `docker compose run --rm backup python -m app.ops.backup create` and fix the error."
+
+      - alert: HighServerErrorRate
+        expr: >
+          sum(rate(app_http_requests_total{status="5xx"}[10m]))
+          / clamp_min(sum(rate(app_http_requests_total[10m])), 0.001) > 0.05
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 5% of API requests are failing"
+          action: "Look at Sentry (if enabled) or `docker compose logs backend` for request ids."
+
+      - alert: SlowBookingPages
+        expr: >
+          histogram_quantile(0.95, sum by (le) (rate(app_http_request_duration_seconds_bucket{route=~"/api/v1/public/.*"}[10m]))) > 2
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Public booking pages take over 2 seconds for 1 in 20 visitors"
+          action: "Check server CPU/memory and database size; see documentation/deployment.md → Performance."

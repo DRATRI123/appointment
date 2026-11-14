@@ -67,3 +67,27 @@ export interface PublicPlatform { platform_name: string; support_email: string; 
 
 export const LIMIT_LABEL = { branches: "Branches", professionals: "Professionals", staff: "Staff", appointments_per_month: "Appointments / month" } as const;
 export const SUBSCRIPTION_STATUS_LABEL: Record<Subscription["status"], string> = { trial: "Trial", active: "Active", past_due: "Past due", cancelled: "Cancelled", expired: "Expired" };
+
+export interface JobState {
+  last_run_at?: string | null;
+  last_success_at?: string | null;
+  last_error?: string | null;
+  last_error_at?: string | null;
+  consecutive_failures?: number;
+  duration_ms?: number;
+  runs?: number;
+  failures?: number;
+}
+
+export interface SystemStatus {
+  status: "ok" | "attention";
+  attention: string[];
+  checked_at: string;
+  version: string;
+  environment: string;
+  worker: { ok: boolean; last_heartbeat_at: string | null; host: string | null; interval_seconds: number | null };
+  jobs: Record<string, JobState>;
+  backup: { ok: boolean; at?: string; file?: string; size_bytes?: number; encrypted?: boolean; offsite?: boolean; error?: string; seconds?: number };
+  backlog: Record<string, number>;
+  checks: Record<string, { ok: boolean; detail: string }>;
+}

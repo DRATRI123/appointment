@@ -16,6 +16,7 @@ from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
+from app.core.observability import MetricsMiddleware, init_sentry, metrics_response
 from app.security.headers import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.security.rate_limit import limiter
 from app.workers import jobs  # noqa: F401  (registers background jobs)
@@ -63,9 +64,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.add_middleware(SlowAPIMiddleware)
         app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(MetricsMiddleware)  # outermost: times everything, including errors
+    init_sentry(settings)
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    # Prometheus scrape endpoint, outside /api so the public web app never proxies it.
+    app.add_route("/metrics", metrics_response, include_in_schema=False)
 
 
     # Public uploads (logos, photos, service images). Private files are never mounted.
