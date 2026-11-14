@@ -31,6 +31,13 @@ environment (already defaulted in the compose file).
 * Centralised logs (JSON), uptime monitoring on `/health/ready`, error tracking.
 * Run workers (`python -m app.workers.runner`) as a separate process.
 
+- Set `FORWARDED_ALLOW_IPS` to the address (or network) of whatever sits in front of the API (the Next.js
+  server, nginx, the load balancer). Only those peers may set `X-Forwarded-For`; otherwise every user would
+  share the proxy's rate-limit bucket, or clients could spoof IPs past API-key allowlists.
+- Leave `WEBHOOK_ALLOW_PRIVATE_TARGETS` unset in production so webhooks cannot reach internal addresses.
+- Run the worker (`python -m app.workers.runner --interval 20`): it delivers notifications and webhooks and
+  syncs calendars.
+
 ## Environment variables
 
 All variables are documented in the root `.env.example` and loaded by `app/core/config.py`.

@@ -83,5 +83,17 @@ def pull_calendar_busy() -> int:
         return pull_all_busy(db)
 
 
+@job("deliver_webhooks")
+def deliver_webhooks() -> dict:
+    from app.services.developer_service import deliver_due, purge_old_deliveries
+
+    with session_scope() as db:
+        counts = deliver_due(db)
+        purge_old_deliveries(db)
+    if any(counts.values()):
+        log.info("jobs.deliver_webhooks", **counts)
+    return counts
+
+
 PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "pull_calendar_busy", "sync_external",
-                 "schedule_reminders", "dispatch_notifications")
+                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks")

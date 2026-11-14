@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     cookie_domain: str | None = None
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
     trusted_hosts: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["*"])
+    # Only these peers may set X-Forwarded-For (the Next.js server / reverse proxy). Anyone else's header is ignored.
+    forwarded_allow_ips: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["127.0.0.1", "::1"])
     rate_limit_enabled: bool = True
     rate_limit_default: str = "120/minute"
     max_upload_size_mb: int = 5
@@ -101,6 +103,11 @@ class Settings(BaseSettings):
     whatsapp_cloud_api_version: str = "v21.0"
     otp_sms_template_id: str | None = None  # DLT / MSG91 flow id for the login-code SMS
     notification_max_attempts: int = 5
+    # Developer API and webhooks
+    api_key_default_rate_limit: int = 120  # requests per minute per key
+    webhook_allow_private_targets: bool | None = None  # None = allowed only in development/test (localhost receivers)
+    webhook_timeout_seconds: int = 10
+    webhook_max_attempts: int = 8
     notification_http_timeout_seconds: int = 15
     google_client_id: str | None = None
     google_client_secret: str | None = None
@@ -114,7 +121,7 @@ class Settings(BaseSettings):
     # --- frontend ----------------------------------------------------------
     frontend_url: str = "http://localhost:3000"
 
-    @field_validator("cors_origins", "trusted_hosts", mode="before")
+    @field_validator("cors_origins", "trusted_hosts", "forwarded_allow_ips", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
         if isinstance(value, str):

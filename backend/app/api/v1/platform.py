@@ -196,3 +196,10 @@ def export_organizations(db: DB, admin: PlatformAdmin, meta: Meta, format: Annot
         return Response(to_csv(report, rows), media_type="text/csv; charset=utf-8", headers=headers)
     return Response(to_xlsx(report, rows, owner="Platform", period=f"as of {stamp}", filters_label="", truncated=False),
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
+
+
+@router.get("/api-usage", summary="API requests, keys and webhook delivery health per organization")
+def api_usage(db: DB, _: PlatformAdmin, days: Annotated[int, Query(ge=1, le=90)] = 30):
+    from app.services.developer_service import platform_usage
+
+    return [u.model_dump() for u in platform_usage(db, days)]

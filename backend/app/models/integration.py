@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import IntegrationStatus, WebhookDeliveryStatus
@@ -151,3 +151,17 @@ class ExternalBusyBlock(PKMixin, TenantMixin, Base):
     end_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
     title: Mapped[str | None] = mapped_column(String(64))  # "Busy" only; event titles are not stored
     fetched_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+
+
+class ApiKeyUsage(PKMixin, TenantMixin, Base):
+    """Requests per API key per day (UTC), for the developer portal and platform usage pages."""
+
+    __tablename__ = "api_key_usage"
+    __table_args__ = (UniqueConstraint("api_key_id", "day"),)
+
+    api_key_id: Mapped[int] = mapped_column(ForeignKey("api_keys.id", ondelete="CASCADE"), nullable=False, index=True)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    requests: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    client_errors: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    server_errors: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    rate_limited: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

@@ -236,6 +236,9 @@ class RefundService:
         self._sync_payment(payment, "refund_processed", reason=payload.notes,
                            details={"refund": refund.reference, "amount_paise": refund.amount_paise, "refund_reference": refund.refund_reference})
         self._notifications().emit("refund.processed", appointment=appt, payment=payment, refund=refund)
+        from app.webhooks.hooks import on_refund
+
+        on_refund(self.db, self.org, refund)
         return refund
 
     def attach_proof(self, refund: PaymentRefund, data: bytes) -> PaymentRefund:

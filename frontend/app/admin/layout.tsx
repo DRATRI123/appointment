@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  Code2,
   CreditCard,
   FileSpreadsheet,
   Home,
@@ -66,6 +67,7 @@ const groups = [
     items: [
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
       { href: "/admin/integrations", label: "Integrations", icon: Plug },
+      { href: "/admin/developers", label: "Developers", icon: Code2 },
       { href: "/admin/reports", label: "Reports", icon: BarChart3 },
       { href: "/admin/staff", label: "Staff", icon: UsersRound },
       { href: "/admin/roles", label: "Roles & permissions", icon: KeyRound },

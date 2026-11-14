@@ -5,16 +5,18 @@ from dataclasses import dataclass, field
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
 from app.core.enums import OrganizationStatus, UserStatus
-from app.core.exceptions import AuthenticationError, NotFoundError, PermissionDenied, ValidationFailed
+from app.core.exceptions import AuthenticationError, NotFoundError, PermissionDenied, RateLimited, ValidationFailed
 from app.core.time import utcnow
 from app.models import Organization, OrganizationMembership, User
 from app.repositories.organizations import MembershipRepository, OrganizationRepository
 from app.repositories.users import SessionRepository, UserRepository
+from app.security.client_ip import client_ip
 from app.security.permissions import PERMISSIONS
 from app.security.tokens import decode_access_token
 from app.services.audit_service import RequestMeta, record_audit
@@ -31,8 +33,7 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def get_request_meta(request: Request) -> RequestMeta:
-    forwarded = request.headers.get("x-forwarded-for")
-    ip = forwarded.split(",")[0].strip() if forwarded else (request.client.host if request.client else None)
+    ip = client_ip(request)
     return RequestMeta(
         ip_address=ip,
         user_agent=request.headers.get("user-agent"),
@@ -63,8 +64,70 @@ def _enforce_csrf(request: Request) -> None:
         raise PermissionDenied("CSRF token missing or invalid.", code="csrf_failed")
 
 
-def get_optional_user(request: Request, db: DB) -> User | None:
+def _authenticate_api_key(request: Request, db: Session, raw: str) -> User:
+    """API key principal: the key's creator, limited later (resolve_tenant) to the key's organization and scopes."""
+    from app.models import APIKey
+    from app.security import api_keys as ak
+
+    settings = get_settings()
+    key = db.scalar(select(APIKey).where(APIKey.key_hash == ak.hash_key(raw)))
+    now = utcnow()
+    if key is None or not key.is_active or key.revoked_at is not None or (key.expires_at is not None and key.expires_at <= now):
+        raise AuthenticationError("Invalid, expired or revoked API key.", code="invalid_api_key")
+    request.state.api_key = key
+    request.state.api_key_savepoint = db.begin_nested()
+    if not ak.path_allowed(request.url.path, settings.api_v1_prefix):
+        raise PermissionDenied("API keys cannot be used on this endpoint.", code="api_key_not_allowed")
+    if not ak.ip_allowed(get_request_meta(request).ip_address, key.allowed_ips):
+        raise PermissionDenied("This API key is not allowed from your IP address.", code="ip_not_allowed")
+    configured = (key.rate_limit or "").split("/")[0]
+    limit = int(configured) if configured.isdigit() else settings.api_key_default_rate_limit
+    allowed, retry_after = ak.limiter.hit(key.id, limit)
+    if not allowed:
+        request.state.api_key_rate_limited = True
+        raise RateLimited(f"Rate limit of {limit} requests per minute exceeded for this API key.", headers={"Retry-After": str(retry_after)})
+    user = db.get(User, key.created_by_user_id) if key.created_by_user_id else None
+    if user is None or user.deleted_at is not None or user.status in {UserStatus.SUSPENDED, UserStatus.INACTIVE}:
+        raise AuthenticationError("The person who created this API key no longer has access.", code="api_key_owner_removed")
+    if key.last_used_at is None or (now - key.last_used_at).total_seconds() > 60:
+        key.last_used_at = now
+    request.state.user = user
+    return user
+
+
+def track_api_key_usage(request: Request, db: DB):
+    """Counts API-key requests in the request's own session (SQLite allows one writer, so a second session would wait
+    on this one). Failed calls are counted too: the request's work, which runs inside a SAVEPOINT opened when the key
+    was recognised, is rolled back, and only the usage row is committed."""
+    from app.services.developer_service import record_usage
+
+    try:
+        yield
+    except Exception as exc:
+        key = getattr(request.state, "api_key", None)
+        if key is not None:
+            savepoint = getattr(request.state, "api_key_savepoint", None)
+            if savepoint is not None and savepoint.is_active:
+                savepoint.rollback()  # undo only this request's work
+            try:
+                record_usage(db, key.id, key.organization_id, int(getattr(exc, "status_code", 500)), bool(getattr(request.state, "api_key_rate_limited", False)))
+                db.commit()
+            except Exception:  # noqa: BLE001 - never mask the original error
+                db.rollback()
+        raise
+    else:
+        key = getattr(request.state, "api_key", None)
+        if key is not None:
+            record_usage(db, key.id, key.organization_id, 200, False)
+
+
+def get_optional_user(request: Request, db: DB, _usage: Annotated[None, Depends(track_api_key_usage)] = None) -> User | None:
+    from app.security.api_keys import looks_like_key
+
     token, source = _extract_token(request)
+    header_key = request.headers.get("x-api-key")
+    if header_key or (source == "header" and looks_like_key(token)):
+        return _authenticate_api_key(request, db, (header_key or token or "").strip())
     if token is None:
         return None
     payload = decode_access_token(token)
@@ -137,6 +200,9 @@ def resolve_tenant(
 ) -> TenantContext:
     orgs = OrganizationRepository(db)
     memberships = MembershipRepository(db)
+    api_key = getattr(request.state, "api_key", None)
+    if api_key is not None:
+        return _resolve_api_key_tenant(request, db, user, api_key, organization_public_id)
     org: Organization | None = None
     if organization_public_id:
         org = orgs.get_by_public_id(organization_public_id)
@@ -168,6 +234,26 @@ def resolve_tenant(
     ctx = TenantContext(
         user=user, organization=org, membership=membership, permissions=permissions, is_platform_admin=user.is_platform_admin
     )
+    request.state.tenant = ctx
+    return ctx
+
+
+def _resolve_api_key_tenant(request: Request, db: Session, user: User, key, organization_public_id: str | None) -> TenantContext:
+    from app.security.api_keys import API_SCOPES
+
+    org = db.get(Organization, key.organization_id)
+    if org is None or org.deleted_at is not None:
+        raise NotFoundError("Organization not found.")
+    if organization_public_id and organization_public_id != org.public_id:
+        raise PermissionDenied("This API key belongs to another organization.", code="wrong_organization")
+    if org.status != OrganizationStatus.ACTIVE:
+        raise PermissionDenied("This organization is not active.", code="organization_inactive")
+    membership = MembershipRepository(db).get_for_user_in_org(user.id, org.id)
+    if membership is None:  # platform admins get no special powers through a key
+        raise AuthenticationError("The person who created this API key no longer has access.", code="api_key_owner_removed")
+    role_permissions = {p.code for p in membership.role.permissions}
+    permissions = set(key.scopes or []) & role_permissions & set(API_SCOPES)
+    ctx = TenantContext(user=user, organization=org, membership=membership, permissions=permissions, is_platform_admin=False)
     request.state.tenant = ctx
     return ctx
 

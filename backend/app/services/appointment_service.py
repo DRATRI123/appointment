@@ -430,6 +430,9 @@ class AppointmentService:
         except Exception:  # noqa: BLE001 - calendar sync must never block a booking
             log.exception("integration.mark_failed", appointment=appt.reference)
         NotificationService(self.db, self.org, self.actor, self.meta).on_appointment_status(appt, from_status, to_status, reason=reason, extra=extra)
+        from app.webhooks.hooks import on_appointment
+
+        on_appointment(self.db, self.org, appt, from_status, to_status, extra)
 
     # -------------------------------------------------------------- lists
     def list(self, *, from_at: datetime | None, to_at: datetime | None, professional_id: str | None, branch_id: str | None, status: str | None, customer_id: str | None, search: str | None, restrict_professional_id: int | None = None) -> list[Appointment]:

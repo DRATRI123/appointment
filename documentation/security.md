@@ -125,6 +125,28 @@ double-submit, session revocation check, tenant resolution, permission guards),
   are written as strings so they never become formulas.
 * Professionals without `reports:read` only ever see their own numbers; the server forces the filter.
 
+## Developer API keys and webhooks
+
+* API keys (`ak_live_<id>_<secret>`) are shown once; only an HMAC-SHA256 (peppered with `SECRET_KEY`) is
+  stored. A key acts as its creator, in one organization, with permissions = key scopes ∩ the creator's
+  current role ∩ the API scope catalogue. Removing or demoting the creator immediately narrows or stops the key.
+* The scope catalogue never includes recording or verifying payments, refunds, roles, staff, settings,
+  integrations or key management. Keys only reach an allowlist of path prefixes (appointments,
+  availability, catalogue, customers, payments read, booking forms, reports, analytics); everything else,
+  including user, platform, organization-admin and developer routes, returns 403 `api_key_not_allowed`.
+  Platform admins get no special powers through a key.
+* Optional expiry, IP/CIDR allowlist and per-key rate limit (429 with `Retry-After`); daily usage counts
+  include failed and rate-limited calls. Creation and revocation are audit-logged.
+* `X-Forwarded-For` is honoured only from `FORWARDED_ALLOW_IPS`, so callers cannot spoof their IP to
+  bypass allowlists, per-IP rate limits or audit records. The general rate limiter keys on the same address.
+* Webhooks: per-endpoint secret (encrypted at rest, shown once, rotatable); every delivery is signed
+  `X-Webhook-Signature: t=…,v1=HMAC-SHA256("t.body")` with an event id for idempotency. URLs must be https
+  and resolve only to public addresses (checked when saved and again before each delivery, so DNS changes
+  cannot reach internal services or cloud metadata). Redirects are not followed; responses are truncated.
+* Events are written to an outbox in the business transaction (no event for rolled-back work), retried with
+  backoff for about two days, and an endpoint is switched off after 50 consecutive failures. Payloads carry
+  public ids only and never clinical notes, form answers, documents or payment screenshots.
+
 ## Healthcare privacy
 
 * Customer notes and documents are restricted to clinical roles (`customers:clinical_read`).

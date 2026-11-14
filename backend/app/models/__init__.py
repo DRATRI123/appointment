@@ -24,6 +24,7 @@ from app.models.coupon import Coupon
 from app.models.customer import Customer, CustomerDependent, CustomerDocument, CustomerNote
 from app.models.integration import (
     APIKey,
+    ApiKeyUsage,
     AppointmentExternalEvent,
     ExternalBusyBlock,
     Integration,
@@ -72,7 +73,7 @@ __all__ = [
     "UPIAccount", "Payment", "PaymentSubmission", "PaymentVerificationLog", "PaymentRefund",
     "BankStatementImport", "BankTransaction",
     "NotificationTemplate", "Notification", "NotificationLog",
-    "Integration", "APIKey", "WebhookEndpoint", "WebhookEvent", "IntegrationLog", "AppointmentExternalEvent", "ExternalBusyBlock",
+    "Integration", "APIKey", "WebhookEndpoint", "WebhookEvent", "IntegrationLog", "AppointmentExternalEvent", "ExternalBusyBlock", "ApiKeyUsage",
     "AuditLog", "SystemSetting",
     "Coupon",
 ]

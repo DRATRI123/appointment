@@ -438,3 +438,35 @@ minus refunds sent; booked value = total of non-cancelled appointments; no-show 
 Limits: adding a branch, professional or staff member beyond the plan returns 409 `plan_limit`. With
 sign-ups closed, `POST /organizations` returns 403 `signup_closed` for everyone except platform admins.
 
+## Phase 11: developer API and webhooks
+
+### Authenticating with an API key
+
+`Authorization: Bearer ak_live_…` (or `X-API-Key: ak_live_…`). No organization header is needed; a different
+`X-Organization-Id` returns 403 `wrong_organization`. Errors: 401 `invalid_api_key` (unknown, expired,
+revoked), 401 `api_key_owner_removed`, 403 `api_key_not_allowed` (path outside the API), 403 `ip_not_allowed`,
+403 `permission_denied` (scope), 429 `rate_limited` with `Retry-After`.
+
+Scopes: `appointments:read`, `appointments:write`, `appointments:checkin`, `customers:read`, `customers:write`,
+`services:read`, `branches:read`, `professionals:read`, `payments:read`, `booking_forms:read`, `reports:read`.
+
+### Developer portal (`api_keys:manage`, never reachable with an API key)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/developers/scopes` | Catalogue, with whether you hold each permission |
+| GET/POST | `/developers/api-keys` | POST `{name, scopes, expires_at?, allowed_ips?, rate_limit_per_minute?}` → includes `key` once; scopes beyond your own permissions 403 `scope_exceeds_yours` |
+| GET | `/developers/api-keys/{id}/usage?days` | Daily requests, client errors, server errors, rate-limited |
+| DELETE | `/developers/api-keys/{id}` | Revoke (immediate) |
+| GET/POST | `/developers/webhooks` | POST `{name, url, events: [...] or ["*"]}` → includes `secret` once |
+| PATCH/DELETE | `/developers/webhooks/{id}` | Change URL/events, pause/resume (resume clears the failure count), delete |
+| POST | `/developers/webhooks/{id}/rotate-secret` · `/test` | New secret (returned once) · signed `ping` sent now |
+| GET | `/developers/webhooks/{id}/deliveries?status` | Delivery log |
+| GET/POST | `/developers/deliveries/{id}` · `/redeliver` | Payload, response, send again |
+| GET | `/developers/events` | Events with example payloads |
+| GET | `/platform/api-usage?days` | Super admin: per-organization requests, keys and delivery health |
+
+Webhook request: `POST` JSON `{id, type, api_version, created_at, organization: {id, slug}, data}` with headers
+`X-Webhook-Id`, `X-Webhook-Event`, `X-Webhook-Timestamp`, `X-Webhook-Signature`. Reply 2xx within 10 s.
+Retries after 1 m, 5 m, 30 m, 2 h, 6 h, 12 h, 24 h (8 attempts).
+

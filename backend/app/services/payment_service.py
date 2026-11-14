@@ -239,6 +239,9 @@ class PaymentService:
         self._set_status(payment, PaymentStatus.SUBMITTED, "submitted", details={"utr": utr_n, "screenshot": stored is not None, "by": "staff" if staff else "customer"})
         if appt is not None and appt.status == AppointmentStatus.PENDING_PAYMENT:
             self._appointments().move(appt, AppointmentStatus.PENDING_VERIFICATION, reason="payment submitted for verification")
+        from app.webhooks.hooks import on_payment
+
+        on_payment(self.db, self.org, payment, "payment.submitted")
         notes = self._notifications()
         if not staff:
             notes.emit("payment.submitted", appointment=appt, payment=payment)
@@ -270,6 +273,9 @@ class PaymentService:
         payment.verified_by_user_id = self.actor.id if self.actor else None
         self._set_status(payment, PaymentStatus.VERIFIED, action, reason=reason, bank_credit_confirmed=bank_credit_confirmed,
                          details={"verified_amount_paise": amount, **(extra or {})})
+        from app.webhooks.hooks import on_payment
+
+        on_payment(self.db, self.org, payment, "payment.verified")
         appt = self.db.get(Appointment, payment.appointment_id) if payment.appointment_id else None
         if appt is None:
             return
@@ -297,7 +303,9 @@ class PaymentService:
             appt.payment_due_at = payment.expires_at
             self._appointments().move(appt, AppointmentStatus.PENDING_PAYMENT, reason=f"payment rejected: {req.reason}")
         from app.services.notification_service import fmt_date, fmt_time
+        from app.webhooks.hooks import on_payment
 
+        on_payment(self.db, self.org, payment, "payment.rejected")
         tz = appt.timezone if appt is not None else None
         self._notifications().emit("payment.rejected", appointment=appt, payment=payment, extra={
             "reason": req.reason.strip(), "payment_deadline": f"{fmt_date(payment.expires_at, tz)}, {fmt_time(payment.expires_at, tz)}"})

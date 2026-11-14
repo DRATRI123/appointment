@@ -6,6 +6,7 @@ from app.api.v1 import (
     booking_forms,
     catalog,
     customers,
+    developers,
     health,
     integrations,
     meta,
@@ -47,6 +48,7 @@ api_router.include_router(integrations.router)
 api_router.include_router(integrations.appointments_router)
 api_router.include_router(integrations.feeds_router)
 api_router.include_router(reports.router)
+api_router.include_router(developers.router)
 api_router.include_router(uploads.router)
 api_router.include_router(public.router)
 api_router.include_router(platform.router)

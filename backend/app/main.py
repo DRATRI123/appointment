@@ -31,6 +31,9 @@ async def lifespan(app: FastAPI):
     log.info("app.stop")
 
 
+log = get_logger("app")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(
@@ -51,7 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token", "X-Organization-Id"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token", "X-Organization-Id", "X-API-Key"],
         expose_headers=["X-Request-ID"],
     )
     if settings.trusted_hosts and settings.trusted_hosts != ["*"]:
@@ -63,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+
 
     # Public uploads (logos, photos, service images). Private files are never mounted.
     public_dir = Path(settings.storage_local_path) / "public"

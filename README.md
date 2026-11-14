@@ -37,7 +37,8 @@ appointment is confirmed.
 | 8 | Notifications: email (SMTP), SMS (MSG91, Twilio), WhatsApp (Meta Cloud API, Twilio), in-app bell; outbox with retries and backoff; reminders; editable templates with live preview; per-event channel settings; customer message preferences and WhatsApp opt-in; OTP delivery | ✅ done |
 | 9 | Google Calendar per professional (events, Google Meet links, busy time blocks slots), Zoom meetings (Server-to-Server OAuth), manual video links, background sync with retries, .ics downloads and private calendar feeds, Join / Add-to-calendar for customers | ✅ done |
 | 10 | Admin dashboard (KPIs vs previous period, daily trends, utilization, busiest times, needs-attention list), professional stats, 10 reports with CSV/Excel export (audit-logged), platform dashboard, subscription plans with enforced limits, organization detail, platform settings and announcement | ✅ done |
-| 11–14 | See roadmap in `documentation/architecture.md` | planned |
+| 11 | Developer portal: scoped API keys (hashed, IP allowlist, per-key rate limit, usage), signed webhooks with outbox delivery, retries, SSRF protection and delivery logs, API docs; platform API usage; trusted-proxy client IPs | ✅ done |
+| 12–14 | See roadmap in `documentation/architecture.md` | planned |
 
 ## Repository layout
 
@@ -164,7 +165,7 @@ One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perfo
 ## Background jobs
 
 The worker expires holds and unpaid bookings, schedules reminders, **delivers notifications** (email, SMS,
-WhatsApp) and **syncs calendars and video meetings**. Run it alongside the API; a short interval keeps messages prompt:
+WhatsApp) and **syncs calendars and video meetings** and **delivers webhooks**. Run it alongside the API; a short interval keeps messages prompt:
 
 ```powershell
 cd backend

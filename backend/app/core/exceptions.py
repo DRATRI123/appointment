@@ -17,8 +17,9 @@ class AppError(Exception):
     status_code: int = status.HTTP_400_BAD_REQUEST
     code: str = "bad_request"
 
-    def __init__(self, detail: str | None = None, *, code: str | None = None, errors: Any = None):
+    def __init__(self, detail: str | None = None, *, code: str | None = None, errors: Any = None, headers: dict[str, str] | None = None):
         self.detail = detail or self.__class__.__name__
+        self.headers = headers
         if code:
             self.code = code
         self.errors = errors
@@ -80,6 +81,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=_payload(exc.detail, exc.code, exc.errors, request),
+            headers=getattr(exc, "headers", None),
         )
 
     @app.exception_handler(RequestValidationError)
