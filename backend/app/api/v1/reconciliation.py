@@ -43,8 +43,8 @@ def presets(ctx: Manage):
 
 
 @router.post("/preview", response_model=StatementPreview, summary="First rows of a statement, to set up a column mapping")
-async def preview_statement(db: DB, ctx: Manage, meta: Meta, file: UploadFile = File(...), delimiter: Annotated[str, Form(max_length=1)] = ","):
-    return _svc(db, ctx, meta).preview(await file.read(), delimiter or ",")
+def preview_statement(db: DB, ctx: Manage, meta: Meta, file: UploadFile = File(...), delimiter: Annotated[str, Form(max_length=1)] = ","):
+    return _svc(db, ctx, meta).preview(file.file.read(), delimiter or ",")
 
 
 @router.get("/imports", response_model=list[ImportRead])
@@ -54,7 +54,7 @@ def list_imports(db: DB, ctx: Manage, meta: Meta):
 
 
 @router.post("/imports", response_model=ImportRead, status_code=status.HTTP_201_CREATED, summary="Import a bank statement CSV and suggest matches")
-async def import_statement(
+def import_statement(
     db: DB, ctx: Manage, meta: Meta, file: UploadFile = File(...),
     parser_code: Annotated[str, Form(max_length=48)] = "generic",
     mapping: Annotated[str | None, Form(max_length=4000, description="JSON column mapping overriding the preset")] = None,
@@ -67,7 +67,7 @@ async def import_statement(
     if mapping_dict is not None and not isinstance(mapping_dict, dict):
         raise ValidationFailed("Column mapping must be an object.", code="invalid_mapping")
     svc = _svc(db, ctx, meta)
-    imp = svc.import_statement(content=await file.read(), file_name=file.filename or "statement.csv", parser_code=parser_code, mapping=mapping_dict, upi_account_id=upi_account_id or None)
+    imp = svc.import_statement(content=file.file.read(), file_name=file.filename or "statement.csv", parser_code=parser_code, mapping=mapping_dict, upi_account_id=upi_account_id or None)
     return svc.import_read(imp)
 
 

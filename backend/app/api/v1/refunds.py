@@ -96,9 +96,9 @@ def process_refund(refund_id: str, payload: RefundProcess, db: DB, ctx: Approve,
 
 
 @router.post("/{refund_id}/proof", response_model=RefundRead, summary="Attach the refund screenshot/receipt (private)")
-async def upload_proof(refund_id: str, db: DB, ctx: Approve, meta: Meta, file: UploadFile = File(...)):
+def upload_proof(refund_id: str, db: DB, ctx: Approve, meta: Meta, file: UploadFile = File(...)):
     svc = RefundService(db, ctx.organization, ctx.user, meta)
-    data = await file.read()
+    data = file.file.read()
     return svc.to_read(svc.attach_proof(svc.get(refund_id), data))
 
 

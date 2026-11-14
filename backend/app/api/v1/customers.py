@@ -159,13 +159,13 @@ def list_documents(customer_id: str, db: DB, ctx: ClinicalRead, meta: Meta):
 
 
 @router.post("/{customer_id}/documents", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
-async def upload_document(
+def upload_document(
     customer_id: str, db: DB, ctx: ClinicalWrite, meta: Meta, settings: AppSettings,
     file: UploadFile = File(...), title: str = Form(""), document_type: str = Form("other"), appointment_id: str | None = Form(None),
 ):
     svc = _svc(db, ctx, meta)
     c = svc.get(customer_id)
-    data = await file.read()
+    data = file.file.read()
     row = svc.add_document(c, data=data, title=title or (file.filename or "Document"), document_type=document_type[:32], appointment_id=appointment_id or None, max_mb=settings.max_upload_size_mb)
     return svc.document_read(row)
 

@@ -17,14 +17,14 @@ WRITE_PERMISSIONS = ("organization:write", "branches:write", "professionals:writ
 
 
 @router.post("/images", response_model=UploadResponse, summary="Upload a public image (PNG/JPEG/WebP, max 5 MB)")
-async def upload_image(
+def upload_image(
     settings: AppSettings,
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
     file: UploadFile = File(...),
 ) -> UploadResponse:
     if not any(ctx.has(p) for p in WRITE_PERMISSIONS):
         raise PermissionDenied("You cannot upload files for this organization.", code="permission_denied")
-    data = await file.read()
+    data = file.file.read()
     mime = validate_upload(data, allowed=IMAGE_TYPES, max_mb=settings.max_upload_size_mb)
     stored = get_storage().save(scope=f"org/{ctx.organization.public_id}", visibility="public", data=data, mime_type=mime)
     return UploadResponse(url=stored.url or "", key=stored.key, mime_type=stored.mime_type, size_bytes=stored.size_bytes)
