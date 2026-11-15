@@ -20,6 +20,9 @@ export interface NavGroup {
 
 export function SidebarNav({ groups }: { groups: NavGroup[] }) {
   const pathname = usePathname();
+  const matches = (href: string) => pathname === href || (href.split("/").length > 2 && pathname.startsWith(href + "/"));
+  // Only the most specific matching item is active (e.g. "Developer docs" rather than also "Developers").
+  const best = groups.flatMap((g) => g.items).filter((i) => matches(i.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
   return (
     <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-6">
       {groups.map((group, index) => (
@@ -28,7 +31,7 @@ export function SidebarNav({ groups }: { groups: NavGroup[] }) {
             <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{group.title}</p>
           ) : null}
           {group.items.map((item) => {
-            const active = pathname === item.href || (item.href.split("/").length > 2 && pathname.startsWith(item.href + "/"));
+            const active = item.href === best;
             return (
               <Link
                 key={item.href}

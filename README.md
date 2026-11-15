@@ -21,6 +21,7 @@ appointment is confirmed.
 * [Database design and ER diagram](documentation/database.md)
 * [Security architecture](documentation/security.md)
 * [API overview](documentation/api.md)
+* [Developer guide: API keys, webhooks, code samples, go-live checklist](documentation/developer-guide.md) (also in the admin under **Developer docs**)
 * [Public booking API with example requests](documentation/public-booking-api.md)
 * [Shopify and website integration (no app needed)](documentation/shopify-integration.md)
 * [Clinic website, website builder, OTP & verification, analytics](documentation/website-and-verification.md)

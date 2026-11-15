@@ -37,14 +37,16 @@ Base URL: `/api/v1`. Interactive docs: `/docs` (Swagger UI) and `/redoc`; OpenAP
 | `/customers` (+ dependents, notes, documents, export), `/customer/organizations/{id}/…` | 5 | implemented |
 | `/booking-forms` (+ templates, publish, assign, responses), `/public/…/booking-form` | 5 | implemented |
 | `/upi-accounts`, `/payments`, `/admin/payments`, `/coupons`, `/customer/payments` | 6 | implemented |
-| `/refunds`, `/bank-statements` | 7 | planned |
-| `/notifications` | 8 | planned |
-| `/integrations` | 9, 11 | planned |
-| `/webhooks` | 11 | planned |
-| `/reports`, `/admin` | 10 | planned |
-| `/platform` | 10 | planned |
+| `/refunds`, `/bank-statements` | 7 | implemented |
+| `/notifications` | 8 | implemented |
+| `/integrations` | 9, 11 | implemented |
+| `/developers` (API keys, webhooks) | 11 | implemented |
+| `/reports`, `/analytics`, `/admin` | 10 | implemented |
+| `/platform` (plans, subscriptions, API usage) | 10 | implemented |
 
-This file is updated at the end of every phase with the concrete endpoints delivered.
+This file is updated at the end of every phase with the concrete endpoints delivered. For integration
+guides (quickstart, scopes, webhooks, code samples) see [`developer-guide.md`](developer-guide.md) and the in-app
+**Admin → Developer docs**.
 
 ## Phase 2 endpoints
 

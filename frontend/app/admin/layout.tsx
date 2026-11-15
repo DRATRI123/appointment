@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  BookOpen,
   Bell,
   Briefcase,
   Building2,
@@ -73,6 +74,7 @@ const groups = [
       { href: "/admin/notifications", label: "Notifications", icon: Bell },
       { href: "/admin/integrations", label: "Integrations", icon: Plug },
       { href: "/admin/developers", label: "Developers", icon: Code2 },
+      { href: "/admin/developers/docs", label: "Developer docs", icon: BookOpen },
       { href: "/admin/reports", label: "Reports", icon: BarChart3 },
       { href: "/admin/website-analytics", label: "Website analytics", icon: LineChart },
       { href: "/admin/staff", label: "Staff", icon: UsersRound },

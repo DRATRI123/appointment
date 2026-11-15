@@ -69,3 +69,55 @@ test("API key created in the portal works until revoked; webhook test ping arriv
   await expect(page.getByTestId("delivery-detail")).toContainText('"type": "ping"');
   server.close();
 });
+
+test("developer docs: every guide renders, search and language choice work, pages pass accessibility checks", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { audit, watch } = await import("./audit");
+  const problems = await watch(page);
+  await page.goto("/register");
+  await page.getByLabel("Full name").fill("Docs Reader");
+  await page.getByLabel("Email").fill(`docs-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`);
+  await page.getByLabel("Password").fill("Str0ngPass123");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL(/\/onboarding/);
+  await page.getByLabel("Organization name").fill(`Docs Clinic ${Date.now()}`);
+  await page.getByRole("button", { name: "Create organization" }).click();
+  await page.waitForURL(/\/admin$/);
+
+  // Reachable from the menu and from the Developers screen.
+  await page.getByRole("link", { name: "Developer docs" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Introduction" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Developer docs" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: "Developers", exact: true })).not.toHaveAttribute("aria-current", "page");
+
+  const nav = page.getByRole("navigation", { name: "Developer docs" });
+  const titles = await nav.getByRole("link").allTextContents();
+  expect(titles.length).toBeGreaterThanOrEqual(19);
+  for (const title of titles) {
+    await nav.getByRole("link", { name: title, exact: true }).click();
+    await expect(page.locator("article h1")).toHaveText(title);
+  }
+
+  // Search narrows the menu.
+  await page.getByTestId("docs-search").fill("hmac");
+  await expect(nav.getByRole("link")).toHaveText(["Webhooks"]);
+  await page.getByTestId("docs-search").fill("");
+
+  // Examples use this site's address and the chosen language everywhere on the page.
+  await page.goto("/admin/developers/docs/quickstart");
+  const blocks = page.getByTestId("code-tabs");
+  await expect(blocks.first().locator("pre")).toContainText(`${new URL(page.url()).origin}/api/v1/branches`);
+  await blocks.first().getByRole("tab", { name: "Python" }).click();
+  await expect(blocks.last().getByRole("tab", { name: "Python" })).toHaveAttribute("aria-selected", "true");
+  await expect(blocks.last().locator("pre")).toContainText("requests.post(");
+  await page.reload();
+  await expect(blocks.first().getByRole("tab", { name: "Python" })).toHaveAttribute("aria-selected", "true");
+
+  await page.goto("/admin/developers");
+  await page.getByRole("tab", { name: "Docs" }).click();
+  await page.getByTestId("docs-index").getByRole("link", { name: /Event reference/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Event reference" })).toBeVisible();
+  await expect(page.getByText("payment.verified").first()).toBeVisible();
+
+  for (const path of ["/admin/developers/docs/quickstart", "/admin/developers/docs/webhooks", "/admin/developers/docs/appointments"]) await audit(page, path, problems);
+});
