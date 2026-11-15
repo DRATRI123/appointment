@@ -1,0 +1,161 @@
+# Project-specific Semgrep rules: the mistakes that would hurt THIS app most (patient data, payments, tenants).
+# Run:  semgrep scan --config .semgrep/rules.yml --metrics=off backend/app frontend
+# CI also runs the public OWASP/Python/TypeScript/secrets rulesets (.github/workflows/security.yml).
+rules:
+  # --- SQL ---------------------------------------------------------------------------------------------------------
+  - id: sql-built-with-string-formatting
+    languages: [python]
+    severity: ERROR
+    message: "SQL text built with f-strings/format/% can be injected. Use SQLAlchemy expressions or bound parameters."
+    patterns:
+      - pattern-either:
+          - pattern: 'sqlalchemy.text(f"...")'
+          - pattern: 'text(f"...")'
+          - pattern: 'text("..." % $X)'
+          - pattern: 'text("...".format(...))'
+          - pattern: '$CONN.exec_driver_sql(f"...")'
+          - pattern: '$CUR.execute(f"...", ...)'
+          - pattern: '$CUR.execute("..." % $X, ...)'
+          - pattern: '$CUR.execute("...".format(...), ...)'
+
+  # --- Secrets and tokens -----------------------------------------------------------------------------------------
+  - id: jwt-signature-not-verified
+    languages: [python]
+    severity: ERROR
+    message: "A token decoded without verifying its signature or expiry can be forged."
+    pattern-either:
+      - pattern: 'jwt.decode(..., options={..., "verify_signature": False, ...}, ...)'
+      - pattern: 'jwt.decode(..., options={..., "verify_exp": False, ...}, ...)'
+      - pattern: 'jwt.decode(..., algorithms=None, ...)'
+
+  - id: tls-verification-disabled
+    languages: [python]
+    severity: ERROR
+    message: "Turning off certificate checks lets anyone in the middle read payment and patient data."
+    pattern-either:
+      - pattern: '$HTTP.$METHOD(..., verify=False, ...)'
+      - pattern: 'httpx.Client(..., verify=False, ...)'
+      - pattern: 'httpx.AsyncClient(..., verify=False, ...)'
+      - pattern: 'ssl._create_unverified_context(...)'
+
+  - id: secret-compared-with-equals
+    languages: [python]
+    severity: WARNING
+    message: "Compare secrets, signatures and codes with hmac.compare_digest (constant time), not ==."
+    patterns:
+      - pattern-either:
+          - pattern: '$A == $B'
+          - pattern: '$A != $B'
+      - metavariable-regex:
+          metavariable: $A
+          regex: (?i).*(signature|token_hash|secret|digest|otp_hash|code_hash|api_key_hash).*
+      - pattern-not-inside: |
+          def $T(...):
+              ...
+      - pattern-not: '$A == None'
+      - pattern-not: '$A != None'
+
+  - id: insecure-randomness-for-security
+    languages: [python]
+    severity: ERROR
+    message: "random is predictable; use the secrets module for codes, tokens and passwords."
+    patterns:
+      - pattern-either:
+          - pattern: 'random.randint(...)'
+          - pattern: 'random.choice(...)'
+          - pattern: 'random.random()'
+          - pattern: 'random.choices(...)'
+      - pattern-inside: |
+          def $F(...):
+              ...
+      - metavariable-regex:
+          metavariable: $F
+          regex: (?i).*(otp|code|token|password|secret|key|salt|nonce).*
+
+  # --- Logging: never passwords, codes, keys, tokens or patient details ----------------------------------------------
+  - id: sensitive-value-logged
+    languages: [python]
+    severity: ERROR
+    message: "Do not log passwords, one-time codes, tokens, keys or patient details (log an id or a hash instead)."
+    patterns:
+      - pattern-either:
+          - pattern: '$LOG.$LEVEL(..., $KW=$V, ...)'
+          - pattern: 'print(..., $V, ...)'
+      - metavariable-regex:
+          metavariable: $LEVEL
+          regex: ^(debug|info|warning|warn|error|exception|critical)$
+      - metavariable-regex:
+          metavariable: $V
+          regex: (?i)^[a-z_.]*(password|passwd|otp_code|plain_code|raw_code|access_token|refresh_token|api_secret|secret_key|private_key|encryption_key|card_number|cvv|aadhaar|diagnosis|clinical_note)s?$
+
+  # --- Dangerous calls -------------------------------------------------------------------------------------------------
+  - id: shell-command-injection
+    languages: [python]
+    severity: ERROR
+    message: "shell=True with dynamic input allows command injection; pass an argument list instead."
+    pattern-either:
+      - pattern: 'subprocess.$F(..., shell=True, ...)'
+      - pattern: 'os.system(...)'
+      - pattern: 'os.popen(...)'
+
+  - id: unsafe-deserialization
+    languages: [python]
+    severity: ERROR
+    message: "pickle / yaml.load / eval on untrusted data can run attacker code."
+    pattern-either:
+      - pattern: 'pickle.loads(...)'
+      - pattern: 'pickle.load(...)'
+      - pattern: 'yaml.load(...)'
+      - pattern: 'eval(...)'
+      - pattern: 'exec(...)'
+
+  - id: tarfile-extract-without-filter
+    languages: [python]
+    severity: WARNING
+    message: "Extracting an archive without filter=\"data\" can write outside the target folder (path traversal)."
+    patterns:
+      - pattern-either:
+          - pattern: '$TAR.extractall(...)'
+          - pattern: '$TAR.extract(...)'
+      - pattern-not: '$TAR.extractall(..., filter="data", ...)'
+      - pattern-not: '$TAR.extract(..., filter="data", ...)'
+
+  # --- Money -------------------------------------------------------------------------------------------------------------
+  - id: money-as-float
+    languages: [python]
+    severity: WARNING
+    message: "Money is stored in integer paise; float() on an amount loses precision."
+    patterns:
+      - pattern: 'float($X)'
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(paise|amount|price|total|balance|fee|refund).*
+
+  # --- Frontend ------------------------------------------------------------------------------------------------------------
+  - id: react-dangerously-set-inner-html
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "dangerouslySetInnerHTML renders raw HTML (XSS) unless the value is sanitised or fully trusted (e.g. JSON-LD built from our own data with JSON.stringify)."
+    patterns:
+      - pattern: '<$EL dangerouslySetInnerHTML={...} />'
+      - pattern-not: '<script ... type="application/ld+json" ... dangerouslySetInnerHTML={{ __html: JSON.stringify(...) }} />'
+
+  - id: secret-in-public-env
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: "NEXT_PUBLIC_ values are shipped to every browser; never put a key, secret or token in one."
+    patterns:
+      - pattern: 'process.env.$NAME'
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: ^NEXT_PUBLIC_.*(SECRET|TOKEN|PASSWORD|PRIVATE|API_KEY).*
+
+  - id: token-in-local-storage
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "Tokens in localStorage can be read by any injected script; keep them in memory or HttpOnly cookies."
+    patterns:
+      - pattern: 'localStorage.setItem($K, ...)'
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(token|jwt|session|refresh).*

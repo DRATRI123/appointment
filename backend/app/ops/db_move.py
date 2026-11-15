@@ -286,7 +286,8 @@ def create_target_database(t: Target) -> dict[str, Any]:
         with engine.connect() as conn:
             exists = conn.execute(text("SELECT 1 FROM pg_database WHERE datname = :d"), {"d": t.database}).scalar()
             if not exists:
-                conn.execute(text(f'CREATE DATABASE "{t.database}"'))  # name checked against _NAME above
+                # CREATE DATABASE cannot take a bound parameter; the name was checked against _NAME (letters, digits, _).
+                conn.execute(text(f'CREATE DATABASE "{t.database}"'))  # nosemgrep: sql-built-with-string-formatting
     except Exception as exc:  # noqa: BLE001
         msg = _plain_error(exc)
         if "permission denied" in msg.lower():

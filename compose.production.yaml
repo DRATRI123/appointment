@@ -130,7 +130,7 @@ services:
   # Shared rate limits between API processes. Internal network only: no password needed, never reachable from outside.
   redis:
     <<: *hardening
-    image: redis:7.4.6-alpine
+    image: redis:7.4.12-alpine3.22
     user: "999:1000"
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction",
               "--protected-mode", "yes", "--bind", "0.0.0.0", "--rename-command", "FLUSHALL", "", "--rename-command", "FLUSHDB", "",
@@ -153,7 +153,12 @@ services:
   # The only container with public ports. Runs as the unprivileged nginx user (inside: 8080/8443).
   nginx:
     <<: *hardening
-    image: nginxinc/nginx-unprivileged:1.28.0-alpine3.21
+    image: appointment-nginx:${TAG:-latest}
+    build:
+      context: ./deployment/nginx
+      dockerfile: ../docker/Dockerfile.nginx
+      args:
+        OS_UPGRADE: ${OS_UPGRADE:-true}
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
     ports:
@@ -165,11 +170,6 @@ services:
       - /etc/nginx/conf.d:size=1m,uid=101,gid=101,mode=0755
       - /var/cache/nginx:size=64m,uid=101,gid=101,mode=0700
     volumes:
-      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./deployment/nginx/snippets:/etc/nginx/snippets:ro
-      - ./deployment/nginx/templates:/etc/nginx/site-templates:ro
-      - ./deployment/nginx/entrypoint/15-choose-site.envsh:/docker-entrypoint.d/15-choose-site.envsh:ro
-      - ./deployment/nginx/entrypoint/40-reload-certificates.sh:/docker-entrypoint.d/40-reload-certificates.sh:ro
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_www:/var/www/certbot:ro
     restart: unless-stopped
@@ -191,7 +191,7 @@ services:
   # read the key. Only CAP_CHOWN, only for this step.
   volume-permissions:
     <<: *hardening
-    image: certbot/certbot:v4.2.0
+    image: certbot/certbot:v5.10.0
     user: "0:0"
     cap_add: ["CHOWN"]
     entrypoint: ["chown", "-R", "101:101", "/etc/letsencrypt", "/var/lib/letsencrypt", "/var/www/certbot"]
@@ -206,7 +206,7 @@ services:
   # Runs as Nginx's user id so Nginx can read the private key; it never gets the Docker socket.
   certbot:
     <<: *hardening
-    image: certbot/certbot:v4.2.0
+    image: certbot/certbot:v5.10.0
     user: "101:101"
     entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet --config-dir /etc/letsencrypt --work-dir /var/lib/letsencrypt --logs-dir /tmp; sleep 12h & wait $${!}; done"]
     read_only: true
@@ -226,7 +226,7 @@ services:
   # Optional: docker compose --profile monitoring up -d prometheus   (reach it over an SSH tunnel; never public)
   prometheus:
     <<: *hardening
-    image: prom/prometheus:v3.5.0
+    image: prom/prometheus:v3.15.1
     profiles: ["monitoring"]
     user: "65534:65534"
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]

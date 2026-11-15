@@ -1,0 +1,8 @@
+# Reviewed gitleaks findings in old commits: example values in API documentation (a booking token and a session
+# key copied from a local test run). They unlock nothing; the current files use obvious placeholders.
+# History is not rewritten. Format: gitleaks fingerprint (commit:file:rule:line).
+a511642b29b615303a006a1912cf945709ff5a7e:frontend/components/developers/docs/pages-api.tsx:generic-api-key:108
+334ad5e5aaf7ffab096f9bcf8e7a84a6473d931a:documentation/public-booking-api.md:generic-api-key:419
+334ad5e5aaf7ffab096f9bcf8e7a84a6473d931a:documentation/public-booking-api.md:generic-api-key:434
+334ad5e5aaf7ffab096f9bcf8e7a84a6473d931a:documentation/public-booking-api.md:generic-api-key:481
+334ad5e5aaf7ffab096f9bcf8e7a84a6473d931a:documentation/public-booking-api.md:generic-api-key:523

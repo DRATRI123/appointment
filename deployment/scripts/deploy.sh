@@ -151,7 +151,7 @@ fi
     || die "health check failed. Logs: docker compose logs. To go back: deployment/scripts/rollback.sh"
 
 record_release "$TAG" "$(db_revision)"
-docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E '^appointment-(api|web):' \
+docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E '^appointment-(api|web|nginx):' \
     | grep -vE ":($TAG|$(cat "$STATE_DIR/previous" 2>/dev/null || echo none)|latest)$" | tail -n +7 | xargs -r docker image rm >/dev/null 2>&1 || true
 
 say "${GREEN}Release $TAG is live at https://$DOMAIN${RESET}"

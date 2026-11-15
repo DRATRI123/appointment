@@ -49,7 +49,8 @@ _SECURITY_CODES = {
     "rate_limited": "rate_limited", "invalid_api_key": "api_key_invalid", "ip_not_allowed": "ip_blocked",
     "csrf_failed": "csrf_failed", "permission_denied": "access_denied", "platform_admin_required": "access_denied",
     "not_a_member": "access_denied", "wrong_organization": "access_denied", "api_key_not_allowed": "access_denied",
-    "duplicate_utr": "payment_duplicate_utr", "token_invalid": "token_invalid", "refresh_reused": "refresh_token_reused",
+    # nosec B105 on the next line: "token_invalid" is a metric label (an error code name), not a password.
+    "duplicate_utr": "payment_duplicate_utr", "token_invalid": "token_invalid", "refresh_reused": "refresh_token_reused",  # nosec B105
     "maintenance": "maintenance",
 }
 

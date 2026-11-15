@@ -1,0 +1,21 @@
+# Secret scanning (gitleaks): the default rules, plus the fake values the tests and docs use on purpose.
+# Run: docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks:v8.28.0 dir /repo --no-banner --redact
+title = "appointment platform"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and documented examples: fake values that unlock nothing"
+paths = [
+    '''backend/tests/''',
+    '''frontend/e2e/''',
+    '''frontend/tests/''',
+    '''(^|/)node_modules/''',
+    '''(^|/)\.next/''',
+    '''(^|/)\.venv/''',
+]
+regexes = [
+    '''EXAMPLE-[A-Za-z0-9-]+''',
+    '''example-[a-z-]+-key''',
+]

@@ -106,7 +106,7 @@ services:
 
   postgres:
     <<: *hardening
-    image: postgres:17.6-alpine3.22
+    image: postgres:17.12-alpine3.24
     user: "70:70"                       # the image's postgres user from the start: no root, no capabilities needed
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}

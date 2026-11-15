@@ -1,0 +1,102 @@
+name: Security
+
+# Static analysis, secret scanning and image scanning on every push; additionally every Monday, because new
+# vulnerabilities are published for code that has not changed. The dynamic scan (OWASP ZAP against a full
+# staging-like stack with sample data only) runs weekly and on demand.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container: semgrep/semgrep:1.140.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Project rules (patient data in logs, raw SQL, token checks, money as float, ...)
+        run: semgrep scan --metrics=off --error --config .semgrep/rules.yml backend/app frontend scripts
+      - name: Public rulesets (OWASP Top 10, Python, TypeScript/React, secrets, Docker, Nginx)
+        # Report-only until the first run's findings are reviewed (the registry was unreachable when this was written);
+        # then add --error to make it blocking like the project rules above.
+        run: >
+          semgrep scan --metrics=off --severity ERROR
+          --config p/owasp-top-ten --config p/python --config p/typescript --config p/react --config p/secrets
+          --config p/dockerfile --config p/docker-compose --config p/nginx
+          --exclude backend/tests --exclude frontend/e2e --exclude frontend/tests
+          backend/app frontend deployment compose.yaml compose.production.yaml
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the whole history: a secret that was committed and deleted is still leaked
+      - name: Gitleaks (files and every commit)
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks:v8.28.0 git /repo --no-banner --redact \
+            -c /repo/.gitleaks.toml --gitleaks-ignore-path /repo/.gitleaksignore
+          docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks:v8.28.0 dir /repo --no-banner --redact -c /repo/.gitleaks.toml
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the images
+        run: |
+          docker build -f deployment/docker/Dockerfile.backend -t appointment-api:scan backend
+          docker build -f deployment/docker/Dockerfile.frontend -t appointment-web:scan frontend
+          docker build -f deployment/docker/Dockerfile.nginx -t appointment-nginx:scan deployment/nginx
+      - name: Our images must have no fixable HIGH/CRITICAL vulnerability
+        run: |
+          for image in appointment-api:scan appointment-web:scan appointment-nginx:scan; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.67.2 image --scanners vuln \
+              --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress "$image"
+          done
+      - name: Third-party images (report only; update the pins in compose*.yaml when fixes appear)
+        run: |
+          for image in $(grep -hoE 'image: [a-z/.-]+:[A-Za-z0-9._-]+' compose.yaml compose.production.yaml | grep -v appointment- | awk '{print $2}' | sort -u); do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.67.2 image --scanners vuln \
+              --severity CRITICAL --ignore-unfixed --no-progress "$image" || true
+          done
+      - name: Dockerfile misconfiguration scan (root user, secrets, unpinned packages, ...)
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" aquasec/trivy:0.67.2 config --severity MEDIUM,HIGH,CRITICAL --exit-code 1 \
+            --skip-dirs /repo/frontend/node_modules /repo
+
+  zap:
+    # A full staging-like stack (deploy.sh with a self-signed certificate, sample data only), then the OWASP ZAP
+    # baseline (passive) scan and the abuse tests. Never pointed at a real server.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy a throw-away staging stack (clinic.localhost, self-signed)
+        run: |
+          echo "127.0.0.1 clinic.localhost" | sudo tee -a /etc/hosts
+          deployment/scripts/deploy.sh --env staging --domain clinic.localhost --self-signed
+          sed -i 's/^SMTP_HOST=.*/SMTP_HOST=smtp.invalid/; s/^SMTP_FROM=.*/SMTP_FROM=ci@clinic.localhost/' .env
+          deployment/scripts/deploy.sh --self-signed
+      - name: OWASP ZAP baseline
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm --network host --add-host clinic.localhost:127.0.0.1 -v "$PWD/zap:/zap/wrk:rw" \
+            zaproxy/zap-stable:2.16.1 zap-baseline.py -t https://clinic.localhost/ -m 3 -J zap.json -r zap.html -I
+      - name: Abuse tests (same-slot race, duplicate payments, 100 users) from inside the Docker network
+        run: |
+          docker run --rm --network appointment-staging_public -v "$PWD/scripts/perf:/perf:ro" "appointment-api:$(grep ^TAG= .env | cut -d= -f2)" \
+            python /perf/abuse_test.py --base-url http://api:8000 --forwarded-ips --skip-otp --users 100 --seconds 60 | tee abuse.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            zap/
+            abuse.json

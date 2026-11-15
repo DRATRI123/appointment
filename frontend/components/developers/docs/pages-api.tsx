@@ -105,7 +105,7 @@ export function AppointmentsPage() {
       <H2 id="holds">Holding a slot first</H2>
       <P>When a person is on the phone, hold the time while you take their details. A hold blocks the slot for everyone else for a few minutes (the clinic&apos;s hold time, default 10).</P>
       <Request title="Hold" method="POST" path="/appointments/holds" body={{ professional_id: PRO, branch_id: BR, service_id: SVC, start_at: "2026-11-20T06:00:00Z" }} />
-      <Response status={201} body={{ id: "d6ce41ac-9cba-4df1-88d7-0acd21a17a31", professional_id: PRO, branch_id: BR, service_id: SVC, start_at: "2026-11-20T06:00:00Z", end_at: "2026-11-20T06:30:00Z", expires_at: "2026-11-15T09:40:00Z", session_key: "JjitDdjbeR2JQ500bC4x8w", status: "active" }} />
+      <Response status={201} body={{ id: "d6ce41ac-9cba-4df1-88d7-0acd21a17a31", professional_id: PRO, branch_id: BR, service_id: SVC, start_at: "2026-11-20T06:00:00Z", end_at: "2026-11-20T06:30:00Z", expires_at: "2026-11-15T09:40:00Z", session_key: "example-browser-session-key", status: "active" }} />
       <Request title="Book the held slot" method="POST" path="/appointments" body={{ hold_id: "d6ce41ac-9cba-4df1-88d7-0acd21a17a31", customer: { full_name: "Asha Patel", mobile: "9812345678" }, source: "api" }} />
       <P>A hold that ran out returns <C>409 hold_expired</C>; place a new one. Release holds you no longer need with <C>DELETE /appointments/holds/&#123;id&#125;</C> so the time opens up again.</P>
 

@@ -25,8 +25,9 @@ class Appointment(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Base):
             "start_at",
             "slot_sequence",
             unique=True,
-            sqlite_where=text(f"status IN ({_ACTIVE_STATUS_SQL})"),
-            postgresql_where=text(f"status IN ({_ACTIVE_STATUS_SQL})"),
+            # Fixed status names from the code (no user input): safe to put in the index definition.
+            sqlite_where=text(f"status IN ({_ACTIVE_STATUS_SQL})"),  # nosemgrep: sql-built-with-string-formatting
+            postgresql_where=text(f"status IN ({_ACTIVE_STATUS_SQL})"),  # nosemgrep: sql-built-with-string-formatting
         ),
         Index("ix_appointments_org_start", "organization_id", "start_at"),
         # First-visit dates per customer (new vs returning on the dashboard): answered from the index alone.

@@ -454,7 +454,7 @@ POST /api/v1/public/organizations/akshar-clinic/appointments
   "payment_due_at": "2026-11-14T12:41:17.822460Z",
   "can_cancel": true,
   "can_reschedule": true,
-  "access_token": "HgZEyP4KUn8CRDqUj1lzYBtFOv178NO2"
+  "access_token": "EXAMPLE-booking-access-token-from-the-response"
 }
 ```
 
@@ -483,7 +483,7 @@ Other errors: `409 slot_unavailable`, `409 hold_expired`, `422 contact_verificat
 `GET /appointments/{reference}/payment?access_token=` — `null` when nothing is due.
 
 ```http
-GET /api/v1/public/organizations/akshar-clinic/appointments/APT-AKSHAR-01M7CZG6DYF6ST1F1YC7Y1ZVZ1/payment?access_token=HgZEyP4KUn8CRDqUj1lzYBtFOv178NO2
+GET /api/v1/public/organizations/akshar-clinic/appointments/APT-AKSHAR-01M7CZG6DYF6ST1F1YC7Y1ZVZ1/payment?access_token=EXAMPLE-booking-access-token-from-the-response
 ```
 
 `200`
@@ -530,7 +530,7 @@ GET /api/v1/public/organizations/akshar-clinic/appointments/APT-AKSHAR-01M7CZG6D
 `pending_verification`; staff verify it against the bank statement.
 
 ```http
-POST /api/v1/public/organizations/akshar-clinic/appointments/APT-AKSHAR-01M7CZG6DYF6ST1F1YC7Y1ZVZ1/payment/submit?access_token=HgZEyP4KUn8CRDqUj1lzYBtFOv178NO2
+POST /api/v1/public/organizations/akshar-clinic/appointments/APT-AKSHAR-01M7CZG6DYF6ST1F1YC7Y1ZVZ1/payment/submit?access_token=EXAMPLE-booking-access-token-from-the-response
 multipart/form-data: utr=412345678901 (+ optional screenshot file)
 ```
 
@@ -572,7 +572,7 @@ multipart/form-data: utr=412345678901 (+ optional screenshot file)
 clinic's cancellation settings).
 
 ```http
-GET /api/v1/public/organizations/akshar-clinic/appointments/APT-AKSHAR-01M7CZG6DYF6ST1F1YC7Y1ZVZ1?access_token=HgZEyP4KUn8CRDqUj1lzYBtFOv178NO2
+GET /api/v1/public/organizations/akshar-clinic/appointments/APT-AKSHAR-01M7CZG6DYF6ST1F1YC7Y1ZVZ1?access_token=EXAMPLE-booking-access-token-from-the-response
 ```
 
 `200`

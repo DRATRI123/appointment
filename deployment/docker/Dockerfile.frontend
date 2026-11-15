@@ -6,7 +6,7 @@
 # Build context: ./frontend   (see frontend/.dockerignore). NEXT_PUBLIC_* values end up in the browser bundle:
 # never put a secret in one.
 
-ARG NODE_IMAGE=node:22.21.1-alpine3.22
+ARG NODE_IMAGE=node:22.23.5-alpine3.24
 
 FROM ${NODE_IMAGE} AS deps
 WORKDIR /app

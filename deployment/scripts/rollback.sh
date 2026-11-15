@@ -22,7 +22,7 @@ while [ $# -gt 0 ]; do
 done
 TARGET="${TARGET:-$(cat "$STATE_DIR/previous" 2>/dev/null || true)}"
 [ -n "$TARGET" ] || die "no earlier release recorded on this server (rollback.sh --list)."
-for image in appointment-api appointment-web; do
+for image in appointment-api appointment-web appointment-nginx; do
     docker image inspect "$image:$TARGET" >/dev/null 2>&1 || die "image $image:$TARGET is no longer on this server; deploy that commit instead: git checkout <commit> && deploy.sh"
 done
 
@@ -43,8 +43,8 @@ fi
 
 say "Rolling back to release $TARGET (database untouched; migrations are not run)"
 export TAG="$TARGET"
-dc up -d --no-deps --no-build api worker web backup
-for service in api worker web; do wait_healthy "$service" 240 || die "$service is not healthy on $TARGET: docker compose logs $service"; done
+dc up -d --no-deps --no-build api worker web backup nginx
+for service in api worker web nginx; do wait_healthy "$service" 240 || die "$service is not healthy on $TARGET: docker compose logs $service"; done
 "$REPO_DIR/deployment/scripts/health-check.sh" --quiet || warn "some checks failed; see deployment/scripts/health-check.sh"
 record_release "$TARGET" "$now_schema"
 say "${GREEN}Now running release $TARGET.${RESET}"
