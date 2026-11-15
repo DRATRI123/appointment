@@ -203,7 +203,7 @@ async def otp(c: Client, clinic: dict) -> dict:
     ch = start.json()["challenge_id"]
     guesses = []
     for i in range(8):  # an attacker guessing; max_attempts is 5 by default
-        r = await c.req("POST", f"{pub(clinic)}/verification/{ch}/verify", ip=ip, json={"code": f"{random.randint(0, 999999):06d}", "session_key": key})
+        r = await c.req("POST", f"{pub(clinic)}/verification/{ch}/verify", ip=ip, json={"code": f"{secrets.randbelow(10**6):06d}", "session_key": key})
         guesses.append(f"{r.status_code}:{r.json().get('code', 'ok')}")
     out["8 wrong guesses"] = guesses
     resend = await c.req("POST", f"{pub(clinic)}/verification/{ch}/resend", ip=ip, json={"session_key": key})

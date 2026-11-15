@@ -91,7 +91,7 @@ set_env_tag() {
     if grep -qE '^TAG=' "$ENV_FILE"; then sed -i "s|^TAG=.*|TAG=$1|" "$ENV_FILE"; else printf 'TAG=%s\n' "$1" >> "$ENV_FILE"; fi
 }
 
-current_tag() { [ -f "$STATE_DIR/current" ] && cat "$STATE_DIR/current" || true; }
+current_tag() { if [ -f "$STATE_DIR/current" ]; then cat "$STATE_DIR/current"; fi; }
 
 record_release() {  # tag  alembic_revision
     mkdir -p "$STATE_DIR"

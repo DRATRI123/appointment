@@ -129,7 +129,7 @@ jobs:
           npx playwright install --with-deps chromium
           npm run build
           nohup npm run start -- --port 3000 > ../next.log 2>&1 &
-          npx --yes wait-on@8 -t 60000 http://127.0.0.1:8000/api/v1/health http://127.0.0.1:3000/login
+          npx --yes wait-on@8 -t 60000 http-get://127.0.0.1:8000/api/v1/health http-get://127.0.0.1:3000/login  # GET probes: the API answers HEAD with 405
       - name: Playwright
         working-directory: frontend
         run: npx playwright test --trace off --workers 1
