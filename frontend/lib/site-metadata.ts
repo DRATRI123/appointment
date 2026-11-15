@@ -6,7 +6,7 @@ export async function fetchWebsite(slug: string): Promise<PublicWebsite | null> 
   if (!/^[a-z0-9][a-z0-9-]{0,79}$/.test(slug)) return null;
   const api = (process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
   try {
-    const r = await fetch(`${api}/api/v1/public/organizations/${slug}/website`, { signal: AbortSignal.timeout(2500), next: { revalidate: 30 } });
+    const r = await fetch(`${api}/api/v1/public/organizations/${slug}/website`, { signal: AbortSignal.timeout(2500), cache: "no-store" });
     return r.ok ? ((await r.json()) as PublicWebsite) : null;
   } catch {
     return null;

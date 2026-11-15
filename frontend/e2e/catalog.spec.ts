@@ -60,8 +60,15 @@ test("branch, category, service and professional appear on the public page", asy
 
   // Public page
   const slug = await page.evaluate(() => fetch("/api/v1/organizations", { credentials: "include" }).then((r) => r.json()).then((o) => o[0].slug));
+  // The clinic website shows the catalogue; the booking steps are one click away.
   await page.goto(`/${slug}`);
   await expect(page.getByRole("heading", { level: 1, name: orgName })).toBeVisible();
+  await expect(page.getByTestId("site-service")).toContainText("Acne consultation");
+  await expect(page.getByTestId("site-doctor")).toContainText("Dr. Kavya Nair");
+  await expect(page.getByTestId("site-branch")).toContainText("Koramangala");
+  await page.getByTestId("site-service").getByRole("link", { name: "Book now" }).click();
+  await expect(page).toHaveURL(new RegExp(`/${slug}/book\\?service=`));
+  await page.goto(`/${slug}/book`);
   await expect(page.getByTestId("pick-service")).toHaveCount(1);
   await expect(page.getByTestId("pick-service")).toContainText("Acne consultation");
   await page.getByTestId("pick-service").click();
@@ -71,9 +78,11 @@ test("branch, category, service and professional appear on the public page", asy
   await expect(summary.getByText("Koramangala")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pick a date and time" })).toBeVisible();
 
-  // Old links keep working.
+  // Old links keep working: /o/{clinic}/book → /{clinic}, and booking-hint links → /{clinic}/book.
   await page.goto(`/o/${slug}/book`);
   await expect(page).toHaveURL(new RegExp(`/${slug}$`));
+  await page.goto(`/${slug}?service=acne-consultation`);
+  await expect(page).toHaveURL(new RegExp(`/${slug}/book\\?service=acne-consultation$`));
 });
 
 test("unknown organization slug shows a not-found state", async ({ page }) => {

@@ -21,8 +21,9 @@ GET  /availability/summary     which days have free times
 GET  /availability             free times for one day
 GET  /quote                    server-calculated price
 POST /holds                    reserve the slot for a few minutes (session_key owns it)
-POST /verify-mobile            send a one-time code to the customer's mobile
-POST /verify-mobile/confirm    exchange the code for a verification token
+GET  /verification             which methods (SMS, WhatsApp, email) the clinic offers
+POST /verification/start       send a one-time code to the customer's mobile or email
+POST /verification/{id}/verify exchange the code for a verification token
 POST /appointments             book the held slot (send the token)
 GET  /appointments/{ref}/payment          UPI QR, UPI id, app links
 POST /appointments/{ref}/payment/submit   customer's UTR (+ optional screenshot); never confirms payment
@@ -35,8 +36,8 @@ GET  /appointments/{ref}       status page (reference + access token)
 |---|---|
 | Prices are never taken from the client | `/appointments` ignores any amount fields; price is recalculated from the catalogue, branch pricing, doctor fee, coupon and tax at booking time. |
 | No double booking | Holds and appointments are checked under row locks and a unique constraint; parallel requests for one slot yield exactly one success (`test_races.py`, SQLite and PostgreSQL). |
-| Mobile verification | With `booking.require_mobile_verification` on (default), `/appointments` needs a token from `/verify-mobile/confirm`. The token is bound to the clinic, the held slot, the session key and the number, and expires after 30 minutes. A signed-in customer whose own number is already verified skips this. |
-| OTP abuse | `/verify-mobile`: 5 per minute and 20 per hour per IP, a 60-second resend cooldown, max 5 codes per number per hour; codes expire after 5 minutes; 5 wrong attempts lock the code; attempts are stored in the database, not memory. `/confirm`: 10 per minute per IP. |
+| Contact verification | When the clinic requires it (default), `/appointments` needs a token from `/verification/{id}/verify`. The token is bound to the clinic, the held slot, the browser session and the exact mobile number (SMS/WhatsApp) or email that was verified, and expires after 30 minutes. A signed-in customer whose own mobile is already verified skips this. |
+| OTP abuse | Per clinic policy (Settings → OTP & verification): codes per destination, per IP and per session per hour, resend cool-down and cap, wrong-attempt lock, expiry; plus a platform-wide 10 codes per destination per hour and route limits (start 5/min and 30/h per IP, verify 10/min). Counters live in the database. Codes are never returned or logged. |
 | Hold ownership | Every call that uses a hold must send the same `session_key` that created it (`403 hold_mismatch`). |
 | Private data | Public endpoints return no patient data except the customer's own booking, which needs the reference **and** the random `access_token` returned at booking. Doctor contact details are stripped. |
 | Payments | A QR is only a payment request. Submitting a UTR or screenshot sets the payment to `submitted`; only authorised staff can mark it verified. |
@@ -288,17 +289,35 @@ POST /api/v1/public/organizations/akshar-clinic/holds
 
 `DELETE /holds/{id}?session_key=` releases it early (e.g. when the visitor goes back).
 
-### Send a verification code
+### Verification methods
 
-`POST /verify-mobile`. `debug_code` is returned **only** in development/test; in staging/production it is
-always `null` and the code goes by SMS/WhatsApp.
+`GET /verification`
+
+```json
+{
+  "required": true,
+  "channels": [
+    "sms",
+    "whatsapp",
+    "email"
+  ],
+  "default_channel": "sms",
+  "code_length": 6,
+  "resend_cooldown_seconds": 60
+}
+```
+
+### Send a code
+
+`POST /verification/start`. The response never contains the code.
 
 ```http
-POST /api/v1/public/organizations/akshar-clinic/verify-mobile
+POST /api/v1/public/organizations/akshar-clinic/verification/start
 {
-  "mobile": "+919876546388",
-  "hold_id": "d6ce41ac-9cba-4df1-88d7-0acd21a17a31",
-  "session_key": "demo-6fa0cc0e5a644f0d"
+  "channel": "sms",
+  "destination": "9876535433",
+  "hold_id": "fe86e651-7ce4-4827-806d-2611cd4b1ccd",
+  "session_key": "demo-16f0b470c4c6"
 }
 ```
 
@@ -306,41 +325,59 @@ POST /api/v1/public/organizations/akshar-clinic/verify-mobile
 
 ```json
 {
-  "detail": "Code sent.",
-  "expires_in_seconds": 300,
-  "resend_after_seconds": 60,
-  "debug_code": "817686"
+  "challenge_id": "b86bd47e-24ee-4f22-bc20-501cc84b6d9d",
+  "channel": "sms",
+  "destination": "+91•••••433",
+  "code_length": 6,
+  "expires_in_seconds": 299,
+  "resend_after_seconds": 59,
+  "resends_left": 3
 }
 ```
 
-Errors: `429 otp_cooldown` (retry after `resend_after_seconds`), `429 otp_hourly_limit`, `429 rate_limited`,
-`409 hold_expired`, `403 hold_mismatch`, `422 hold_not_found`.
+Errors: `429 otp_destination_limit` / `otp_ip_limit` / `otp_session_limit`, `422 otp_channel_unavailable`,
+`503 otp_delivery_failed` (provider refused; try again or another method), `409 hold_expired`, `403 hold_mismatch`,
+`422 hold_not_found`.
 
-### Confirm the code
+`POST /verification/{challenge_id}/resend` with `{"session_key": …}` sends a new code for the same request:
 
-`POST /verify-mobile/confirm`
+`429`
 
-```http
-POST /api/v1/public/organizations/akshar-clinic/verify-mobile/confirm
+```json
 {
-  "mobile": "+919876546388",
-  "code": "817686",
-  "hold_id": "d6ce41ac-9cba-4df1-88d7-0acd21a17a31",
-  "session_key": "demo-6fa0cc0e5a644f0d"
+  "detail": "Please wait 59 seconds before asking for another code.",
+  "code": "otp_cooldown"
 }
 ```
+
+### Check the code
+
+`POST /verification/{challenge_id}/verify` with `{"code": "…", "session_key": …}`. A wrong code:
+
+`401`
+
+```json
+{
+  "detail": "That code is not right. 4 attempts left.",
+  "code": "otp_incorrect"
+}
+```
+
+The right code:
 
 `200`
 
 ```json
 {
-  "verification_token": "eyJhbGciOiJIUzI1NiIsInR…\u2026",
-  "mobile": "+919876546388",
+  "verification_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…",
+  "channel": "sms",
+  "destination": "+919876535433",
   "expires_in_seconds": 1800
 }
 ```
 
-Errors (all `401`): `otp_incorrect` (message says how many attempts are left), `otp_locked`, `otp_expired`, `otp_not_found`.
+Other errors: `429 otp_locked`, `401 otp_expired`, `401 otp_superseded` (a newer code was sent), `409 otp_used`,
+`404 otp_not_found` (unknown id, or another browser session's request).
 
 ### Book
 
@@ -362,8 +399,8 @@ POST /api/v1/public/organizations/akshar-clinic/appointments
 
 ```json
 {
-  "detail": "Please verify your mobile number with the code we send you.",
-  "code": "mobile_not_verified"
+  "detail": "Please verify your contact details with the code we send you.",
+  "code": "contact_not_verified"
 }
 ```
 
@@ -380,7 +417,8 @@ POST /api/v1/public/organizations/akshar-clinic/appointments
     "mobile": "+919876546388",
     "email": "priya@example.com"
   },
-  "mobile_verification_token": "eyJhbGciOiJIUzI1NiIsInR…",
+  "verification_token": "eyJhbGciOiJIUzI1NiIsInR…",
+  "attribution": {"utm_source": "instagram", "utm_campaign": "monsoon-care", "entry": "website"},
   "total_amount_paise": 1
 }
 ```
@@ -421,9 +459,23 @@ POST /api/v1/public/organizations/akshar-clinic/appointments
 ```
 
 Keep `reference` and `access_token`: they are the only way (besides signing in) to see or manage the booking.
-The booking page sends the visitor to `/{clinic}/appointments/{reference}?t={access_token}`.
+The booking page sends the visitor to `/{clinic}/appointments/{reference}?t={access_token}`. The booking steps themselves live at `/{clinic}/book`; `/{clinic}` is the clinic website.
 
-Other errors: `409 slot_unavailable`, `409 hold_expired`, `422 mobile_verification_expired`,
+With a token for a different number than the one being booked:
+
+`422`
+
+```json
+{
+  "detail": "The verified contact does not match the details in this booking. Please verify again.",
+  "code": "contact_not_verified"
+}
+```
+
+`attribution` is optional: only `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `ref` and `entry`
+with short lower-case values are kept, for reporting.
+
+Other errors: `409 slot_unavailable`, `409 hold_expired`, `422 contact_verification_expired`,
 `422 form_invalid` (booking-form answers), `422 login_required` (when the clinic turned guest booking off).
 
 ### Payment (own UPI QR)

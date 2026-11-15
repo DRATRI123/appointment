@@ -32,7 +32,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Organization settings" description="Profile, booking rules, cancellation policy, payment behaviour, notifications and branding." />
-      <p className="-mt-2 mb-4 text-sm">One-time codes for bookings: <Link href="/admin/settings/verification" className="font-medium text-primary hover:underline">OTP &amp; verification</Link></p>
+      <p className="-mt-2 mb-4 text-sm">One-time codes for bookings: <Link href="/admin/settings/verification" className="font-medium text-primary underline underline-offset-4">OTP &amp; verification</Link></p>
       <Tabs defaultValue="profile">
         <TabsList className="mb-6 flex h-auto flex-wrap">
           <TabsTrigger value="profile">Profile</TabsTrigger>

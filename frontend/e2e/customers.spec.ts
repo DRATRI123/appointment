@@ -74,7 +74,7 @@ test("a published booking form is required during public booking", async ({ page
 
   // Guest sees the form; submitting without required answers shows field errors.
   const guest = await (await context.browser()!.newContext()).newPage();
-  await guest.goto(`/${slug}`);
+  await guest.goto(`/${slug}/book`);
   await guest.getByTestId("pick-service").first().click();
   await pickFirstSlot(guest);
   await expect(guest.getByTestId("booking-form-section")).toBeVisible();

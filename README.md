@@ -23,6 +23,7 @@ appointment is confirmed.
 * [API overview](documentation/api.md)
 * [Public booking API with example requests](documentation/public-booking-api.md)
 * [Shopify and website integration (no app needed)](documentation/shopify-integration.md)
+* [Clinic website, website builder, OTP & verification, analytics](documentation/website-and-verification.md)
 * [Deployment](documentation/deployment.md)
 
 ## Status
@@ -44,6 +45,7 @@ appointment is confirmed.
 | 13 | Production: Docker stack with automatic HTTPS (Caddy), PostgreSQL 17, Redis, worker and one-shot migrations; startup refuses unsafe settings; encrypted, verified, pruned daily backups with restore and off-site copy; S3-compatible uploads; System health page, Prometheus metrics and alert rules, optional Sentry (scrubbed); nonce-based CSP; shared Redis rate limits; deployment runbook | ✅ done |
 | 14 | PostgreSQL and performance: whole suite runs on PostgreSQL in CI; real concurrency races fixed with row locks (payments verified twice, refunds beyond the amount paid, coupon limits, double cancel) and proven by parallel tests; commit before the response is sent; SQLite → PostgreSQL migration tool with checksum verification; N+1 queries removed; indexes; multi-process API; load-tested to 150 simultaneous users on 2 cores (`documentation/performance.md`) | ✅ done |
 | 15 | Public booking page and Shopify: premium mobile-first booking at `/{clinic}` (doctor profiles, services with prices, branch choice, day strip and grouped times, mobile one-time code, review with server price, own UPI QR + UTR, clear success/pending/failed screens); preselection by URL (`?service=&branch=&doctor=&date=`), validated and never trusted for price; embeddable `/embed/{clinic}` with per-clinic allowed websites (`frame-ancestors`, fail closed) and auto-resize; Shopify Liquid button snippet and theme section; admin *Booking page & Shopify* screen with generated code (`documentation/shopify-integration.md`) | ✅ done |
+| 16 | Clinic website and builder: a full public website per clinic at `/{clinic}` (hero, about, services, doctors, categories, facilities, gallery, approved testimonials, FAQ, locations with hours, contact, custom pages, policy and location pages, SEO), booking at `/{clinic}/book` (service → doctor → location → time); Website Management with templates, drag-and-drop, buttons, pages, device preview, draft/publish/restore; OTP by SMS, WhatsApp or email with clinic-owned encrypted provider accounts and test sends; campaign tracking, WhatsApp links and cookie-free website analytics (`documentation/website-and-verification.md`) | ✅ done |
 
 ## Repository layout
 

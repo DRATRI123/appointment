@@ -42,14 +42,14 @@ export default function WebsiteAnalyticsPage() {
       </div>
       {report.isLoading ? <Skeleton className="h-96" /> : report.error ? <EmptyState icon={BarChart3} title="No access" body={errorMessage(report.error)} /> : r ? (
         <>
-          <dl className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6" data-testid="website-kpis">
+          <ul className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6" data-testid="website-kpis">
             {[
               ["Page views", r.totals.page_views], ["Book clicks", r.totals.book_clicks], ["Booking page views", r.totals.booking_views],
               ["Times reserved", r.totals.holds], ["Bookings via website", r.totals.website_bookings], ["Bookings per 100 views", r.totals.conversion_percent ?? "—"],
             ].map(([label, value]) => (
-              <Card key={label as string}><CardContent className="p-4"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{value}</dd></CardContent></Card>
+              <li key={label as string}><Card className="h-full"><CardContent className="p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p></CardContent></Card></li>
             ))}
-          </dl>
+          </ul>
           <Card>
             <CardHeader><CardTitle>Visits and bookings per day</CardTitle></CardHeader>
             <CardContent className="h-72">

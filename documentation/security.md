@@ -225,7 +225,7 @@ Outcomes are recorded for the System health page and the `BackupMissing` alert. 
 
 | Area | Control | Test |
 |---|---|---|
-| Fake bookings / OTP abuse | Online bookings need a one-time code for the customer's mobile (setting `booking.require_mobile_verification`, on by default). The token is a signed JWT bound to clinic, held slot, session key and number, valid 30 minutes. Per-IP limits (5/min, 20/h send; 10/min confirm), 60 s resend cooldown, 5 codes per number per hour, 5 wrong attempts lock the code; attempts persist even though the request fails | `tests/test_public_booking.py` |
+| Fake bookings / OTP abuse | Online bookings need a one-time code by SMS, WhatsApp or email (clinic policy, on by default). Codes from `secrets`, stored as HMAC bound to challenge and destination, single use, expiry, attempt lock (persisted), superseded on new request; limits per destination, IP and session plus a platform cap; the token is bound to clinic, held slot, browser session and the exact verified contact | `tests/test_otp.py` |
 | Hold hijacking | Code requests and bookings must present the session key that created the hold | `test_codes_need_the_customers_own_live_reservation` |
 | URL parameters | `service`, `branch`, `doctor`, `date` are parsed against a strict pattern and matched to the real catalogue; unknown values are ignored; they never reach price or permission logic. The server recalculates price and ignores client amount fields | `frontend/tests/unit/booking-params.test.ts`, `test_prices_come_from_the_server_never_from_the_request` |
 | Click-jacking | Normal pages: `frame-ancestors 'none'` + `X-Frame-Options: DENY`. `/embed/{clinic}`: `frame-ancestors 'self'` plus the clinic's allowed websites (exact `https://` origins, max 20, validated server-side), fetched by the web server with a short cache; on any error the header is `'none'` (fail closed) | `frontend/tests/unit/csp.test.ts`, `frontend/e2e/public-booking.spec.ts` |
@@ -234,3 +234,16 @@ Outcomes are recorded for the System health page and the `BackupMissing` alert. 
 | iframe messages | The embed page only posts `{type: "appointment-booking:resize", height}`; the generated listeners check `event.origin` and bound the height | `frontend/tests/unit/embed-code.test.ts` |
 | Slug squatting | Organization slugs cannot take top-level app routes (`admin`, `embed`, `api`, `login`, …) | `test_reserved_web_addresses_cannot_be_taken` |
 | Patient data in URLs | Public URLs carry only clinic/service/doctor slugs. The appointment page needs a reference and a random token, is `noindex`, and sends `Referrer-Policy: strict-origin-when-cross-origin` | |
+
+## Clinic website and verification accounts
+
+| Area | Control | Test |
+|---|---|---|
+| Website content | Validated document (`app/schemas/website.py`): https-only links without credentials, `.pdf` downloads, hex colours, font allow-list, reserved page addresses, size limit; Markdown rendered without HTML; buttons store kinds, the frontend builds hrefs | `tests/test_website.py`, `frontend/tests/unit/website.test.tsx` |
+| Publishing | `website:write` / `website:publish` permissions, optimistic locking against concurrent edits, numbered versions, audit log of every change | `tests/test_website.py` |
+| Testimonials | Shown only when approved *and* the patient's consent is recorded (server-enforced) | `tests/test_website.py` |
+| Admin preview | `/website-preview` is the only page that may be framed, and only by this site (`frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`); it renders only documents posted by a same-origin parent | `frontend/tests/unit/csp.test.ts`, `e2e/website.spec.ts` |
+| Provider secrets | Clinic SMS / WhatsApp / email credentials encrypted with `DATA_ENCRYPTION_KEY` (AES-256-GCM), never returned (hints only), not written to audit logs; clinic accounts never mix with platform credentials | `tests/test_otp.py` |
+| Codes in logs | Messages carrying codes are marked sensitive: console delivery logs "[one-time code hidden]"; provider errors are scrubbed of the code; the test outbox route exists only in development and test | `tests/test_otp.py::test_codes_never_reach_the_logs` |
+| Analytics privacy | Counters only (day, page, source); no cookies, IPs or identifiers; Do Not Track / GPC honoured | `tests/test_website_analytics.py` |
+| Campaign labels | Allow-listed keys, short lower-case values, stored for reporting only | `tests/test_website_analytics.py` |

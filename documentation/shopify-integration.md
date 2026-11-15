@@ -20,15 +20,19 @@ and clinic filled in, and lets you pick a service, location or doctor to presele
 ## Public URL structure
 
 ```
-https://<booking-site>/<clinic>                                   booking page
-https://<booking-site>/<clinic>?service=<service>                 service preselected
-https://<booking-site>/<clinic>?branch=<branch>&doctor=<doctor>   location and doctor preselected
-https://<booking-site>/<clinic>?service=consultation&date=2026-11-20
+https://<booking-site>/<clinic>                                        clinic website
+https://<booking-site>/<clinic>/book                                   booking steps
+https://<booking-site>/<clinic>/book?service=<service>                 service preselected
+https://<booking-site>/<clinic>/book?branch=<branch>&doctor=<doctor>   location and doctor preselected
+https://<booking-site>/<clinic>/book?service=consultation&date=2026-11-20
+https://<booking-site>/<clinic>/book?utm_source=shopify&utm_campaign=diwali   with campaign labels
+https://<booking-site>/<clinic>/<branch>                               a location's page
+https://<booking-site>/<clinic>?service=<service>                      older links: forwarded to /<clinic>/book
 https://<booking-site>/embed/<clinic>?…                           same flow without header/footer, for iframes
 https://<booking-site>/<clinic>/appointments/<reference>?t=<token>  the customer's own booking (link sent to them)
 ```
 
-Example for the demo clinic: `https://booking.mydomain.com/akshar-clinic?service=consultation`.
+Example for the demo clinic: `https://booking.mydomain.com/akshar-clinic/book?service=consultation`.
 
 | Parameter | Alias | Accepts | Effect |
 |---|---|---|---|
@@ -80,6 +84,8 @@ All parameters:
   branch: 'navrangpura',
   doctor: 'dr-meera-joshi',
   date: '2026-11-20',
+  source: 'shopify',                            {%- comment -%} campaign labels (Website analytics) {%- endcomment -%}
+  campaign: 'diwali-offer',
   label: 'Book a consultation',                 {%- comment -%} default "Book appointment" {%- endcomment -%}
   style: 'outline',                             {%- comment -%} solid (default) or outline {%- endcomment -%}
   new_tab: true                                 {%- comment -%} open booking in a new tab {%- endcomment -%}
@@ -161,7 +167,7 @@ campaign, WhatsApp, Google Business Profile, Instagram bio, or a QR code printed
 | Free slots, holds, double-booking prevention | FastAPI, row locks + unique constraints (tests: `test_races.py`) |
 | Price, discount, tax, advance amount | FastAPI calculates from the catalogue; client values ignored |
 | Mobile number verification (one-time code) | FastAPI, token bound to clinic + held slot + number, 30 min |
-| Rate limits & OTP abuse | Per-IP limits on code requests (5/min, 20/h), per-number hourly cap, cooldown, attempt lockout |
+| Rate limits & OTP abuse | Per clinic policy (per destination, IP and session), platform cap per destination, cool-down, attempt lockout; codes by SMS, WhatsApp or email |
 | Payment | Your own UPI QR. A QR, UTR or screenshot never confirms a payment; only authorised staff can verify |
 | Customer data | Never in the Shopify theme, never in public URLs |
 

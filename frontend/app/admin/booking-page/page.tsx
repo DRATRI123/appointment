@@ -297,7 +297,7 @@ function MobileVerification({ orgId, canWrite, initial }: { orgId: string; canWr
     <Card>
       <CardHeader>
         <CardTitle>Mobile verification</CardTitle>
-        <CardDescription>Guests confirm their mobile number or email with a one-time code before an online booking is accepted. Choose SMS, WhatsApp or email and set limits under <Link href="/admin/settings/verification" className="text-primary hover:underline">OTP &amp; verification</Link>.</CardDescription>
+        <CardDescription>Guests confirm their mobile number or email with a one-time code before an online booking is accepted. Choose SMS, WhatsApp or email and set limits under <Link href="/admin/settings/verification" className="text-primary underline underline-offset-4">OTP &amp; verification</Link>.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between rounded-lg border px-4 py-3">

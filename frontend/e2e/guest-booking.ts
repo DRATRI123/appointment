@@ -20,7 +20,8 @@ export interface GuestBooking {
  * test. The page itself never shows it.
  */
 export async function bookAsGuest(page: Page, slug: string, b: GuestBooking): Promise<string> {
-  await page.goto(`${b.base ?? ""}/${slug}${b.query ?? ""}`);
+  // The booking steps live at /{clinic}/book (the clinic website is /{clinic}); the frame page is /embed/{clinic}.
+  await page.goto(b.base ? `${b.base}/${slug}${b.query ?? ""}` : `/${slug}/book${b.query ?? ""}`);
   if (!b.servicePreselected) await page.getByTestId("pick-service").first().click();
   await pickFirstSlot(page);
   await fillDetailsAndVerify(page, b);

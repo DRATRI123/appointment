@@ -36,7 +36,7 @@ test("admin turns on WhatsApp, a guest opts in, staff see the bell and the outbo
   await expect(page.getByTestId("reminder-chip")).toHaveCount(2);
 
   const guest = await (await context.browser()!.newContext()).newPage();
-  await guest.goto(`/${slug}`);
+  await guest.goto(`/${slug}/book`);
   await guest.getByTestId("pick-service").first().click();
   await pickFirstSlot(guest);
   await guest.getByTestId("whatsapp-opt-in").check();

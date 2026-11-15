@@ -383,7 +383,10 @@ function Summary({ service, branch, pro, anyDoctor, when, quote }: {
         {body}
       </aside>
       {/* Phones: a compact bar at the bottom that opens the full summary. */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.25)] backdrop-blur lg:hidden" data-testid="mobile-summary">
+      {/* While the summary is open it covers the page: dim the rest so it reads as a panel, and close on tap or Escape. */}
+      {open ? <button type="button" aria-label="Close booking summary" className="fixed inset-0 z-20 bg-black/30 lg:hidden" onClick={() => setOpen(false)} data-testid="mobile-summary-backdrop" /> : null}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.25)] backdrop-blur lg:hidden" data-testid="mobile-summary"
+        onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
         {open ? <div className="max-h-[50dvh] overflow-y-auto border-b px-4 py-4">{body}</div> : null}
         <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           <span className="min-w-0 flex-1">

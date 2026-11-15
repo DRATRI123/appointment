@@ -254,7 +254,8 @@ def public_website(slug: str, db: DB, response: Response):
     from app.services.website_service import WebsiteService
 
     org, _ = _org(db, slug)
-    response.headers["Cache-Control"] = "public, max-age=30"
+    # Always revalidate: after the clinic publishes, visitors (and the admin checking) must see the new version at once.
+    response.headers["Cache-Control"] = "no-cache"
     return WebsiteService(db, org).public()
 
 

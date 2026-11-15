@@ -51,22 +51,26 @@ async function allowEmbedding(page: Page, clinic: Clinic, origins: string[]) {
 test("every step appears in order and the visitor can go back and change a choice", async ({ page, browser }) => {
   const clinic = await seedClinic(page);
   const guest = await (await browser.newContext()).newPage();
-  await guest.goto(`/${clinic.slug}`);
+  await guest.goto(`/${clinic.slug}/book`);
+  // Order: service → doctor → location → date and time.
   await expect(guest.getByRole("heading", { level: 2, name: "What would you like to book?" })).toBeVisible();
   await expect(guest.getByTestId("pick-service")).toHaveCount(2);
   await guest.getByTestId("pick-service").filter({ hasText: "Consultation" }).click();
-  await expect(guest.getByRole("heading", { name: "Choose a location" })).toBeVisible();
-  await guest.getByTestId("pick-branch").filter({ hasText: "East Side" }).click();
   await expect(guest.getByRole("heading", { name: "Choose your doctor" })).toBeVisible();
   await expect(guest.getByTestId("pick-professional")).toHaveCount(2);
   await expect(guest.getByText("BAMS, MD")).toBeVisible();
   await expect(guest.getByText("12+ yrs experience")).toBeVisible();
   await guest.getByTestId("pick-any").click();
+  await expect(guest.getByRole("heading", { name: "Choose a location" })).toBeVisible();
+  await guest.getByTestId("pick-branch").filter({ hasText: "East Side" }).click();
   await expect(guest.getByRole("heading", { name: "Pick a date and time" })).toBeVisible();
-  // Back goes to the doctor step with the choice kept editable.
+  // Back returns to the previous step with the choice editable.
+  await guest.getByRole("button", { name: "Back" }).click();
+  await expect(guest.getByRole("heading", { name: "Choose a location" })).toBeVisible();
   await guest.getByRole("button", { name: "Back" }).click();
   await expect(guest.getByRole("heading", { name: "Choose your doctor" })).toBeVisible();
   await guest.getByTestId("pick-professional").filter({ hasText: "Dr. Asha Rao" }).click();
+  await guest.getByTestId("pick-branch").filter({ hasText: "East Side" }).click();
   await pickFirstSlot(guest);
   const summary = guest.getByRole("complementary", { name: "Booking summary" });
   await expect(summary).toContainText("East Side");
@@ -125,7 +129,7 @@ test("a wrong code is refused and the booking cannot continue until the number i
   const code = await sendCode(guest);
   const wrong = code === "000000" ? "111111" : "000000";
   await guest.getByTestId("otp-input").fill(wrong);
-  await expect(guest.getByTestId("otp-error")).toContainText("Incorrect code");
+  await expect(guest.getByTestId("otp-error")).toContainText("That code is not right");
   await expect(guest.getByTestId("details-continue")).toBeDisabled();
   await guest.getByTestId("otp-input").fill(code);
   await expect(guest.getByTestId("mobile-verified")).toBeVisible();
@@ -140,21 +144,30 @@ test.describe("on a phone", () => {
   test.use(iphone);
 
   test("books end to end with the bottom summary bar and no sideways scrolling", async ({ page, browser }) => {
+    test.setTimeout(90_000); // website + full booking journey
     const clinic = await seedClinic(page);
     const guest = await (await browser.newContext(iphone)).newPage();
     await guest.goto(`/${clinic.slug}`);
     const noSideScroll = () => guest.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    // The clinic website on a phone: no sideways scrolling, sticky Book bar, menu.
     expect(await noSideScroll()).toBe(true);
+    await expect(guest.getByTestId("floating-book")).toBeVisible();
+    await guest.getByRole("button", { name: "Open menu" }).click();
+    await expect(guest.getByRole("navigation", { name: "Mobile" })).toBeVisible();
+    await guest.keyboard.press("Escape");
+    await guest.getByTestId("floating-book").getByRole("link", { name: "Book appointment" }).click();
+    await guest.waitForURL(new RegExp(`/${clinic.slug}/book`));
     await expect(guest.getByTestId("mobile-summary")).toBeVisible();
     await guest.getByTestId("pick-service").filter({ hasText: "Consultation" }).click();
-    await guest.getByTestId("pick-branch").first().click();
     await guest.getByTestId("pick-professional").first().click();
+    await guest.getByTestId("pick-branch").first().click();
     await pickFirstSlot(guest);
     expect(await noSideScroll()).toBe(true);
     await fillDetailsAndVerify(guest, { name: "Phone Visitor", mobile: randomMobile() });
     await expect(guest.getByTestId("review")).toBeVisible();
     await guest.getByTestId("mobile-summary").getByRole("button").click();
     await expect(guest.getByTestId("mobile-summary")).toContainText("₹600.00");
+    await guest.getByTestId("mobile-summary").getByRole("button").click(); // close the summary again before confirming
     await guest.getByTestId("confirm-booking").click();
     await guest.waitForURL(/\/appointments\/APT-/);
     await expect(guest.getByTestId("upi-qr")).toBeVisible();
@@ -201,7 +214,7 @@ test.describe("embedding", () => {
     const store = await ctx.newPage();
     await store.goto("http://shop.localhost:4999/pages/book");
     const frame = store.frameLocator("#booking");
-    await expect(frame.getByRole("heading", { name: "Choose a location" })).toBeVisible({ timeout: 15_000 });
+    await expect(frame.getByRole("heading", { name: "Choose your doctor" })).toBeVisible({ timeout: 15_000 });
     await expect(frame.getByTestId("booking-shell")).toBeVisible();
     await expect(frame.getByRole("heading", { level: 1 })).toHaveCount(0); // no clinic hero/header inside the frame
     await expect.poll(async () => store.locator("#booking").evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(320);
@@ -220,9 +233,9 @@ test("the admin screen builds links and code and saves allowed websites", async 
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/admin/booking-page");
   const link = page.getByTestId("booking-link");
-  await expect(link).toHaveValue(new RegExp(`/${clinic.slug}$`));
+  await expect(link).toHaveValue(new RegExp(`/${clinic.slug}/book$`));
   await page.getByLabel("Preselect service").selectOption({ label: "Therapy" });
-  await expect(link).toHaveValue(new RegExp(`/${clinic.slug}\\?service=${clinic.services.therapy}$`));
+  await expect(link).toHaveValue(new RegExp(`/${clinic.slug}/book\\?service=${clinic.services.therapy}$`));
   await expect(page.getByTestId("liquid-code")).toContainText(`clinic: '${clinic.slug}'`);
   await expect(page.getByTestId("liquid-code")).toContainText(`service: '${clinic.services.therapy}'`);
   await page.getByTestId("liquid-code-copy").click();
