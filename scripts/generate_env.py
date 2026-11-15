@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         pass
     print(f"Wrote {args.output} ({args.env}) for https://{domain}")
     print("Now: 1) save DATA_ENCRYPTION_KEY and BACKUP_ENCRYPTION_KEY in your password manager,")
-    print("     2) fill in the SMS / email provider settings, 3) docker compose up -d --build")
+    print("     2) fill in the SMS / email provider settings, 3) run deployment/scripts/deploy.sh")
     return 0
 
 

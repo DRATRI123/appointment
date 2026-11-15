@@ -1,0 +1,143 @@
+# Shared service definitions for every Docker environment. Never used alone: always add one environment file.
+#
+#   Development (hot reload, local PostgreSQL):   docker compose -f compose.yaml -f compose.dev.yaml up --build
+#   Automated tests (throw-away PostgreSQL):      docker compose -f compose.yaml -f compose.test.yaml run --rm backend-tests
+#   Staging / production (Nginx, HTTPS):          deployment/scripts/deploy.sh   (uses compose.production.yaml)
+#
+# On a server, .env sets COMPOSE_FILE=compose.yaml:compose.production.yaml, so plain `docker compose ps/logs`
+# always talks to the production stack. Windows development without Docker: START-APP.bat (unchanged).
+# Guide: docs/docker-development.md and docs/production-deployment.md
+#
+# Every container: a non-root user, no Linux capabilities, no privilege escalation, a read-only filesystem where the
+# program allows it (writable paths are tmpfs or named volumes), log rotation, and no Docker socket.
+# PostgreSQL and Redis sit on an internal network with no route to the internet and no published ports.
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "5"}
+
+x-hardening: &hardening
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  logging: *logging
+
+x-backend: &backend
+  <<: *hardening
+  image: appointment-api:${TAG:-latest}
+  build: &backend-build
+    context: ./backend
+    dockerfile: ../deployment/docker/Dockerfile.backend
+    target: runtime
+    args:
+      INSTALL_PG_CLIENT: ${INSTALL_PG_CLIENT:-true}
+  read_only: true
+  tmpfs: ["/tmp:size=64m,mode=1777"]
+  restart: unless-stopped
+  networks: [public, data]
+  volumes:
+    - uploads:/data/uploads
+  depends_on:
+    postgres: {condition: service_healthy}
+
+services:
+  # One-shot release step: migrations + roles/permissions. api and worker start only after it succeeds.
+  migrate:
+    <<: *backend
+    command: ["python", "-m", "app.ops.setup"]
+    restart: "no"
+    networks: [data]
+    healthcheck: {disable: true}
+
+  api:
+    <<: *backend
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+
+  # Background jobs: reminders, message retries, releasing unpaid holds, webhooks, calendar sync.
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.workers.runner", "--interval", "20"]
+    stop_grace_period: 60s
+    healthcheck:                         # healthy while job cycles keep finishing (heartbeat in the database)
+      test: ["CMD", "python", "-m", "app.workers.runner", "--check", "--interval", "20"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    depends_on:
+      postgres: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+
+  web:
+    <<: *hardening
+    image: appointment-web:${TAG:-latest}
+    build:
+      context: ./frontend
+      dockerfile: ../deployment/docker/Dockerfile.frontend
+      target: runtime
+      args:
+        API_INTERNAL_URL: http://api:8000
+        ENABLE_HSTS: ${ENABLE_HSTS:-false}
+        NEXT_PUBLIC_APP_NAME: ${APP_NAME:-Appointment Platform}
+        OS_UPGRADE: ${OS_UPGRADE:-true}
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /app/.next/cache:size=256m,uid=1000,gid=1000,mode=0700
+    restart: unless-stopped
+    networks: [public]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      api: {condition: service_healthy}
+
+  postgres:
+    <<: *hardening
+    image: postgres:17.6-alpine3.22
+    user: "70:70"                       # the image's postgres user from the start: no root, no capabilities needed
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-appointments}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --data-checksums"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/run/postgresql:size=1m,uid=70,gid=70,mode=2775
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    shm_size: 256mb
+    restart: unless-stopped
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+networks:
+  # Reaches the internet (messages, webhooks, certificates). The API trusts forwarded client IPs only from here.
+  public:
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET:-172.28.0.0/16}
+  # Database traffic only: no internet access in either direction.
+  data:
+    internal: true
+
+volumes:
+  postgres_data:
+  uploads:

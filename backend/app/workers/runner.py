@@ -86,7 +86,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true", help="run every job once and exit (non-zero if any failed)")
     parser.add_argument("--interval", type=int, default=60, help="seconds to sleep between cycles")
+    parser.add_argument("--check", action="store_true", help="health check: exit 0 if a worker finished a cycle recently")
     args = parser.parse_args(argv)
+    if args.check:
+        from app.core.database import session_scope
+        from app.services import ops_service
+
+        with session_scope() as db:
+            return 0 if ops_service.worker_alive(db, interval_seconds=args.interval) else 1
     configure_logging()
     runner = Runner(interval=args.interval)
     signal.signal(signal.SIGTERM, runner.stop)

@@ -72,3 +72,14 @@ def test_analytics_needs_report_permission_and_valid_range(client, clinic):
     assert client.get("/api/v1/website/analytics", headers=rec).status_code == 403
     r = client.get("/api/v1/website/analytics", params={"from_date": "2026-01-10", "to_date": "2026-01-01"}, headers=clinic.h)
     assert r.status_code == 422
+
+
+def test_today_is_the_clinics_date_not_the_servers(monkeypatch):
+    """At 20:00 UTC it is already the next day in India: the default report range must include it."""
+    from datetime import UTC, date, datetime
+    from types import SimpleNamespace
+
+    from app.services import website_analytics_service as svc
+
+    monkeypatch.setattr(svc, "utcnow", lambda: datetime(2026, 11, 15, 20, 0, tzinfo=UTC))
+    assert svc.WebsiteAnalyticsService(None, SimpleNamespace(timezone="Asia/Kolkata", id=1)).today() == date(2026, 11, 16)

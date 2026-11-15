@@ -1,0 +1,257 @@
+# Staging and production (same hardened stack; APP_ENV in .env decides which). Started by
+# deployment/scripts/deploy.sh, which creates .env with fresh secrets, refuses example values, backs up before every
+# migration and checks health afterwards. Manually:
+#
+#   docker compose -f compose.yaml -f compose.production.yaml up -d      (or just `docker compose up -d`: .env sets
+#                                                                         COMPOSE_FILE to these two files)
+#
+# Public ports: only Nginx, 80 and 443. Everything else is reachable only inside Docker.
+# Resource limits suit a 2 vCPU / 8 GB VPS; adjust in the *_MEMORY / *_CPUS settings of .env.
+
+name: ${COMPOSE_PROJECT_NAME:-appointment}
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "5"}
+
+x-hardening: &hardening
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  logging: *logging
+
+# Settings every backend container gets on a server. Secrets come only from .env at run time (never in an image).
+x-server-env: &server-env
+  APP_ENV: ${APP_ENV:?set APP_ENV (staging or production) in .env}
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:?run deployment/scripts/deploy.sh to create .env}@postgres:5432/${POSTGRES_DB:-appointments}
+  REDIS_URL: redis://redis:6379/0
+  COOKIE_SECURE: "true"
+  FRONTEND_URL: https://${DOMAIN:?set DOMAIN in .env}
+  CORS_ORIGINS: https://${DOMAIN}
+  TRUSTED_HOSTS: ${DOMAIN},api,localhost,127.0.0.1
+  FORWARDED_ALLOW_IPS: ${DOCKER_SUBNET:-172.28.0.0/16}
+  STORAGE_LOCAL_PATH: /data/uploads
+  BACKUP_DIR: /data/backups
+  LOG_JSON: "true"
+  DEBUG: "false"
+
+x-server-backend: &server-backend
+  env_file:
+    - path: .env
+      required: true
+  environment: *server-env
+  depends_on: &backend-deps
+    postgres: {condition: service_healthy}
+    redis: {condition: service_healthy}
+
+services:
+  migrate:
+    <<: *server-backend
+    deploy:
+      resources:
+        limits: {memory: 512m, cpus: "1.0", pids: 256}
+
+  api:
+    <<: *server-backend
+    depends_on:
+      <<: *backend-deps
+      migrate: {condition: service_completed_successfully}
+    deploy:
+      resources:
+        limits: {memory: "${API_MEMORY:-1536m}", cpus: "${API_CPUS:-1.5}", pids: 512}
+
+  worker:
+    <<: *server-backend
+    depends_on:
+      <<: *backend-deps
+      migrate: {condition: service_completed_successfully}
+    deploy:
+      resources:
+        limits: {memory: "${WORKER_MEMORY:-512m}", cpus: "${WORKER_CPUS:-0.5}", pids: 256}
+
+  # Daily encrypted, verified backup with retention (BACKUP_* settings); also run by deploy.sh before migrations.
+  backup:
+    <<: [*hardening, *server-backend]
+    image: appointment-api:${TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: ../deployment/docker/Dockerfile.backend
+      target: runtime
+      args:
+        INSTALL_PG_CLIENT: ${INSTALL_PG_CLIENT:-true}
+    command: ["python", "-m", "app.ops.backup", "schedule"]
+    healthcheck: {disable: true}         # its success is tracked instead: /api/v1/health/details and the BackupMissing alert
+    read_only: true
+    tmpfs: ["/tmp:size=512m,mode=1777"]
+    restart: unless-stopped
+    networks: [public, data]          # public only for the optional off-site copy (BACKUP_S3_BUCKET)
+    volumes:
+      - uploads:/data/uploads:ro
+      - backups:/data/backups
+    depends_on:
+      <<: *backend-deps
+      migrate: {condition: service_completed_successfully}
+    deploy:
+      resources:
+        limits: {memory: "${BACKUP_MEMORY:-768m}", cpus: "0.5", pids: 128}
+
+  web:
+    deploy:
+      resources:
+        limits: {memory: "${WEB_MEMORY:-768m}", cpus: "${WEB_CPUS:-1.0}", pids: 256}
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run deployment/scripts/deploy.sh to create .env}
+    # Logs slow statements (never their values), checkpoints and lock waits; enough connections for
+    # 2 API processes x (pool 10 + overflow 20) + the worker and backup.
+    command:
+      - postgres
+      - -c
+      - max_connections=150
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - log_min_duration_statement=1000
+      - -c
+      - log_parameter_max_length=0
+      - -c
+      - log_lock_waits=on
+      - -c
+      - log_checkpoints=on
+      - -c
+      - password_encryption=scram-sha-256
+    stop_grace_period: 60s
+    deploy:
+      resources:
+        limits: {memory: "${POSTGRES_MEMORY:-2g}", cpus: "${POSTGRES_CPUS:-1.5}", pids: 512}
+
+  # Shared rate limits between API processes. Internal network only: no password needed, never reachable from outside.
+  redis:
+    <<: *hardening
+    image: redis:7.4.6-alpine
+    user: "999:1000"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction",
+              "--protected-mode", "yes", "--bind", "0.0.0.0", "--rename-command", "FLUSHALL", "", "--rename-command", "FLUSHDB", "",
+              "--rename-command", "CONFIG", "", "--rename-command", "DEBUG", ""]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 320m, cpus: "0.5", pids: 64}
+
+  # The only container with public ports. Runs as the unprivileged nginx user (inside: 8080/8443).
+  nginx:
+    <<: *hardening
+    image: nginxinc/nginx-unprivileged:1.28.0-alpine3.21
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    ports:
+      - "80:8080"
+      - "443:8443"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,uid=101,gid=101,mode=0700
+      - /etc/nginx/conf.d:size=1m,uid=101,gid=101,mode=0755
+      - /var/cache/nginx:size=64m,uid=101,gid=101,mode=0700
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/nginx/snippets:/etc/nginx/snippets:ro
+      - ./deployment/nginx/templates:/etc/nginx/site-templates:ro
+      - ./deployment/nginx/entrypoint/15-choose-site.envsh:/docker-entrypoint.d/15-choose-site.envsh:ro
+      - ./deployment/nginx/entrypoint/40-reload-certificates.sh:/docker-entrypoint.d/40-reload-certificates.sh:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    restart: unless-stopped
+    networks: [public]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      web: {condition: service_healthy}
+      api: {condition: service_healthy}
+      volume-permissions: {condition: service_completed_successfully}
+    deploy:
+      resources:
+        limits: {memory: 256m, cpus: "1.0", pids: 128}
+
+  # One-shot: gives the certificate volumes to Nginx's user id (101) so certbot can run without root and Nginx can
+  # read the key. Only CAP_CHOWN, only for this step.
+  volume-permissions:
+    <<: *hardening
+    image: certbot/certbot:v4.2.0
+    user: "0:0"
+    cap_add: ["CHOWN"]
+    entrypoint: ["chown", "-R", "101:101", "/etc/letsencrypt", "/var/lib/letsencrypt", "/var/www/certbot"]
+    restart: "no"
+    network_mode: none
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_lib:/var/lib/letsencrypt
+      - certbot_www:/var/www/certbot
+
+  # Renews the Let's Encrypt certificate twice a day (Nginx re-reads it every 6 hours). First issue: deploy.sh.
+  # Runs as Nginx's user id so Nginx can read the private key; it never gets the Docker socket.
+  certbot:
+    <<: *hardening
+    image: certbot/certbot:v4.2.0
+    user: "101:101"
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet --config-dir /etc/letsencrypt --work-dir /var/lib/letsencrypt --logs-dir /tmp; sleep 12h & wait $${!}; done"]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,uid=101,gid=101,mode=0700"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_lib:/var/lib/letsencrypt
+      - certbot_www:/var/www/certbot
+    restart: unless-stopped
+    networks: [public]
+    depends_on:
+      volume-permissions: {condition: service_completed_successfully}
+    deploy:
+      resources:
+        limits: {memory: 256m, cpus: "0.5", pids: 64}
+
+  # Optional: docker compose --profile monitoring up -d prometheus   (reach it over an SSH tunnel; never public)
+  prometheus:
+    <<: *hardening
+    image: prom/prometheus:v3.5.0
+    profiles: ["monitoring"]
+    user: "65534:65534"
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    read_only: true
+    volumes:
+      - ./deployment/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deployment/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    secrets:
+      - metrics_token
+    ports: ["127.0.0.1:9090:9090"]
+    restart: unless-stopped
+    networks: [public, data]
+    deploy:
+      resources:
+        limits: {memory: 512m, cpus: "0.5"}
+
+secrets:
+  metrics_token:
+    environment: METRICS_TOKEN
+
+volumes:
+  redis_data:
+  backups:
+  letsencrypt:
+  certbot_lib:
+  certbot_www:
+  prometheus_data:

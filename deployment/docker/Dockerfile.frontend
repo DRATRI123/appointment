@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1.7
+# The Next.js website.
+#   target "runtime" (default)  production and staging: Next.js standalone server only, no npm/yarn, non-root
+#   target "dev"                docker development: `next dev` with hot reload; the code is bind-mounted
+#
+# Build context: ./frontend   (see frontend/.dockerignore). NEXT_PUBLIC_* values end up in the browser bundle:
+# never put a secret in one.
+
+ARG NODE_IMAGE=node:22.21.1-alpine3.22
+
+FROM ${NODE_IMAGE} AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+# npm ci installs exactly package-lock.json (checked against its integrity hashes). Optional build secret "extra_ca"
+# for building behind a TLS-inspecting proxy; never kept in the image.
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    npm ci --no-audit --no-fund
+
+FROM deps AS dev
+ENV NEXT_TELEMETRY_DISABLED=1 WATCHPACK_POLLING=true
+# compose.dev.yaml keeps these two folders in volumes; they start with the node user's ownership from here.
+RUN mkdir -p .next && chown node:node .next node_modules
+USER node
+EXPOSE 3000
+CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+
+FROM ${NODE_IMAGE} AS build
+WORKDIR /app
+# Read by next.config.ts at build time (rewrites and security headers are compiled into the build).
+ARG API_INTERNAL_URL=http://api:8000
+ARG ENABLE_HSTS=false
+ARG NEXT_PUBLIC_APP_NAME="Appointment Platform"
+ENV NEXT_OUTPUT=standalone NEXT_TELEMETRY_DISABLED=1 NODE_ENV=production \
+    API_INTERNAL_URL=$API_INTERNAL_URL ENABLE_HSTS=$ENABLE_HSTS NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+ARG API_INTERNAL_URL=http://api:8000
+# The standalone server needs only node: remove the package managers (and their dependencies) from the final image,
+# and apply Alpine security updates (OS_UPGRADE=false only for test builds where the Alpine mirrors are unreachable).
+ARG OS_UPGRADE=true
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /usr/local/bin/npm /usr/local/bin/npx \
+           /usr/local/bin/corepack /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+ && if [ "$OS_UPGRADE" = "true" ]; then apk upgrade --no-cache; fi
+# Also read at runtime by proxy.ts (each clinic's embed policy).
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0 API_INTERNAL_URL=$API_INTERNAL_URL
+# Code is owned by root (read-only for the app); only the cache folder is writable (a tmpfs in compose).
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+RUN mkdir -p .next/cache && chown node:node .next/cache
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+CMD ["node", "server.js"]

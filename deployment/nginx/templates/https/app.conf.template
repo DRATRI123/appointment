@@ -1,0 +1,86 @@
+# HTTPS site for ${DOMAIN} (used once a certificate exists in /etc/letsencrypt/live/${DOMAIN}/).
+# This file is a template: ${DOMAIN} is filled in when the container starts; Nginx's own $variables are untouched.
+
+# --- Port 80: certificate challenges, then everything goes to HTTPS -------------------------------------------------
+server {
+    listen 8080 default_server;
+    server_name _;
+    include /etc/nginx/snippets/health.conf;
+    include /etc/nginx/snippets/acme.conf;
+    location / { return 444; }            # unknown host names (IP scans, wrong domains): close the connection
+}
+server {
+    listen 8080;
+    server_name ${DOMAIN};
+    include /etc/nginx/snippets/acme.conf;
+    location / { return 301 https://$host$request_uri; }
+}
+
+# --- Port 443 ----------------------------------------------------------------------------------------------------------
+server {
+    listen 8443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;              # unknown host names get no certificate and no content
+}
+
+server {
+    listen 8443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include /etc/nginx/snippets/tls.conf;
+
+    limit_conn conn_per_ip 60;
+
+    # Security headers (Content-Security-Policy, HSTS, frame rules, nosniff, ...) come from the app itself, per page.
+
+    # Prometheus scrapes the API inside the Docker network; never from the internet.
+    location = /metrics { return 404; }
+
+    # Sign-in, one-time codes, passwords, two-step codes, booking verification: strict per-IP limit on POSTs.
+    location ^~ /api/v1/auth/ {
+        limit_req zone=sign_in burst=20 nodelay;
+        limit_req zone=per_ip burst=60 nodelay;
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_pass http://api;
+    }
+    location ~ ^/api/v1/public/organizations/[^/]+/verification/ {
+        limit_req zone=sign_in burst=20 nodelay;
+        limit_req zone=per_ip burst=60 nodelay;
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_pass http://api;
+    }
+
+    location /api/ {
+        limit_req zone=per_ip burst=80 nodelay;
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_pass http://api;
+    }
+    location /media/ {
+        limit_req zone=per_ip burst=80 nodelay;
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_pass http://api;
+    }
+    location ~ ^/(docs|redoc)(/|$) {
+        limit_req zone=per_ip burst=20 nodelay;
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_pass http://api;
+    }
+
+    # Next.js build files have content hashes in their names: safe to cache for a year.
+    location ^~ /_next/static/ {
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_pass http://web;
+        access_log off;
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location / {
+        limit_req zone=per_ip burst=100 nodelay;
+        include /etc/nginx/snippets/proxy.conf;
+        proxy_pass http://web;
+    }
+}

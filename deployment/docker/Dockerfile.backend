@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1.7
+# One image for the API, the worker, the backup scheduler and the one-shot migrate step (different commands).
+#
+#   target "runtime" (default)  production and staging: exact hashed packages, no compilers, no tests, non-root
+#   target "dev"                docker development and the test stack: adds pytest/ruff; code is bind-mounted
+#
+# Build context: ./backend   (see backend/.dockerignore: no .env, databases, uploads or backups ever enter an image)
+# Secrets are never baked in: every secret arrives at run time from the server's .env.
+
+ARG PYTHON_IMAGE=python:3.13.18-slim-trixie
+
+# --------------------------------------------------------------------------------------------------------------------
+FROM ${PYTHON_IMAGE} AS base
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    VIRTUAL_ENV=/opt/venv PATH=/opt/venv/bin:$PATH
+WORKDIR /app
+
+# --------------------------------------------------------------------------------------------------------------------
+# Python packages from requirements.lock: exact versions, every file checked against its sha256, wheels only (nothing
+# is compiled during the build). The optional build secret "extra_ca" is a CA bundle for building behind a
+# TLS-inspecting proxy; it is mounted only for this step and never stored in a layer.
+FROM base AS deps
+COPY requirements.lock .
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -s /run/secrets/extra_ca ]; then export PIP_CERT=/run/secrets/extra_ca; fi; \
+    python -m venv /opt/venv \
+ && pip install --require-hashes --only-binary=:all: --no-deps -r requirements.lock
+
+# --------------------------------------------------------------------------------------------------------------------
+FROM deps AS dev
+COPY requirements.txt requirements-dev.txt ./
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -s /run/secrets/extra_ca ]; then export PIP_CERT=/run/secrets/extra_ca; fi; \
+    pip install -r requirements-dev.txt
+RUN useradd --uid 10001 --create-home app && mkdir -p /data/uploads /data/backups && chown -R app:app /data
+USER 10001:10001
+EXPOSE 8000
+# The code is bind-mounted over /app by compose.dev.yaml; --reload restarts on every save (development only:
+# compose.production.yaml uses the runtime target, which has no reloader and no dev tools).
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--no-server-header"]
+
+# --------------------------------------------------------------------------------------------------------------------
+FROM base AS runtime
+# PostgreSQL client tools for pg_dump / pg_restore (backups). Debian 13 ships client 17: matches the postgres:17 server.
+# Security updates for the base system are applied at build time; rebuild regularly (update.sh does).
+# INSTALL_PG_CLIENT=false skips both (only for test builds where Debian mirrors are unreachable; backups need it).
+ARG INSTALL_PG_CLIENT=true
+RUN --mount=type=secret,id=extra_ca,required=false \
+    useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app \
+ && mkdir -p /data/uploads /data/backups && chown app:app /data/uploads /data/backups \
+ && [ "$INSTALL_PG_CLIENT" = "true" ] || exit 0; \
+    sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+ && APT_CA=""; if [ -s /run/secrets/extra_ca ]; then APT_CA="-o Acquire::https::CAInfo=/run/secrets/extra_ca"; fi \
+ && apt-get $APT_CA update \
+ && apt-get $APT_CA -y upgrade \
+ && apt-get $APT_CA install -y --no-install-recommends postgresql-client \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=deps /opt/venv /opt/venv
+# Application code belongs to root and is read-only for the app user: a compromised process cannot rewrite it.
+COPY . .
+# pip is not needed at run time: remove it from the virtualenv and the base image.
+RUN python -m compileall -q -j 0 app migrations \
+ && rm -rf /opt/venv/bin/pip* /opt/venv/lib/python3.13/site-packages/pip* /usr/local/bin/pip* /usr/local/lib/python3.13/site-packages/pip*
+
+USER 10001:10001
+ENV STORAGE_LOCAL_PATH=/data/uploads BACKUP_DIR=/data/backups LOG_JSON=true WEB_CONCURRENCY=2
+EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=4)"]
+# Exec form so SIGTERM reaches uvicorn directly (graceful shutdown). Client IPs are resolved by the app itself from
+# FORWARDED_ALLOW_IPS, so uvicorn's own proxy-header handling is off. WEB_CONCURRENCY processes (about one per CPU
+# core) share request metrics through PROMETHEUS_MULTIPROC_DIR (a tmpfs). Keep-alive (75 s) outlasts Nginx's idle
+# upstream timeout (60 s), so the proxy always closes an idle connection first (avoids 502s from a reuse race).
+# No uvicorn access log: query strings can hold patient search terms. Nginx logs every request, path only.
+CMD ["sh", "-c", "export PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus && rm -rf \"$PROMETHEUS_MULTIPROC_DIR\" && mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers \"$WEB_CONCURRENCY\" --no-proxy-headers --no-server-header --no-access-log --timeout-keep-alive 75 --timeout-graceful-shutdown 20"]

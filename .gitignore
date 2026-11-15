@@ -45,3 +45,6 @@ Thumbs.db
 # Progress of Super admin → Database tasks (local state, not code)
 database-task.json
 saving-paused.json
+
+# deploy.sh release history (server only)
+/.deploy/

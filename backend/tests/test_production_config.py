@@ -23,6 +23,9 @@ GOOD_PRODUCTION = {
     "email_provider": "smtp",
     "sms_provider": "msg91",
     "whatsapp_provider": "disabled",
+    "smtp_host": "smtp.example-mail.in",
+    "smtp_from": "bookings@example-clinic.in",
+    "msg91_auth_key": "msg91-account-key-for-tests",
     "backup_encryption_key": base64.b64encode(os.urandom(32)).decode(),
 }
 
@@ -138,3 +141,16 @@ def test_development_needs_an_explicit_choice_for_real_messages_or_remote_data()
     assert _local(app_env="development", email_provider="smtp", dev_allow_real_messages=True).email_provider == "smtp"
     with pytest.raises(ValidationError, match="DEV_ALLOW_REMOTE_DATABASE"):
         _local(app_env="development", database_url="postgresql+psycopg://u:p@10.0.0.5/live")
+
+
+@pytest.mark.parametrize("overrides, message", [
+    ({"smtp_host": None}, "EMAIL_PROVIDER=smtp needs SMTP_HOST"),
+    ({"msg91_auth_key": ""}, "SMS_PROVIDER=msg91 needs MSG91_AUTH_KEY"),
+    ({"sms_provider": "twilio"}, "SMS_PROVIDER=twilio needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_SMS_FROM"),
+    ({"whatsapp_provider": "meta"}, "WHATSAPP_PROVIDER=meta needs WHATSAPP_CLOUD_TOKEN"),
+    ({"email_provider": "disabled", "sms_provider": "disabled"}, "needs at least one of EMAIL/SMS/WHATSAPP_PROVIDER"),
+])
+def test_a_chosen_provider_must_have_its_account_details(overrides, message):
+    """Otherwise every message would fail later without anyone noticing."""
+    with pytest.raises(ValidationError, match=message):
+        _settings(**overrides)

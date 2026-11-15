@@ -219,6 +219,7 @@ class Settings(BaseSettings):
             if provider == "console":
                 problems.append(f"{name} cannot be console here (messages would only be written to the log): "
                                 "set a real provider, or 'disabled' if clinics bring their own accounts")
+        problems.extend(self._missing_provider_settings())
         if self.otp_test_code:
             problems.append("OTP_TEST_CODE must not be set (it is for local load tests only)")
         if not self.platform_admin_require_mfa:
@@ -267,6 +268,26 @@ class Settings(BaseSettings):
         if problems:
             raise ValueError(f"Unsafe {self.app_env} configuration:\n  - " + "\n  - ".join(problems))
         return self
+
+    def _missing_provider_settings(self) -> list[str]:
+        """A chosen provider without its account details would fail every message later, silently. Refuse it now."""
+        need = {
+            ("EMAIL_PROVIDER", "smtp"): ("smtp_host", "smtp_from"),
+            ("SMS_PROVIDER", "msg91"): ("msg91_auth_key",),
+            ("SMS_PROVIDER", "twilio"): ("twilio_account_sid", "twilio_auth_token", "twilio_sms_from"),
+            ("WHATSAPP_PROVIDER", "meta"): ("whatsapp_cloud_token", "whatsapp_cloud_phone_number_id"),
+            ("WHATSAPP_PROVIDER", "twilio"): ("twilio_account_sid", "twilio_auth_token", "twilio_whatsapp_from"),
+        }
+        chosen = {"EMAIL_PROVIDER": self.email_provider, "SMS_PROVIDER": self.sms_provider, "WHATSAPP_PROVIDER": self.whatsapp_provider}
+        out = []
+        for (setting, provider), fields in need.items():
+            if chosen[setting] == provider:
+                missing = [f.upper() for f in fields if not (getattr(self, f) or "").strip()]
+                if missing:
+                    out.append(f"{setting}={provider} needs {', '.join(missing)} (or set {setting}=disabled)")
+        if self.otp_provider == "notifications" and all(v == "disabled" for v in chosen.values()):
+            out.append("OTP_PROVIDER=notifications needs at least one of EMAIL/SMS/WHATSAPP_PROVIDER enabled to send sign-in codes")
+        return out
 
     def _check_local(self) -> None:
         """Development and test must not touch real people or real data by accident (production credentials copied

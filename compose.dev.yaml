@@ -1,0 +1,73 @@
+# Docker development: the same services as production, with hot reload and a local PostgreSQL.
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up --build
+#   website http://localhost:3000   API http://localhost:8000/docs   PostgreSQL localhost:5433 (user app)
+#
+# Saving a file in backend/ or frontend/ reloads that service (polling, so it also works on Windows).
+# Messages are only printed to the logs (console providers). Every port listens on 127.0.0.1 only.
+# The password below is for this throw-away local database only; servers refuse it (deploy.sh makes random ones).
+# No Docker? START-APP.bat still runs everything on Windows directly.
+
+name: appointment-dev
+
+x-dev-backend: &dev-backend
+  image: appointment-api:dev
+  build:
+    context: ./backend
+    dockerfile: ../deployment/docker/Dockerfile.backend
+    target: dev
+  read_only: false
+  env_file:
+    - path: .env.development.example
+      required: true
+  environment:
+    APP_ENV: development
+    DATABASE_URL: postgresql+psycopg://app:dev-only-password@postgres:5432/appointments
+    FRONTEND_URL: http://localhost:3000
+    CORS_ORIGINS: http://localhost:3000
+    FORWARDED_ALLOW_IPS: ${DOCKER_SUBNET:-172.28.0.0/16}
+    STORAGE_LOCAL_PATH: /data/uploads
+    BACKUP_DIR: /data/backups
+    WATCHFILES_FORCE_POLLING: "true"
+  volumes:
+    - ./backend:/app
+    - uploads:/data/uploads
+
+services:
+  migrate:
+    <<: *dev-backend
+
+  api:
+    <<: *dev-backend
+    ports: ["127.0.0.1:8000:8000"]
+
+  worker:
+    <<: *dev-backend
+
+  web:
+    image: appointment-web:dev
+    build:
+      context: ./frontend
+      dockerfile: ../deployment/docker/Dockerfile.frontend
+      target: dev
+    read_only: false
+    # Writes a few files into your frontend folder (next-env.d.ts, .next). On Windows/macOS nothing to set; on Linux
+    # use your own user id if it is not 1000: DEV_UID=$(id -u) DEV_GID=$(id -g) docker compose ... up
+    user: "${DEV_UID:-1000}:${DEV_GID:-1000}"
+    tmpfs: !override ["/tmp"]
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules          # keep the image's Linux packages (not the Windows ones from your PC)
+      - /app/.next
+    ports: ["127.0.0.1:3000:3000"]
+    healthcheck:
+      start_period: 120s           # the first page compiles on demand
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: dev-only-password
+    ports: ["127.0.0.1:5433:5432"]
+    networks: [public, data]       # public only so the port above can reach your PC

@@ -29,18 +29,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: pip
           cache-dependency-path: |
-            backend/requirements.txt
+            backend/requirements.lock
             backend/requirements-dev.txt
-      - run: pip install -r requirements-dev.txt
+      - name: Install the exact versions the Docker image ships (hash-checked), then the dev tools
+        run: |
+          pip install --require-hashes -r requirements.lock
+          pip install -r requirements-dev.txt
       - name: Lint (ruff)
         run: ruff check app tests
       - name: Security lint (bandit)
         run: bandit -q -r app
       - name: Dependency vulnerabilities (pip-audit)
-        run: pip-audit -r requirements.txt
+        run: pip-audit --require-hashes --disable-pip -r requirements.lock
       - name: Migrations apply cleanly and match the models (SQLite)
         run: alembic upgrade head && alembic check
         env:
@@ -101,9 +104,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: backend/requirements.lock
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -112,7 +115,7 @@ jobs:
       - name: Start API
         working-directory: backend
         run: |
-          pip install -r requirements.txt
+          pip install --require-hashes -r requirements.lock
           alembic upgrade head
           python ../scripts/seed.py
           PLATFORM_ADMIN_PASSWORD=ci-only-Admin-pass1 python ../scripts/create_platform_admin.py --email root@example.com
@@ -138,26 +141,43 @@ jobs:
         run: tail -n 200 uvicorn.log worker.log next.log
 
   docker:
-    # The production images build, the stack configuration is valid, and the alert rules parse.
+    # The production images build hardened, every compose file is valid, Nginx accepts its configuration,
+    # the deployment scripts pass ShellCheck and the alert rules parse.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Build API image
-        run: docker build -f infrastructure/docker/Dockerfile.backend -t appointment-api:ci backend
+        run: docker build -f deployment/docker/Dockerfile.backend -t appointment-api:ci backend
       - name: Build web image
-        run: docker build -f infrastructure/docker/Dockerfile.frontend -t appointment-web:ci frontend
-      - name: Images contain no secrets or local data
+        run: docker build -f deployment/docker/Dockerfile.frontend -t appointment-web:ci frontend
+      - name: Images hold no secrets or local data, run as non-root, code is read-only
         run: |
-          docker run --rm appointment-api:ci sh -c 'test ! -e /app/.env && test ! -e /app/data && test ! -e /app/uploads && command -v pg_dump && id -u | grep -qv "^0$"'
-      - name: Compose file is valid with a generated .env
+          docker run --rm appointment-api:ci sh -c 'test ! -e /app/.env && test ! -e /app/data && test ! -e /app/uploads && test ! -e /app/tests \
+            && command -v pg_dump && ! command -v pip && [ "$(id -u)" != 0 ] && ! touch /app/app/x 2>/dev/null'
+          docker run --rm appointment-web:ci sh -c 'test ! -e /app/.env.local && ! command -v npm && [ "$(id -u)" != 0 ] && ! touch /app/server.js 2>/dev/null'
+      - name: Compose files are valid (development, test, production with a generated .env)
         run: |
-          python3 scripts/generate_env.py --domain ci.example.com
+          docker compose -f compose.yaml -f compose.dev.yaml --env-file /dev/null config --quiet
+          docker compose -f compose.yaml -f compose.test.yaml --env-file /dev/null config --quiet
+          python3 scripts/generate_env.py --domain ci.example-clinic.in
           docker compose config --quiet
           docker compose --profile monitoring config --quiet
           rm .env
+      - name: Nginx accepts its configuration (HTTPS mode, with a throw-away certificate)
+        run: |
+          mkdir -p /tmp/le/live/ci.test && openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+            -subj /CN=ci.test -keyout /tmp/le/live/ci.test/privkey.pem -out /tmp/le/live/ci.test/fullchain.pem 2>/dev/null
+          chmod -R a+rX /tmp/le
+          docker run --rm -e DOMAIN=ci.test --add-host api:127.0.0.1 --add-host web:127.0.0.1 \
+            -v "$PWD/deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" -v "$PWD/deployment/nginx/snippets:/etc/nginx/snippets:ro" \
+            -v "$PWD/deployment/nginx/templates:/etc/nginx/site-templates:ro" \
+            -v "$PWD/deployment/nginx/entrypoint/15-choose-site.envsh:/docker-entrypoint.d/15-choose-site.envsh:ro" \
+            -v /tmp/le:/etc/letsencrypt:ro nginxinc/nginx-unprivileged:1.28.0-alpine3.21 nginx -t
+      - name: Deployment scripts (ShellCheck)
+        run: shellcheck -x -P SCRIPTDIR -s bash deployment/scripts/*.sh && shellcheck -s sh deployment/nginx/entrypoint/*
       - name: Prometheus config and alert rules
         run: |
           echo dummy-token-for-validation > /tmp/metrics_token
-          docker run --rm --entrypoint promtool -v "$PWD/infrastructure/monitoring:/etc/prometheus:ro" \
+          docker run --rm --entrypoint promtool -v "$PWD/deployment/monitoring:/etc/prometheus:ro" \
             -v /tmp/metrics_token:/run/secrets/metrics_token:ro prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml

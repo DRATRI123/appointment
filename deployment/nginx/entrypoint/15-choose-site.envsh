@@ -1,0 +1,15 @@
+#!/bin/sh
+# Runs inside the Nginx image's entrypoint before the templates are filled in.
+# Chooses HTTPS mode when the certificate for DOMAIN exists, otherwise bootstrap mode (HTTP challenge only).
+if [ -z "${DOMAIN:-}" ]; then
+    echo "nginx: DOMAIN is not set; refusing to start" >&2
+    exit 1
+fi
+if [ -s "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ] && [ -s "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ]; then
+    export NGINX_ENVSUBST_TEMPLATE_DIR=/etc/nginx/site-templates/https
+    echo "nginx: certificate found for ${DOMAIN}: HTTPS mode"
+else
+    export NGINX_ENVSUBST_TEMPLATE_DIR=/etc/nginx/site-templates/bootstrap
+    echo "nginx: no certificate yet for ${DOMAIN}: bootstrap mode (Let's Encrypt challenge only)"
+fi
+export NGINX_ENVSUBST_FILTER='^DOMAIN$'

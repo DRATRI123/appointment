@@ -65,5 +65,5 @@ def test_server_templates_pass_once_deploy_fills_them(tmp_path, env):
     # What compose.production.yaml derives from DOMAIN for the API container:
     values.update(frontend_url=f"https://{domain}", cors_origins=f"https://{domain}", trusted_hosts=domain,
                   forwarded_allow_ips="172.28.0.0/16", cookie_secure="true", database_url="postgresql+psycopg://app:x@postgres:5432/appointments",
-                  smtp_host="smtp.example.com", smtp_from="bookings@example-clinic.in")
+                  smtp_host="smtp.example.com", smtp_from="bookings@example-clinic.in", msg91_auth_key="the-clinic-msg91-key")  # filled in by the operator
     assert _load(values).app_env == env

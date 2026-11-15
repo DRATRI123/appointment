@@ -60,8 +60,9 @@ def analytics(db: DB, ctx: Analyst, from_date: _date | None = None, to_date: _da
     from app.core.exceptions import ValidationFailed
     from app.services.website_analytics_service import WebsiteAnalyticsService
 
-    end = to_date or _date.today()
+    service = WebsiteAnalyticsService(db, ctx.organization)
+    end = to_date or service.today()  # the clinic's own date, not the server's (they differ for hours every night)
     start = from_date or end - timedelta(days=29)
     if start > end or (end - start).days > 366:
         raise ValidationFailed("Choose a range of up to one year.", code="invalid_range")
-    return WebsiteAnalyticsService(db, ctx.organization).report(start, end)
+    return service.report(start, end)

@@ -52,6 +52,13 @@ def record_heartbeat(db: Session, *, interval_seconds: int) -> None:
     })
 
 
+def worker_alive(db: Session, *, interval_seconds: int) -> bool:
+    """For the container health check: the worker finished a cycle recently (3 intervals, at least 2 minutes)."""
+    hb = _get(db, HEARTBEAT_KEY)
+    hb_at = _parse(hb.get("at")) if hb else None
+    return bool(hb_at and utcnow() - hb_at <= timedelta(seconds=max(120, 3 * interval_seconds)))
+
+
 def record_job(db: Session, name: str, *, ok: bool, duration_ms: int, result: Any = None, error: str | None = None) -> None:
     previous = _get(db, JOB_KEY_PREFIX + name) or {}
     now = utcnow().isoformat()

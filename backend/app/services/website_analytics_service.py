@@ -37,7 +37,7 @@ class WebsiteAnalyticsService:
     def record(self, metric: str, key: str | None, source: str | None) -> None:
         if metric not in METRICS:
             return
-        values = {"organization_id": self.org.id, "day": utcnow().astimezone(self.tz).date(), "metric": metric, "key": clean_key(key), "source": clean_source(source), "count": 1}
+        values = {"organization_id": self.org.id, "day": self.today(), "metric": metric, "key": clean_key(key), "source": clean_source(source), "count": 1}
         dialect = self.db.get_bind().dialect.name
         if dialect == "postgresql":
             from sqlalchemy.dialects.postgresql import insert
@@ -46,6 +46,9 @@ class WebsiteAnalyticsService:
         stmt = insert(WebsiteDailyStat).values(**values)
         stmt = stmt.on_conflict_do_update(index_elements=["organization_id", "day", "metric", "key", "source"], set_={"count": WebsiteDailyStat.count + 1})
         self.db.execute(stmt)
+
+    def today(self) -> date:
+        return utcnow().astimezone(self.tz).date()
 
     def report(self, start: date, end: date) -> dict[str, Any]:
         rows = self.db.execute(select(WebsiteDailyStat.day, WebsiteDailyStat.metric, WebsiteDailyStat.key, WebsiteDailyStat.source, WebsiteDailyStat.count)
