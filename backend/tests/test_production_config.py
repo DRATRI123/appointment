@@ -101,3 +101,9 @@ def test_backup_settings_come_from_the_settings_file(monkeypatch, tmp_path):
 
 def test_development_defaults_still_work():
     assert Settings(_env_file=None).app_env == "development"
+
+
+def test_the_load_test_otp_code_is_refused_outside_development():
+    with pytest.raises(ValidationError, match="OTP_TEST_CODE"):
+        _settings(otp_test_code="123456")
+    assert Settings(_env_file=None, app_env="development", otp_test_code="123456").otp_test_code == "123456"

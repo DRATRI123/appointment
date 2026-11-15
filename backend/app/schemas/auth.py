@@ -91,3 +91,32 @@ class SessionRead(APIModel):
     last_seen_at: datetime | None
     expires_at: datetime
     is_current: bool = False
+
+
+class MFAVerifyRequest(APIModel):
+    mfa_token: str = Field(min_length=20, max_length=2048)
+    code: str = Field(min_length=6, max_length=16, description="6-digit authenticator code, or a backup code like 7KQ4-M2XD")
+
+
+class MFACodeRequest(APIModel):
+    code: str = Field(min_length=6, max_length=16)
+
+
+class MFADisableRequest(MFACodeRequest):
+    password: str | None = Field(default=None, max_length=256)
+
+
+class MFASetup(APIModel):
+    secret: str
+    otpauth_uri: str
+    qr_data_url: str
+
+
+class MFARecoveryCodes(APIModel):
+    recovery_codes: list[str]
+
+
+class MFAStatus(APIModel):
+    enabled: bool
+    enabled_at: datetime | None = None
+    recovery_codes_left: int = 0

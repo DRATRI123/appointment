@@ -49,7 +49,9 @@ export const publicPayments = {
     if (data.payer_upi_id) form.append("payer_upi_id", data.payer_upi_id);
     if (data.notes) form.append("notes", data.notes);
     if (data.screenshot) form.append("screenshot", data.screenshot);
-    return api.post<Checkout>(`/public/organizations/${slug}/appointments/${reference}/payment/submit`, form, { searchParams: { access_token: access_token ?? undefined } });
+    // One UTR for one appointment is one submission: retries with the same key return the first answer.
+    return api.post<Checkout>(`/public/organizations/${slug}/appointments/${reference}/payment/submit`, form, {
+      searchParams: { access_token: access_token ?? undefined }, headers: { "Idempotency-Key": `utr:${reference}:${data.utr.replace(/[^A-Za-z0-9]/g, "")}`.slice(0, 100) } });
   },
 };
 

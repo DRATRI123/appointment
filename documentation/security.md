@@ -247,3 +247,63 @@ Outcomes are recorded for the System health page and the `BackupMissing` alert. 
 | Codes in logs | Messages carrying codes are marked sensitive: console delivery logs "[one-time code hidden]"; provider errors are scrubbed of the code; the test outbox route exists only in development and test | `tests/test_otp.py::test_codes_never_reach_the_logs` |
 | Analytics privacy | Counters only (day, page, source); no cookies, IPs or identifiers; Do Not Track / GPC honoured | `tests/test_website_analytics.py` |
 | Campaign labels | Allow-listed keys, short lower-case values, stored for reporting only | `tests/test_website_analytics.py` |
+
+## Two-step sign-in, key rotation and idempotency (November 2026)
+
+### Two-step sign-in (administrator MFA)
+
+* Any account can turn on an authenticator app (TOTP, RFC 6238: 6 digits, 30-second steps, ±1 step for clock drift)
+  under **Profile & security**. The secret is stored AES-256-GCM encrypted; ten single-use backup codes are shown
+  once and stored only as HMACs.
+* Sign-in with password, mobile code or Google then answers `401 mfa_required` with a 5-minute `mfa_token` instead
+  of a session; `POST /auth/mfa/verify` with a current code (or a backup code) issues the session. A code is never
+  accepted twice (the last used time step is stored). Wrong codes count towards the same lockout as wrong passwords
+  (5 tries, 15 minutes). Every enable, disable, backup-code use and lockout is audit-logged.
+* A clinic can require it: **Organization settings → Security → require_admin_mfa**. Owners and administrators
+  without it get `403 mfa_setup_required` on the clinic's admin API (the web app sends them to the set-up page); they
+  can still reach their own profile to set it up. The setting can only be switched on by someone who already uses
+  two-step sign-in, so an owner cannot lock themselves out, and while it is on they cannot switch theirs off.
+* API keys are unaffected (they are scoped, IP-restrictable server credentials, see "Developer API keys").
+
+### Field encryption keys: ids and rotation
+
+* Values are written as `enc:v2:<key id>:<nonce|ciphertext|tag>`; the key id is bound to the ciphertext as
+  associated data, and every value has its own random 96-bit nonce. Older `enc:v1:` values remain readable.
+* Rotate without downtime: set a new `DATA_ENCRYPTION_KEY`, move the old one to `DATA_ENCRYPTION_PREVIOUS_KEYS`,
+  restart, run `python -m app.ops.rotate_keys` (add `--dry-run` first), then remove the old key once it reports
+  nothing left. The command also encrypts any value still stored as plain text from before encryption existed.
+* Never silently plain text: a missing key in staging/production stops the app at start-up; an unknown key id or a
+  modified value raises an error instead of returning garbage.
+* Protected fields: clinical notes, calendar/video integration credentials, the clinic's own SMS/email/WhatsApp
+  provider secrets, webhook signing secrets, two-step sign-in secrets, and stored idempotent responses (which can
+  contain a booking's access token). Passwords are Argon2id hashes (never reversible); one-time codes, refresh
+  tokens, API keys and backup codes are stored as keyed hashes.
+
+### Whole-database encryption (SQLCipher) — evaluated, not adopted
+
+SQLCipher would encrypt the SQLite file itself, but it replaces Python's built-in SQLite driver with a separately
+built one (e.g. `sqlcipher3`) plus its native library on every machine, Windows included, which makes setup and
+upgrades more fragile; the database key would also have to be supplied at every start. It does not apply to
+PostgreSQL, where production is headed. Recommended instead, and documented for both:
+
+* **Windows (local or a clinic PC):** BitLocker on the drive that holds `backend/data/` and `backend/uploads/`.
+* **Servers:** the provider's encrypted volumes, or LUKS on Linux; PostgreSQL managed services encrypt at rest.
+* **Backups:** already AES-256-GCM encrypted with `BACKUP_ENCRYPTION_KEY` (kept off the server).
+
+The most sensitive fields are additionally encrypted by the application (above), so a copied database file alone does
+not expose them.
+
+### Idempotency keys
+
+`POST /appointments` (staff and API), `POST /public/organizations/{slug}/appointments` and the UPI reference
+submission accept an `Idempotency-Key` header. A retry with the same key and the same body returns the first
+response (`Idempotent-Replayed: true`) and does nothing twice; the same key with a different body is rejected
+(`422 idempotency_key_reused`). Keys are scoped to the clinic, the operation and the caller (a visitor cannot replay
+someone else's key), stored response bodies are encrypted, and they expire after 24 hours. The booking page sends one
+automatically. This complements, not replaces, the database constraints that make a double booking impossible.
+
+### Load-test switch
+
+`OTP_TEST_CODE` makes every booking verification code a fixed value so a local load test can verify codes across
+several API processes. It only works with `APP_ENV=development` or `test`, and the API refuses to start with it set
+anywhere else.

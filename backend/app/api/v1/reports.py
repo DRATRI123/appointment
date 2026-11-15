@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 
 from app.api.deps import DB, Meta, TenantContext, get_tenant_context
+from app.core.database import writes_on_read
 from app.core.exceptions import NotFoundError, PermissionDenied
 from app.core.time import utcnow
 from app.models import Branch, Professional, Service
@@ -118,6 +119,7 @@ def report(key: str, db: DB, ctx: Tenant, params: Annotated[FilterParams, Depend
 
 
 @router.get("/reports/{key}/export", summary="Download a report as CSV or Excel (audit-logged)")
+@writes_on_read  # access is audit-logged
 def export(key: str, db: DB, ctx: Tenant, meta: Meta, params: Annotated[FilterParams, Depends()],
            format: Annotated[str, Query(pattern=r"^(csv|xlsx)$")] = "csv"):  # noqa: A002 - query parameter name
     ctx.require("reports:export")

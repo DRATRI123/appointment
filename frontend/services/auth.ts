@@ -19,6 +19,12 @@ export const authService = {
   changePassword: (current_password: string | null, new_password: string) =>
     api.post<ApiErrorBody>("/auth/password/change", { current_password, new_password }),
   sessions: () => api.get<SessionInfo[]>("/auth/sessions"),
+  mfaVerify: (mfa_token: string, code: string) => api.post<TokenResponse>("/auth/mfa/verify", { mfa_token, code }),
+  mfaStatus: () => api.get<{ enabled: boolean; enabled_at: string | null; recovery_codes_left: number }>("/auth/mfa"),
+  mfaSetup: () => api.post<{ secret: string; otpauth_uri: string; qr_data_url: string }>("/auth/mfa/setup"),
+  mfaEnable: (code: string) => api.post<{ recovery_codes: string[] }>("/auth/mfa/enable", { code }),
+  mfaDisable: (code: string, password: string | null) => api.post<ApiErrorBody>("/auth/mfa/disable", { code, password }),
+  mfaRecoveryCodes: (code: string) => api.post<{ recovery_codes: string[] }>("/auth/mfa/recovery-codes", { code }),
   revokeSession: (id: string) => api.delete<ApiErrorBody>(`/auth/sessions/${id}`),
   revokeAll: () => api.post<ApiErrorBody>("/auth/sessions/revoke-all"),
   requestEmailVerification: () => api.post<ApiErrorBody>("/auth/email/verify/request"),

@@ -233,6 +233,14 @@ def resolve_tenant(
     if org.status != OrganizationStatus.ACTIVE and not user.is_platform_admin and not allow_inactive_org:
         raise PermissionDenied("This organization is not active.", code="organization_inactive")
 
+    if membership is not None and user.mfa_enabled_at is None and membership.role is not None:
+        from app.services.mfa_service import ADMIN_ROLES
+
+        if membership.role.code in ADMIN_ROLES:
+            row = orgs.get_setting(org.id, "security", "require_admin_mfa")
+            if row is not None and (row.value or {}).get("v") is True:
+                raise PermissionDenied("This clinic requires two-step sign-in for administrators. Turn it on under Profile & security.",
+                                       code="mfa_setup_required")
     permissions = set(PERMISSIONS) if user.is_platform_admin else {p.code for p in membership.role.permissions}  # type: ignore[union-attr]
     ctx = TenantContext(
         user=user, organization=org, membership=membership, permissions=permissions, is_platform_admin=user.is_platform_admin

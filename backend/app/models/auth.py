@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import MembershipStatus, UserStatus
@@ -28,6 +28,11 @@ class User(PKMixin, PublicIdMixin, TimestampMixin, SoftDeleteMixin, Base):
     failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     locked_until: Mapped[datetime | None] = mapped_column(UTCDateTime)
     preferences: Mapped[dict[str, Any] | None] = mapped_column(nullable=True)
+    # Two-step sign-in (authenticator app). The secret is AES-256-GCM encrypted; backup codes are stored as HMACs.
+    mfa_secret: Mapped[str | None] = mapped_column(Text)
+    mfa_enabled_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    mfa_last_step: Mapped[int | None] = mapped_column(Integer)
+    mfa_recovery_hashes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     sessions: Mapped[list[UserSession]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

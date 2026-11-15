@@ -66,8 +66,10 @@ service-categories, service-packages, customers, payments, booking-forms, report
 * Money is integer paise (`80000` = ₹800.00).
 * Paged lists return `{"data": [...], "meta": {"page", "page_size", "total"}}`; appointments use `from_at`/`to_at`.
 * Errors: `{"detail", "code", "request_id", "errors"?}`. Branch on `code`; quote `request_id` for support.
-* Retrying: GETs are safe. If a booking POST times out, look the booking up before retrying; a repeat for the same
-  slot returns `409 slot_unavailable` instead of a duplicate. Back off on `5xx`; honour `Retry-After` on `429`.
+* Retrying: GETs are safe. Send `Idempotency-Key: <uuid>` on `POST /appointments`; repeating the same request with
+  the same key returns the first response (`Idempotent-Replayed: true`) and books nothing twice (24 h; a different
+  body with the same key is `422 idempotency_key_reused`). Without a key, a repeat for the same slot returns
+  `409 slot_unavailable` instead of a duplicate. Back off on `5xx`; honour `Retry-After` on `429`.
 
 ### Booking from your server
 

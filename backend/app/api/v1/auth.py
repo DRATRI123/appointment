@@ -18,6 +18,12 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     EmailVerificationConfirm,
     GoogleLoginRequest,
+    MFACodeRequest,
+    MFADisableRequest,
+    MFARecoveryCodes,
+    MFASetup,
+    MFAStatus,
+    MFAVerifyRequest,
     OTPRequest,
     OTPRequestResponse,
     OTPVerifyRequest,
@@ -217,3 +223,52 @@ def request_email_verification(request: Request, response: Response, db: DB, use
 def confirm_email_verification(payload: EmailVerificationConfirm, db: DB, meta: Meta) -> Message:
     AuthService(db, meta).confirm_email_verification(payload.token)
     return Message(detail="Email verified.")
+
+
+# ------------------------------------------------------------------ two-step sign-in (authenticator app)
+@router.post("/mfa/verify", response_model=TokenResponse, summary="Second sign-in step: the authenticator (or backup) code")
+@limiter.limit("10/minute")
+def mfa_verify(request: Request, payload: MFAVerifyRequest, response: Response, db: DB, settings: AppSettings, meta: Meta) -> TokenResponse:
+    from app.services.mfa_service import MFAService
+
+    result = MFAService(db, meta).complete_sign_in(payload.mfa_token, payload.code)
+    set_auth_cookies(response, result, settings)
+    return _token_response(result)
+
+
+@router.get("/mfa", response_model=MFAStatus, summary="Is two-step sign-in on for me?")
+def mfa_status(user: CurrentUser) -> MFAStatus:
+    return MFAStatus(enabled=user.mfa_enabled_at is not None, enabled_at=user.mfa_enabled_at, recovery_codes_left=len(user.mfa_recovery_hashes or []))
+
+
+@router.post("/mfa/setup", response_model=MFASetup, summary="Start: a new secret and QR code for the authenticator app")
+@limiter.limit("10/minute")
+def mfa_setup(request: Request, response: Response, user: CurrentUser, db: DB, meta: Meta) -> MFASetup:
+    from app.services.mfa_service import MFAService
+
+    return MFASetup(**MFAService(db, meta).start_setup(user))
+
+
+@router.post("/mfa/enable", response_model=MFARecoveryCodes, summary="Confirm with a code from the app; returns backup codes once")
+@limiter.limit("10/minute")
+def mfa_enable(request: Request, response: Response, payload: MFACodeRequest, user: CurrentUser, db: DB, meta: Meta) -> MFARecoveryCodes:
+    from app.services.mfa_service import MFAService
+
+    return MFARecoveryCodes(recovery_codes=MFAService(db, meta).enable(user, payload.code))
+
+
+@router.post("/mfa/disable", response_model=Message, summary="Turn two-step sign-in off (password and a current code)")
+@limiter.limit("5/minute")
+def mfa_disable(request: Request, response: Response, payload: MFADisableRequest, user: CurrentUser, db: DB, meta: Meta) -> Message:
+    from app.services.mfa_service import MFAService
+
+    MFAService(db, meta).disable(user, code=payload.code, password=payload.password)
+    return Message(detail="Two-step sign-in is off.")
+
+
+@router.post("/mfa/recovery-codes", response_model=MFARecoveryCodes, summary="New backup codes (the old ones stop working)")
+@limiter.limit("5/minute")
+def mfa_recovery_codes(request: Request, response: Response, payload: MFACodeRequest, user: CurrentUser, db: DB, meta: Meta) -> MFARecoveryCodes:
+    from app.services.mfa_service import MFAService
+
+    return MFARecoveryCodes(recovery_codes=MFAService(db, meta).regenerate_recovery_codes(user, payload.code))

@@ -396,7 +396,12 @@ class AuthService:
         return count
 
     # -------------------------------------------------------------- helpers
-    def _issue_session(self, user: User, device_label: str | None, *, is_new_user: bool = False) -> AuthResult:
+    def _issue_session(self, user: User, device_label: str | None, *, is_new_user: bool = False, mfa_passed: bool = False) -> AuthResult:
+        if user.mfa_enabled_at is not None and not mfa_passed:
+            # Password, mobile code or Google was right; the authenticator code comes next (POST /auth/mfa/verify).
+            from app.services.mfa_service import MFARequired, issue_mfa_token
+
+            raise MFARequired(issue_mfa_token(user, device_label))
         now = utcnow()
         refresh_token = generate_refresh_token()
         session = UserSession(

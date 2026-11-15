@@ -28,12 +28,62 @@ async def lifespan(app: FastAPI):
     configure_logging()
     log = get_logger("app")
     settings: Settings = app.state.settings
-    log.info("app.start", env=settings.app_env, version=settings.app_version, sqlite=settings.is_sqlite)
+    if settings.worker_threads:
+        # Sync endpoints run in this many threads per process. More threads than this only queue for Python's single
+        # interpreter lock (measured on SQLite at 100 users); a request never holds the database lock while waiting
+        # for one (see get_db), so a small pool cannot deadlock.
+        import anyio.to_thread
+
+        anyio.to_thread.current_default_thread_limiter().total_tokens = settings.worker_threads
+    log.info("app.start", env=settings.app_env, version=settings.app_version, sqlite=settings.is_sqlite, worker_threads=settings.worker_threads)
     yield
     log.info("app.stop")
 
 
 log = get_logger("app")
+
+
+def commit_in_handler(app: FastAPI) -> None:
+    """Commit each sync endpoint's request session in the endpoint's own worker thread, right after it returns.
+
+    Write requests also take the database's write lock only here, when the endpoint starts (see get_db).
+    FastAPI validates a sync endpoint's response in a second worker thread, and the session used to be committed only
+    after that. On SQLite a writer then held the database's single write lock while waiting for a thread, and under
+    load every thread was taken by requests waiting for that lock: nothing moved until SQLite gave up after 30 s
+    (measured at 100 users). Committing here releases the lock before any other thread is needed. A commit error now
+    also becomes the request's error response instead of surfacing after the handler finished."""
+    import functools
+    import inspect
+
+    from fastapi.routing import APIRoute
+    from sqlalchemy.orm import Session
+
+    def wrap(call):
+        @functools.wraps(call)
+        def run(*args, **kwargs):
+            from app.core.database import begin_writing
+
+            for value in kwargs.values():
+                if isinstance(value, Session) and value.info.pop("write_lock_in_handler", False):
+                    begin_writing(value)
+            result = call(*args, **kwargs)
+            for value in kwargs.values():
+                if isinstance(value, Session) and value.info.get("commit_in_handler"):
+                    value.commit()
+            return result
+        run.commits_in_handler = True
+        return run
+
+    def patch(routes) -> None:
+        for route in routes:
+            if isinstance(route, APIRoute):
+                if not inspect.iscoroutinefunction(route.endpoint) and not getattr(route.endpoint, "commits_in_handler", False):
+                    route.endpoint = wrap(route.endpoint)
+                    route.dependant.call = route.endpoint
+            elif getattr(route, "original_router", None) is not None:  # an included router (built lazily by FastAPI)
+                patch(route.original_router.routes)
+
+    patch(app.router.routes)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -56,8 +106,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token", "X-Organization-Id", "X-API-Key"],
-        expose_headers=["X-Request-ID"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token", "X-Organization-Id", "X-API-Key", "Idempotency-Key"],
+        expose_headers=["X-Request-ID", "Idempotent-Replayed"],
     )
     if settings.trusted_hosts and settings.trusted_hosts != ["*"]:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
@@ -70,6 +120,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    commit_in_handler(app)
     # Prometheus scrape endpoint, outside /api so the public web app never proxies it.
     app.add_route("/metrics", metrics_response, include_in_schema=False)
 

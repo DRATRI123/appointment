@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { z } from "@/lib/zod-config";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field } from "@/components/forms/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { errorMessage } from "@/lib/errors";
+import { ApiError } from "@/lib/api-client";
 
 const otpRequestSchema = z.object({ identifier: z.string().min(3, "Enter your mobile number or email") });
 const otpVerifySchema = z.object({ code: z.string().regex(/^\d{4,8}$/, "Enter the code you received"), full_name: z.string().optional() });
@@ -31,10 +32,35 @@ export function LoginForm() {
   const queryClient = useQueryClient();
   const next = params.get("next");
 
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+
   async function finishLogin() {
     const me = await usersService.me();
     queryClient.setQueryData(ME_QUERY_KEY, me);
     router.replace(safeNextPath(next) ?? defaultDestination(me));
+  }
+
+  /** Password, mobile code or Google was right; accounts with two-step sign-in need the authenticator code next. */
+  function needsSecondStep(error: unknown): boolean {
+    if (error instanceof ApiError && error.code === "mfa_required" && error.body?.mfa_token) {
+      setMfaToken(error.body.mfa_token);
+      return true;
+    }
+    return false;
+  }
+
+  if (mfaToken) {
+    return (
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-xl">Two-step sign-in</CardTitle>
+          <CardDescription>Open your authenticator app and enter the 6-digit code for this account.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MfaStep token={mfaToken} onSuccess={finishLogin} onRestart={() => setMfaToken(null)} />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -50,10 +76,10 @@ export function LoginForm() {
             <TabsTrigger value="password" className="flex-1">Email &amp; password</TabsTrigger>
           </TabsList>
           <TabsContent value="otp">
-            <OtpLogin onSuccess={finishLogin} />
+            <OtpLogin onSuccess={finishLogin} onSecondStep={needsSecondStep} />
           </TabsContent>
           <TabsContent value="password">
-            <PasswordLogin onSuccess={finishLogin} />
+            <PasswordLogin onSuccess={finishLogin} onSecondStep={needsSecondStep} />
           </TabsContent>
         </Tabs>
         <p className="mt-6 text-center text-sm text-muted-foreground">
@@ -67,7 +93,7 @@ export function LoginForm() {
   );
 }
 
-function OtpLogin({ onSuccess }: { onSuccess: () => Promise<void> }) {
+function OtpLogin({ onSuccess, onSecondStep }: { onSuccess: () => Promise<void>; onSecondStep: (error: unknown) => boolean }) {
   const [stage, setStage] = useState<"request" | "verify">("request");
   const [identifier, setIdentifier] = useState("");
   const [debugCode, setDebugCode] = useState<string | null>(null);
@@ -100,7 +126,7 @@ function OtpLogin({ onSuccess }: { onSuccess: () => Promise<void> }) {
       await authService.verifyOtp({ identifier, code: values.code, full_name: values.full_name || undefined });
       await onSuccess();
     } catch (error) {
-      toast.error(errorMessage(error));
+      if (!onSecondStep(error)) toast.error(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -150,7 +176,7 @@ function OtpLogin({ onSuccess }: { onSuccess: () => Promise<void> }) {
   );
 }
 
-function PasswordLogin({ onSuccess }: { onSuccess: () => Promise<void> }) {
+function PasswordLogin({ onSuccess, onSecondStep }: { onSuccess: () => Promise<void>; onSecondStep: (error: unknown) => boolean }) {
   const form = useForm<z.infer<typeof passwordSchema>>({ resolver: zodResolver(passwordSchema), defaultValues: { email: "", password: "" } });
   const [busy, setBusy] = useState(false);
 
@@ -160,7 +186,7 @@ function PasswordLogin({ onSuccess }: { onSuccess: () => Promise<void> }) {
       await authService.login(values);
       await onSuccess();
     } catch (error) {
-      toast.error(errorMessage(error));
+      if (!onSecondStep(error)) toast.error(errorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -180,6 +206,51 @@ function PasswordLogin({ onSuccess }: { onSuccess: () => Promise<void> }) {
       <Button type="submit" className="w-full" disabled={busy}>
         {busy ? <Loader2 className="animate-spin" /> : null} Sign in
       </Button>
+    </form>
+  );
+}
+
+function MfaStep({ token, onSuccess, onRestart }: { token: string; onSuccess: () => Promise<void>; onRestart: () => void }) {
+  const [code, setCode] = useState("");
+  const [useBackup, setUseBackup] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await authService.mfaVerify(token, code.trim());
+      await onSuccess();
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === "mfa_token_expired" || err.code === "mfa_token_invalid")) {
+        toast.error(err.message);
+        onRestart();
+        return;
+      }
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-4" data-testid="mfa-form">
+      <Field label={useBackup ? "Backup code" : "Authenticator code"} htmlFor="mfa_code" error={error ?? undefined}>
+        <Input id="mfa_code" value={code} onChange={(e) => setCode(e.target.value)} autoFocus autoComplete="one-time-code"
+          inputMode={useBackup ? "text" : "numeric"} placeholder={useBackup ? "7KQ4-M2XD" : "123456"} maxLength={useBackup ? 12 : 6}
+          className="text-center font-mono text-lg tracking-[0.3em]" />
+      </Field>
+      <Button type="submit" className="w-full" disabled={busy || code.trim().length < 6}>
+        {busy ? <Loader2 className="animate-spin" /> : null} Verify &amp; sign in
+      </Button>
+      <div className="flex justify-between text-sm">
+        <button type="button" className="text-primary hover:underline" onClick={() => { setUseBackup((b) => !b); setCode(""); setError(null); }}>
+          {useBackup ? "Use the authenticator app" : "Use a backup code"}
+        </button>
+        <button type="button" className="text-muted-foreground hover:underline" onClick={onRestart}>Start again</button>
+      </div>
     </form>
   );
 }

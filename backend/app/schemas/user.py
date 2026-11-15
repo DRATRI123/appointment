@@ -20,6 +20,7 @@ class UserRead(APIModel):
     mobile_verified_at: datetime | None
     last_login_at: datetime | None
     created_at: datetime
+    mfa_enabled_at: datetime | None = None  # two-step sign-in (authenticator app) turned on
 
 
 class UserUpdate(APIModel):

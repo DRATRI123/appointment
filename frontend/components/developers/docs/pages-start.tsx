@@ -193,7 +193,7 @@ export function ConventionsPage() {
       <H2 id="retries">Retrying safely</H2>
       <UL>
         <li>GET requests can always be retried.</li>
-        <li>For POST <C>/appointments</C>: if a call times out, don&apos;t blindly repeat it. First list appointments for that customer and time (<C>GET /appointments?from_at=…&amp;to_at=…&amp;search=&lt;mobile&gt;</C>); if it&apos;s there, the first call worked. A repeat for the same slot cannot create a second booking anyway; it returns <C>409 slot_unavailable</C>.</li>
+        <li>For POST <C>/appointments</C>: send an <C>Idempotency-Key</C> header (8–100 letters, digits, <C>- _ . :</C>), for example a UUID you create per booking. If the call times out, repeat it with the <strong>same</strong> key and body: you get the first response back (header <C>Idempotent-Replayed: true</C>) and nothing is booked twice. The same key with a different body returns <C>422 idempotency_key_reused</C>. Keys last 24 hours. Without a key, a repeat for the same slot still cannot create a second booking; it returns <C>409 slot_unavailable</C>.</li>
         <li>On <C>429</C> wait for <C>Retry-After</C> seconds. On <C>5xx</C> retry with exponential backoff (1 s, 2 s, 4 s… up to a minute).</li>
       </UL>
     </>

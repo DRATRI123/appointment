@@ -6,6 +6,7 @@ from pydantic import Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import DB
+from app.core import public_cache
 from app.core.exceptions import NotFoundError
 from app.models import Organization, ServiceCategory
 from app.schemas.catalog import BranchRead, CategoryRead, ProfessionalRead, ServiceRead
@@ -39,6 +40,7 @@ def _public_settings(db: Session, org: Organization) -> dict:
 
 
 @router.get("/organizations/{slug}", response_model=PublicOrganization)
+@public_cache.cached("organization")
 def organization(slug: str, db: DB) -> PublicOrganization:
     org, catalog = _org(db, slug)
     from app.api.v1.catalog import category_read
@@ -54,12 +56,14 @@ def organization(slug: str, db: DB) -> PublicOrganization:
 
 
 @router.get("/organizations/{slug}/branches", response_model=list[BranchRead])
+@public_cache.cached("branches")
 def branches(slug: str, db: DB) -> list[BranchRead]:
     _, catalog = _org(db, slug)
     return [BranchRead.model_validate(b) for b in catalog.list_branches(include_inactive=False)]
 
 
 @router.get("/organizations/{slug}/services", response_model=list[ServiceRead])
+@public_cache.cached("services")
 def services(slug: str, db: DB, branch_id: str | None = None, category_id: str | None = None) -> list[ServiceRead]:
     org, catalog = _org(db, slug)
     from app.api.v1.catalog import service_read
@@ -69,6 +73,7 @@ def services(slug: str, db: DB, branch_id: str | None = None, category_id: str |
 
 
 @router.get("/organizations/{slug}/services/{service_id}", response_model=ServiceRead)
+@public_cache.cached("service")
 def service(slug: str, service_id: str, db: DB) -> ServiceRead:
     org, catalog = _org(db, slug)
     from app.api.v1.catalog import service_read
@@ -80,6 +85,7 @@ def service(slug: str, service_id: str, db: DB) -> ServiceRead:
 
 
 @router.get("/organizations/{slug}/professionals", response_model=list[ProfessionalRead])
+@public_cache.cached("professionals")
 def professionals(slug: str, db: DB, branch_id: str | None = None, service_id: str | None = None) -> list[ProfessionalRead]:
     org, catalog = _org(db, slug)
     from app.api.v1.catalog import professional_read
@@ -89,6 +95,7 @@ def professionals(slug: str, db: DB, branch_id: str | None = None, service_id: s
 
 
 @router.get("/organizations/{slug}/professionals/{professional_id}", response_model=ProfessionalRead)
+@public_cache.cached("professional")
 def professional(slug: str, professional_id: str, db: DB) -> ProfessionalRead:
     org, catalog = _org(db, slug)
     from app.api.v1.catalog import professional_read
@@ -295,14 +302,20 @@ def public_release_hold(slug: str, hold_id: str, db: DB, meta: Meta, session_key
 @limiter.limit("20/minute")
 def public_book(request: Request, response: Response, slug: str, payload: AppointmentCreate, db: DB, meta: Meta, user: OptionalUser):
     from app.api.v1.appointments import appointment_detail
+    from app.services.idempotency import Idempotency
     from app.services.otp import check_booking_token
 
     org, _ = _org(db, slug)
+    idem = Idempotency.start(db, request, org, scope="public_booking", principal=f"session:{payload.session_key}:user:{user.id if user else ''}",
+                             payload=payload.model_dump(mode="json"))
+    if idem and idem.replay:
+        return idem.replay
     check_booking_token(db, org, hold_id=payload.hold_id, session_key=payload.session_key, customer_mobile=payload.customer.mobile,
                         customer_email=payload.customer.email, token=payload.verification_token or payload.mobile_verification_token, user=user)
     service = AppointmentService(db, org, user, meta)
     appt = service.create(payload, user=user, staff=False, session_key=payload.session_key)
-    return appointment_detail(db, service.get(appt.public_id), include_token=True, service=service, viewer_is_customer=True)
+    result = appointment_detail(db, service.get(appt.public_id), include_token=True, service=service, viewer_is_customer=True)
+    return idem.finish(result, 201) if idem else result
 
 
 @router.get("/organizations/{slug}/appointments/{reference}", response_model=AppointmentDetail, summary="Appointment status by reference + access token")
@@ -400,13 +413,23 @@ def public_submit_payment(
     utr: str = Form(..., max_length=64), transaction_reference: str | None = Form(None, max_length=128), paid_at: _datetime | None = Form(None),
     payer_upi_id: str | None = Form(None, max_length=120), notes: str | None = Form(None, max_length=2000), screenshot: UploadFile | None = File(None),
 ):
+    import hashlib
+
+    from app.services.idempotency import Idempotency
+
     org, appt, _, payment = _payment_for(db, slug, reference, access_token, user)
+    data = screenshot.file.read() if screenshot is not None else None
+    idem = Idempotency.start(db, request, org, scope="payment_submit", principal=f"appointment:{appt.id}",
+                             payload={"utr": utr, "transaction_reference": transaction_reference, "paid_at": paid_at, "payer_upi_id": payer_upi_id,
+                                      "notes": notes, "screenshot": hashlib.sha256(data).hexdigest() if data else None})
+    if idem and idem.replay:
+        return idem.replay
     svc = PaymentService(db, org, user, meta)
     if payment is None:
         from app.core.exceptions import ConflictError
 
         raise ConflictError("Nothing is due for this appointment.", code="nothing_due")
-    data = screenshot.file.read() if screenshot is not None else None
     svc.submit(payment, utr=utr, transaction_reference=transaction_reference, paid_at=paid_at, payer_upi_id=payer_upi_id, notes=notes, screenshot=data or None,
                submitted_ip=meta.ip_address)
-    return svc.checkout(payment)
+    result = svc.checkout(payment)
+    return idem.finish(result, 200) if idem else result

@@ -22,9 +22,10 @@ class AppError(Exception):
     code: str = "bad_request"
 
     def __init__(self, detail: str | None = None, *, code: str | None = None, errors: Any = None, headers: dict[str, str] | None = None,
-                 persist: bool = False):
+                 persist: bool = False, data: dict[str, Any] | None = None):
         self.detail = detail or self.__class__.__name__
         self.headers = headers
+        self.data = data  # extra fields for the error body (e.g. the token for the second sign-in step)
         # Security bookkeeping (failed-login counters, OTP attempts, duplicate-UTR flags) must survive the error:
         # the request session commits instead of rolling back when this is set.
         self.persist_changes = persist
@@ -88,7 +89,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
-            content=_payload(exc.detail, exc.code, exc.errors, request),
+            content={**(getattr(exc, "data", None) or {}), **_payload(exc.detail, exc.code, exc.errors, request)},
             headers=getattr(exc, "headers", None),
         )
 

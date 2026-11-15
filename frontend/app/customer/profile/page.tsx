@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Smartphone } from "lucide-react";
@@ -16,6 +16,7 @@ import { Field } from "@/components/forms/field";
 import { MessagePreferences } from "@/components/notifications/message-preferences";
 import { errorMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
+import { TwoStepCard } from "@/components/auth/two-step-card";
 
 export default function ProfilePage() {
   const { user, refresh } = useAuth();
@@ -48,7 +49,7 @@ export default function ProfilePage() {
   if (!user) return null;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader title="Profile & security" description="Your account details, password and signed-in devices." />
+      <PageHeader title="Profile & security" description="Your account details, password, two-step sign-in and signed-in devices." />
       <Card>
         <CardHeader><CardTitle>Profile</CardTitle></CardHeader>
         <CardContent className="space-y-4">
@@ -76,6 +77,7 @@ export default function ProfilePage() {
           </form>
         </CardContent>
       </Card>
+      <Suspense fallback={null}><TwoStepCard onChange={refresh} /></Suspense>
       <Card>
         <CardHeader><CardTitle>Signed-in devices</CardTitle></CardHeader>
         <CardContent>

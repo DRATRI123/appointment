@@ -64,7 +64,9 @@ export const publicBooking = {
   quote: (slug: string, params: { service_id: string; branch_id: string; professional_id?: string; coupon_code?: string }) => api.get<PriceQuote>(`/public/organizations/${slug}/quote`, { searchParams: params }),
   hold: (slug: string, body: Body) => api.post<Hold>(`/public/organizations/${slug}/holds`, body),
   releaseHold: (slug: string, id: string, session_key: string) => api.delete<ApiErrorBody>(`/public/organizations/${slug}/holds/${id}`, { searchParams: { session_key } }),
-  book: (slug: string, body: Body) => api.post<AppointmentDetail>(`/public/organizations/${slug}/appointments`, body),
+  /** `idempotencyKey`: the same key for every retry of one booking, so a double tap or a retried request never books twice. */
+  book: (slug: string, body: Body, idempotencyKey?: string) =>
+    api.post<AppointmentDetail>(`/public/organizations/${slug}/appointments`, body, idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : undefined),
   verificationOptions: (slug: string) => api.get<VerificationOptions>(`/public/organizations/${slug}/verification`),
   startVerification: (slug: string, body: { channel: VerificationChannel; destination: string; hold_id: string; session_key: string }) =>
     api.post<VerificationChallenge>(`/public/organizations/${slug}/verification/start`, body),

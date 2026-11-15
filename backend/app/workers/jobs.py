@@ -83,6 +83,14 @@ def pull_calendar_busy() -> int:
         return pull_all_busy(db)
 
 
+@job("purge_idempotency_keys")
+def purge_idempotency_keys() -> int:
+    from app.services.idempotency import purge_expired
+
+    with session_scope() as db:
+        return purge_expired(db)
+
+
 @job("deliver_webhooks")
 def deliver_webhooks() -> dict:
     from app.services.developer_service import deliver_due, purge_old_deliveries
@@ -96,4 +104,4 @@ def deliver_webhooks() -> dict:
 
 
 PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "pull_calendar_busy", "sync_external",
-                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks")
+                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks", "purge_idempotency_keys")

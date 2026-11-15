@@ -26,6 +26,7 @@ appointment is confirmed.
 * [Shopify and website integration (no app needed)](documentation/shopify-integration.md)
 * [Clinic website, website builder, OTP & verification, analytics](documentation/website-and-verification.md)
 * [Deployment](documentation/deployment.md)
+* [Performance, security and encryption review: audit, load tests, before/after](documentation/optimization-report.md)
 
 ## Status
 
@@ -82,8 +83,11 @@ py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-Copy-Item .env.example .env
+Copy-Item .env.development .env
 ```
+
+`.env.development` holds safe local defaults (SQLite, plain HTTP on localhost, messages printed instead of sent).
+`.env.example` documents every option; `.env.production.example` is the template for a real server.
 
 Generate a secret and paste it into `.env` as `SECRET_KEY` (required outside development, recommended
 always):
@@ -125,9 +129,10 @@ Open a second PowerShell window:
 ```powershell
 cd appointment-platform\frontend
 npm install
-Copy-Item .env.example .env.local
 npm run dev
 ```
+
+`npm run dev` loads `frontend/.env.development` automatically; put personal overrides in `.env.local`.
 
 Open http://localhost:3000. The frontend proxies `/api/*` to the backend
 (`API_INTERNAL_URL`, default `http://127.0.0.1:8000`), so the browser only talks to one origin.
@@ -163,6 +168,32 @@ with rate limiting off (`RATE_LIMIT_ENABLED=false` in `backend/.env`, or set it 
 session). Keep rate limiting on everywhere else.
 
 One-shot helpers: `scripts\dev-backend.ps1` and `scripts\dev-frontend.ps1` perform steps 2 and 3.
+
+### 5. Many users on one Windows PC (for example the clinic's reception computer)
+
+`--reload` runs a single process for development. To serve many people at once, run several API processes (one per
+CPU core), the background worker, and the built frontend, each in its own PowerShell window:
+
+```powershell
+cd backend; .\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 4
+```
+
+```powershell
+cd backend; .\.venv\Scripts\Activate.ps1
+python -m app.workers.runner
+```
+
+```powershell
+cd frontend
+npm run build
+npm run start
+```
+
+Remove the `WORKER_THREADS=8` line from `backend/.env` when you use `--workers` (8 threads suit one process; with
+several processes the default of 40 measured best). SQLite works with several processes (WAL mode); keep the database
+on the PC's own disk, never on a network drive.
+Measured results and limits: [`documentation/optimization-report.md`](documentation/optimization-report.md).
 
 ## First sign-in
 

@@ -15,7 +15,7 @@ from app.repositories.organizations import MembershipRepository, OrganizationRep
 from app.schemas.organization import DomainCreate, OrganizationCreate, OrganizationUpdate
 from app.services.audit_service import RequestMeta, record_audit
 
-SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed", "otp"}
+SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed", "otp", "security"}
 
 # One-time-code policy for public bookings: (default, min, max) for numbers.
 OTP_LIMITS = {
@@ -89,6 +89,8 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     },
     # Websites (e.g. a Shopify store) allowed to show the booking page inside an iframe.
     "embed": {"allowed_origins": []},
+    # Owners and administrators must use two-step sign-in (authenticator app) to manage the clinic.
+    "security": {"require_admin_mfa": False},
     # One-time codes before an online booking is accepted (see app/services/otp).
     "otp": {"enabled": True, "required_for_booking": True, "channels": ["sms"], "default_channel": "sms", **{k: v[0] for k, v in OTP_LIMITS.items()}},
     "cancellation": {
@@ -280,6 +282,12 @@ class OrganizationService:
         before = self.get_settings(org, namespace)[namespace]
         if namespace == "embed" and "allowed_origins" in values:
             values = {**values, "allowed_origins": validate_embed_origins(values["allowed_origins"])}
+        if namespace == "security":
+            unknown = set(values) - {"require_admin_mfa"}
+            if unknown or not isinstance(values.get("require_admin_mfa", False), bool):
+                raise ValidationFailed("Only require_admin_mfa (true or false) can be set here.", code="invalid_setting")
+            if values.get("require_admin_mfa") and actor.mfa_enabled_at is None:
+                raise ValidationFailed("Turn on two-step sign-in for your own account first, so you are not locked out.", code="mfa_not_enabled")
         if namespace == "otp":
             values = validate_otp_values(values)
             merged = {**before, **values}

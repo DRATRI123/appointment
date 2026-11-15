@@ -3,6 +3,7 @@ export interface ApiErrorBody {
   code?: string;
   errors?: unknown;
   request_id?: string;
+  mfa_token?: string;
 }
 
 export interface PageMeta {

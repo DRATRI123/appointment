@@ -20,7 +20,10 @@ import { errorMessage } from "@/lib/errors";
 import { titleCase } from "@/lib/format";
 import type { Organization } from "@/types/auth";
 
-const NAMESPACES = ["booking", "cancellation", "payment", "notification", "branding", "legal", "general"] as const;
+const NAMESPACES = ["booking", "cancellation", "payment", "notification", "branding", "legal", "general", "security"] as const;
+const LABELS: Record<string, string> = {
+  require_admin_mfa: "Require two-step sign-in (authenticator app) for owners and administrators. Turn it on for your own account first under Profile & security.",
+};
 
 export default function SettingsPage() {
   const { currentOrganizationId: orgId, hasPermission } = useAuth();
@@ -106,7 +109,7 @@ function NamespaceForm({ orgId, namespace, values, canWrite }: { orgId: string; 
       <CardContent>
         <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); save.mutate(); }} data-testid={`settings-${namespace}`}>
           {entries.map(([key, value]) => (
-            <SettingInput key={key} id={`${namespace}.${key}`} label={titleCase(key)} value={value} disabled={!canWrite} onChange={(v) => setDraft({ ...draft, [key]: v })} />
+            <SettingInput key={key} id={`${namespace}.${key}`} label={LABELS[key] ?? titleCase(key)} value={value} disabled={!canWrite} onChange={(v) => setDraft({ ...draft, [key]: v })} />
           ))}
           {canWrite ? <div className="flex justify-end"><Button type="submit" disabled={save.isPending}>Save</Button></div> : null}
         </form>

@@ -13,6 +13,8 @@ export class ApiError extends Error {
   code: string;
   errors?: unknown;
   requestId?: string;
+  /** The whole error body: some errors carry data for the next step (e.g. `mfa_token`). */
+  body: ApiErrorBody | null;
 
   constructor(status: number, body: ApiErrorBody | null, fallback = "Request failed") {
     super(body?.detail ?? fallback);
@@ -21,6 +23,7 @@ export class ApiError extends Error {
     this.code = body?.code ?? "unknown_error";
     this.errors = body?.errors;
     this.requestId = body?.request_id;
+    this.body = body;
   }
 }
 
@@ -101,6 +104,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
     const isAuthRoute = path.startsWith("/auth/");
     if (response.status === 401 && !isAuthRoute && !_retried && error.code === "token_expired") {
       if (await tryRefresh()) return apiRequest<T>(path, options, true);
+    }
+    // The clinic requires two-step sign-in for administrators and this account has not set it up yet.
+    if (response.status === 403 && error.code === "mfa_setup_required" && typeof window !== "undefined" && !window.location.pathname.startsWith("/customer/profile")) {
+      // Outside React (no router here); a full page load is fine for this one-off redirect.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign("/customer/profile?mfa=required#two-step");
     }
     throw error;
   }

@@ -154,7 +154,7 @@ export function BookingFlow() {
       customer_notes: details.notes.trim() || undefined, dependent_id: details.dependentId || undefined,
       form_answers: bookingForm.data ? answers : undefined, coupon_code: coupon ?? undefined,
       attribution: { ...(typeof window === "undefined" ? {} : rememberCampaign(params)), entry: embedded ? "embed" : "website" },
-    }),
+    }, `book:${hold!.id}`),
     onSuccess: (appt) => {
       try { window.localStorage.setItem(`ap.appt.${appt.reference}`, appt.access_token ?? ""); } catch { /* private mode */ }
       router.push(`${base}/appointments/${appt.reference}${appt.access_token ? `?t=${encodeURIComponent(appt.access_token)}` : ""}`);

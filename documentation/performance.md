@@ -1,5 +1,8 @@
 # Performance
 
+> SQLite at 100 users (full booking journey with one-time codes and payment verification), the stall that was found
+> and fixed, and before/after numbers: [optimization-report.md](optimization-report.md).
+
 ## Targets
 
 95% of requests (p95) must finish within these times, with no errors and no double bookings:

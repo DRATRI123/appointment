@@ -54,7 +54,17 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     otp_length: int = 6
     otp_pepper: str = ""
+    # Development and load tests only: every booking verification code is this value (no real message is sent by the
+    # console providers anyway). The server refuses to start with it outside development/test.
+    otp_test_code: str | None = None
+    # Worker threads per API process for request handling (0 = the framework default of 40).
+    worker_threads: int = 0
+    # Seconds the public clinic profile, services and doctors lists are cached per API process (0 = off).
+    public_cache_seconds: int = 5
     data_encryption_key: str = ""  # base64 32-byte key for field-level encryption (Phase 5)
+    # Older keys, still used to READ data encrypted before a key rotation (comma-separated, newest first). New data is
+    # always written with DATA_ENCRYPTION_KEY. See documentation/security.md, "Rotating the encryption key".
+    data_encryption_previous_keys: Annotated[list[str], NoDecode] = Field(default_factory=list)
     cookie_secure: bool = False
     cookie_domain: str | None = None
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
@@ -153,7 +163,7 @@ class Settings(BaseSettings):
     # --- frontend ----------------------------------------------------------
     frontend_url: str = "http://localhost:3000"
 
-    @field_validator("cors_origins", "trusted_hosts", "forwarded_allow_ips", mode="before")
+    @field_validator("cors_origins", "trusted_hosts", "forwarded_allow_ips", "data_encryption_previous_keys", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
         if isinstance(value, str):
@@ -168,6 +178,8 @@ class Settings(BaseSettings):
         if self.app_env in {"development", "test"}:
             return self
         problems: list[str] = []
+        if self.otp_test_code:
+            problems.append("OTP_TEST_CODE must not be set (it is for local load tests only)")
         if self.secret_key == INSECURE_DEFAULT_SECRET or len(self.secret_key) < 32:
             problems.append("SECRET_KEY must be a random value of at least 32 characters")
         if not self.cookie_secure:
@@ -182,6 +194,8 @@ class Settings(BaseSettings):
                     raise ValueError
             except ValueError:
                 problems.append("DATA_ENCRYPTION_KEY must be base64 of exactly 32 random bytes")
+        if any(not _is_key32(k) for k in self.data_encryption_previous_keys):
+            problems.append("DATA_ENCRYPTION_PREVIOUS_KEYS must each be base64 of exactly 32 bytes")
         if len(self.otp_pepper) < 16:
             problems.append("OTP_PEPPER must be a random value of at least 16 characters")
         if "*" in self.cors_origins:

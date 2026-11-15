@@ -9,6 +9,7 @@ import pytest
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+os.environ.setdefault("PUBLIC_CACHE_SECONDS", "0")  # tests share one uncommitted session; test_public_cache.py covers the cache
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, event  # noqa: E402

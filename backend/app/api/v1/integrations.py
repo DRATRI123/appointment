@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.api.deps import DB, CurrentUser, Meta, OptionalUser, TenantContext, get_tenant_context
 from app.core.config import get_settings
+from app.core.database import writes_on_read
 from app.core.exceptions import NotFoundError, PermissionDenied
 from app.models import Appointment, Customer, Professional
 from app.schemas.common import Message
@@ -63,6 +64,7 @@ def google_connect(payload: GoogleConnect, db: DB, ctx: Tenant, meta: Meta):
 
 
 @router.get("/google/callback", include_in_schema=False)
+@writes_on_read  # access is audit-logged
 def google_callback(db: DB, state: str = "", code: str | None = None, error: str | None = None):
     return_to, outcome = IntegrationService.google_callback(db, code=code, state=state, error=error)
     db.commit()

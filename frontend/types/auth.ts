@@ -12,6 +12,8 @@ export interface User {
   mobile_verified_at: string | null;
   last_login_at: string | null;
   created_at: string;
+  /** Two-step sign-in (authenticator app) turned on. */
+  mfa_enabled_at?: string | null;
 }
 
 export interface OrganizationSummary {

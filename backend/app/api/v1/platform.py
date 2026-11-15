@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 
 from app.api.deps import DB, Meta, PlatformAdmin
+from app.core.database import writes_on_read
 from app.core.enums import UserStatus
 from app.core.exceptions import NotFoundError, PermissionDenied
 from app.core.pagination import Page, PageMeta, PageParams, page_params
@@ -175,6 +176,7 @@ def set_subscription(organization_id: str, payload: SubscriptionUpdate, db: DB, 
 
 
 @router.get("/exports/organizations", summary="Organizations with plan and usage as CSV or Excel")
+@writes_on_read  # access is audit-logged
 def export_organizations(db: DB, admin: PlatformAdmin, meta: Meta, format: Annotated[str, Query(pattern=r"^(csv|xlsx)$")] = "csv"):  # noqa: A002
     from app.services.report_service import Column, ReportDef, to_csv, to_xlsx
 

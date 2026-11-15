@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -169,10 +169,18 @@ def calendar(db: DB, meta: Meta, ctx: Annotated[TenantContext, Depends(get_tenan
 
 
 @router.post("/appointments", response_model=AppointmentDetail, status_code=status.HTTP_201_CREATED, summary="Book for a customer (reception, walk-in, professional)")
-def create_appointment(payload: AppointmentCreate, db: DB, ctx: WriteAppts, meta: Meta):
+def create_appointment(request: Request, payload: AppointmentCreate, db: DB, ctx: WriteAppts, meta: Meta):
+    from app.services.idempotency import Idempotency
+
+    key = getattr(request.state, "api_key", None)
+    idem = Idempotency.start(db, request, ctx.organization, scope="booking", principal=f"api_key:{key.id}" if key else f"user:{ctx.user.id}",
+                             payload=payload.model_dump(mode="json"))
+    if idem and idem.replay:
+        return idem.replay
     service = AppointmentService(db, ctx.organization, ctx.user, meta)
     appt = service.create(payload, user=ctx.user, staff=True)
-    return appointment_detail(db, service.get(appt.public_id), include_internal=True, service=service)
+    result = appointment_detail(db, service.get(appt.public_id), include_internal=True, service=service)
+    return idem.finish(result, 201) if idem else result
 
 
 @router.post("/appointments/recurring", response_model=RecurringResult, status_code=status.HTTP_201_CREATED)

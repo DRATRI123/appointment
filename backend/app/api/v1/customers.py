@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import DB, AppSettings, CurrentUser, Meta, TenantContext, require_permission
+from app.core.database import writes_on_read
 from app.core.enums import OrganizationStatus
 from app.core.exceptions import NotFoundError, PermissionDenied, ValidationFailed
 from app.core.pagination import Page, PageMeta, PageParams, page_params
@@ -130,6 +131,7 @@ def delete_dependent(customer_id: str, dependent_id: str, db: DB, ctx: WriteCust
 
 # -------------------------------------------------------------------- notes
 @router.get("/{customer_id}/notes", response_model=list[NoteRead])
+@writes_on_read  # access is audit-logged
 def list_notes(customer_id: str, db: DB, ctx: ClinicalRead, meta: Meta, purpose: Annotated[str | None, Query(max_length=200)] = None):
     svc = _svc(db, ctx, meta)
     return svc.list_notes(svc.get(customer_id), purpose=purpose)
@@ -171,6 +173,7 @@ def upload_document(
 
 
 @router.get("/{customer_id}/documents/{document_id}/download", summary="Download a document (access is audit-logged)")
+@writes_on_read  # access is audit-logged
 def download_document(customer_id: str, document_id: str, db: DB, ctx: ClinicalRead, meta: Meta, purpose: Annotated[str | None, Query(max_length=200)] = None):
     svc = _svc(db, ctx, meta)
     row, handle = svc.open_document(svc.get(customer_id), document_id, purpose=purpose)
