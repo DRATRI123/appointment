@@ -42,7 +42,7 @@ def test_every_tenant_table_has_organization_id():
 
 
 def test_expected_table_count():
-    assert len(Base.metadata.tables) == 64  # + websites, website_versions, otp_challenges, messaging_provider_configs
+    assert len(Base.metadata.tables) == 65  # + websites, website_versions, otp_challenges, messaging_provider_configs, website_daily_stats
 
 
 def _fixture_graph(db):

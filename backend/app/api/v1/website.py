@@ -1,6 +1,7 @@
 """Website Management: edit the draft, publish, history and restore (permissions website:write / website:publish)."""
 from __future__ import annotations
 
+from datetime import date as _date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -47,3 +48,20 @@ def versions(db: DB, ctx: Editor, meta: Meta):
 @router.post("/versions/{version}/restore", response_model=WebsiteState, summary="Copy a published version into the draft")
 def restore(version: int, body: PublishRequest, db: DB, ctx: Publisher, meta: Meta):
     return _svc(db, ctx, meta).restore(version, body.lock_version)
+
+
+Analyst = Annotated[TenantContext, Depends(require_permission("reports:read"))]
+
+
+@router.get("/analytics", summary="Website traffic and booking funnel for a date range (cookie-free counts)")
+def analytics(db: DB, ctx: Analyst, from_date: _date | None = None, to_date: _date | None = None):
+    from datetime import timedelta
+
+    from app.core.exceptions import ValidationFailed
+    from app.services.website_analytics_service import WebsiteAnalyticsService
+
+    end = to_date or _date.today()
+    start = from_date or end - timedelta(days=29)
+    if start > end or (end - start).days > 366:
+        raise ValidationFailed("Choose a range of up to one year.", code="invalid_range")
+    return WebsiteAnalyticsService(db, ctx.organization).report(start, end)

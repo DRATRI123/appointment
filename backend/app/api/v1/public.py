@@ -258,6 +258,22 @@ def public_website(slug: str, db: DB, response: Response):
     return WebsiteService(db, org).public()
 
 
+class SiteEvent(APIModel):
+    metric: str = Field(pattern=r"^(page_view|book_click|booking_view)$")
+    key: str = Field(default="", max_length=80)
+    source: str = Field(default="", max_length=64)
+
+
+@router.post("/organizations/{slug}/events", status_code=204, summary="Count a page view or Book click (no cookies, no personal data)")
+@limiter.limit("120/minute")
+def site_event(request: Request, response: Response, slug: str, payload: SiteEvent, db: DB):
+    from app.services.website_analytics_service import WebsiteAnalyticsService
+
+    org, _ = _org(db, slug)
+    WebsiteAnalyticsService(db, org).record(payload.metric, payload.key, payload.source)
+    return Response(status_code=204)
+
+
 @router.get("/organizations/{slug}/embed-policy", response_model=EmbedPolicy, summary="Websites allowed to show this booking page in an iframe")
 def embed_policy(slug: str, db: DB, response: Response):
     org, _ = _org(db, slug)

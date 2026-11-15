@@ -14,11 +14,13 @@ function htmlAttr(value: string): string {
 }
 
 /** `{% render %}` call for the appointment-booking-button snippet, with the clinic's own values filled in. */
-export function liquidButtonCode(origin: string, slug: string, hints: BookingParams = {}, label = "Book appointment"): string {
+export function liquidButtonCode(origin: string, slug: string, hints: BookingParams = {}, label = "Book appointment", campaign: Record<string, string> = {}): string {
   const args: [string, string][] = [["booking_url", origin], ["clinic", slug]];
   if (hints.service) args.push(["service", hints.service]);
   if (hints.branch) args.push(["branch", hints.branch]);
   if (hints.doctor) args.push(["doctor", hints.doctor]);
+  if (campaign.utm_source) args.push(["source", campaign.utm_source]);
+  if (campaign.utm_campaign) args.push(["campaign", campaign.utm_campaign]);
   args.push(["label", label]);
   return `{% render 'appointment-booking-button',\n${args.map(([k, v]) => `  ${k}: ${liquidString(v)}`).join(",\n")}\n%}`;
 }
@@ -27,8 +29,8 @@ export function liquidButtonCode(origin: string, slug: string, hints: BookingPar
  * A responsive iframe plus a small listener that grows the frame to fit the booking page. The listener only accepts
  * messages from the booking site's own origin, and only the one message type the page sends.
  */
-export function iframeEmbedCode(origin: string, slug: string, hints: BookingParams = {}, title = "Book an appointment"): string {
-  const src = bookingUrl(origin, slug, hints, true);
+export function iframeEmbedCode(origin: string, slug: string, hints: BookingParams = {}, title = "Book an appointment", campaign: Record<string, string> = {}): string {
+  const src = bookingUrl(origin, slug, hints, true, campaign);
   const bookingOrigin = new URL(origin).origin;
   const id = `appointment-booking-${slug}`;
   return [
@@ -46,8 +48,8 @@ export function iframeEmbedCode(origin: string, slug: string, hints: BookingPara
 }
 
 /** Plain HTML link button for any website. */
-export function htmlButtonCode(origin: string, slug: string, hints: BookingParams = {}, label = "Book appointment"): string {
-  return `<a href="${htmlAttr(bookingUrl(origin, slug, hints))}" style="display:inline-block;padding:12px 24px;border-radius:999px;background:#0f5132;color:#fff;font-weight:600;text-decoration:none">${htmlAttr(label)}</a>`;
+export function htmlButtonCode(origin: string, slug: string, hints: BookingParams = {}, label = "Book appointment", campaign: Record<string, string> = {}): string {
+  return `<a href="${htmlAttr(bookingUrl(origin, slug, hints, false, campaign))}" style="display:inline-block;padding:12px 24px;border-radius:999px;background:#0f5132;color:#fff;font-weight:600;text-decoration:none">${htmlAttr(label)}</a>`;
 }
 
 const ORIGIN = /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?::\d{1,5})?$/;
@@ -67,4 +69,9 @@ export function normalizeOrigin(input: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** A WhatsApp share link: opens WhatsApp with a ready message containing the booking link (to send to patients). */
+export function whatsappShareLink(message: string, link: string): string {
+  return `https://wa.me/?text=${encodeURIComponent(`${message.trim()} ${link}`.trim())}`;
 }

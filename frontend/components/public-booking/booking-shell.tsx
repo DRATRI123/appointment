@@ -8,6 +8,7 @@ import { Building2, CalendarOff, Globe, Mail, MapPin, Phone } from "lucide-react
 import { publicCatalog, mediaUrl } from "@/services/catalog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { sendSiteEvent } from "@/lib/site-events";
 import { safeHex, textOn } from "./brand";
 import type { PublicOrganization } from "@/types/catalog";
 
@@ -73,6 +74,10 @@ export function BookingShell({ slug, embedded = false, children }: { slug: strin
   const query = useQuery({ queryKey: ["public-org", slug], queryFn: () => publicCatalog.organization(slug), retry: false, staleTime: 60_000 });
   const pathname = usePathname();
   useEmbedResize(embedded);
+  const isBookingPage = pathname === (embedded ? `/embed/${slug}` : `/${slug}`);
+  useEffect(() => {
+    if (embedded && isBookingPage) sendSiteEvent(slug, "booking_view", "book", "embed");
+  }, [embedded, isBookingPage, slug]);
 
   if (query.isLoading) {
     return (

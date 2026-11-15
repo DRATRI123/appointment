@@ -1,5 +1,5 @@
 {%- comment -%}
-  Appointment booking button. No Shopify app needed: it simply links to your booking page.
+  Appointment booking button. No Shopify app needed: it simply links to your booking page (/{clinic}/book).
 
   Usage (anywhere in a theme file):
     {% render 'appointment-booking-button', booking_url: 'https://booking.mydomain.com', clinic: 'akshar-clinic' %}
@@ -14,6 +14,8 @@
     branch       optional  Preselect a location by its slug
     doctor       optional  Preselect a doctor by their slug
     date         optional  Open on a date, YYYY-MM-DD
+    source       optional  Campaign source for your website analytics, e.g. shopify (sent as utm_source)
+    campaign     optional  Campaign name, e.g. diwali-offer (sent as utm_campaign)
     label        optional  Button text (default "Book appointment")
     style        optional  "solid" (default) or "outline"
     new_tab      optional  true to open the booking page in a new tab
@@ -35,6 +37,8 @@
   assign ab_branch = branch | default: '' | handleize
   assign ab_doctor = doctor | default: '' | handleize
   assign ab_date = date | default: '' | strip | slice: 0, 10 | handleize
+  assign ab_source = source | default: '' | handleize
+  assign ab_campaign = campaign | default: '' | handleize
   assign ab_query = ''
   if ab_service != ''
     assign ab_query = ab_query | append: '&service=' | append: ab_service
@@ -48,10 +52,16 @@
   if ab_date != ''
     assign ab_query = ab_query | append: '&date=' | append: ab_date
   endif
+  if ab_source != ''
+    assign ab_query = ab_query | append: '&utm_source=' | append: ab_source
+  endif
+  if ab_campaign != ''
+    assign ab_query = ab_query | append: '&utm_campaign=' | append: ab_campaign
+  endif
   if ab_query != ''
     assign ab_query = ab_query | remove_first: '&' | prepend: '?'
   endif
-  assign ab_href = ab_base | append: '/' | append: ab_clinic | append: ab_query
+  assign ab_href = ab_base | append: '/' | append: ab_clinic | append: '/book' | append: ab_query
   assign ab_label = label | default: 'Book appointment'
   assign ab_style = style | default: 'solid'
   assign ab_scheme = ab_base | slice: 0, 8

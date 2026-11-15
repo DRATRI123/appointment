@@ -39,9 +39,15 @@ export function matchHint<T extends { id: string; slug: string }>(items: readonl
   return items.find((item) => item.slug.toLowerCase() === hint || item.id.toLowerCase() === hint);
 }
 
-/** Build a shareable booking link (used by the admin "Booking page" screen and the Shopify instructions). */
-export function bookingUrl(origin: string, slug: string, hints: BookingParams = {}, embed = false): string {
-  const url = new URL(`${embed ? "/embed" : ""}/${encodeURIComponent(slug)}`, origin);
+/**
+ * Build a shareable link (admin "Booking page" screen and Shopify instructions). `target` "book" goes straight to the
+ * booking steps, "site" to the clinic website, "embed" to the frame page. Campaign labels (utm_*) are appended for
+ * the website analytics; like the hints, they never affect price or permissions.
+ */
+export function bookingUrl(origin: string, slug: string, hints: BookingParams = {}, embed = false, campaign: Record<string, string> = {}, target: "book" | "site" = "book"): string {
+  const path = embed ? `/embed/${encodeURIComponent(slug)}` : target === "site" ? `/${encodeURIComponent(slug)}` : `/${encodeURIComponent(slug)}/book`;
+  const url = new URL(path, origin);
   for (const [key, value] of Object.entries(hints)) if (value) url.searchParams.set(key, value);
+  for (const [key, value] of Object.entries(campaign)) if (value && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(value)) url.searchParams.set(key, value);
   return url.toString();
 }

@@ -1,5 +1,6 @@
 """Import every model so SQLAlchemy metadata (and Alembic autogenerate) sees all tables."""
 from app.models.admin import AuditLog, SystemSetting
+from app.models.analytics import WebsiteDailyStat
 from app.models.appointment import (
     Appointment,
     AppointmentCancellation,
@@ -80,4 +81,5 @@ __all__ = [
     "Coupon",
     "Website", "WebsiteVersion",
     "OtpChallenge", "MessagingProviderConfig",
+    "WebsiteDailyStat",
 ]

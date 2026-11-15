@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { BookingContext, addressLine, initials } from "@/components/public-booking/booking-shell";
 import { rememberCampaign } from "@/lib/campaign";
+import { sendSiteEvent } from "@/lib/site-events";
 import { navHref, phoneDigits, whatsappLink, type LinkContext } from "@/lib/site-links";
 import { cn } from "@/lib/utils";
 import { ButtonsAt } from "./site-button";
@@ -39,6 +40,15 @@ export function SiteShell({ slug, children, previewDocument }: { slug: string; c
     return { slug, base, org: org.data, doc, preview: !!previewDocument, campaign, links };
   }, [org.data, doc, slug, campaign, previewDocument]);
 
+  // Count page views (not in the admin preview). Key: "home", "book", or the page / location name.
+  const base = `/${slug}`;
+  const pageKey = pathname === base ? "home" : pathname.startsWith(`${base}/book`) ? "book" : pathname.startsWith(`${base}/appointments`) ? null : pathname.slice(base.length + 1).split("/")[0];
+  const loaded = !!value;
+  useEffect(() => {
+    if (previewDocument || !pageKey || !loaded) return;
+    sendSiteEvent(slug, pageKey === "book" ? "booking_view" : "page_view", pageKey, campaign.utm_source ?? "");
+  }, [slug, pageKey, previewDocument, campaign.utm_source, loaded]);
+
   if (org.isLoading || (!previewDocument && site.isLoading)) {
     return (
       <div className="min-h-dvh">
@@ -62,7 +72,12 @@ export function SiteShell({ slug, children, previewDocument }: { slug: string; c
   return (
     <SiteContext.Provider value={value}>
       <BookingContext.Provider value={{ slug, data: value.org, base: value.base, bookPath: `${value.base}/book`, embedded: false }}>
-        <div className="site flex min-h-dvh flex-col text-foreground" style={siteTheme(value.doc.settings)} data-testid="site-shell">
+        <div className="site flex min-h-dvh flex-col text-foreground" style={siteTheme(value.doc.settings)} data-testid="site-shell"
+          onClickCapture={(e) => {
+            if (previewDocument || !pageKey || pageKey === "book") return;
+            const a = (e.target as HTMLElement).closest("a");
+            if (a?.getAttribute("href")?.startsWith(`${value.base}/book`)) sendSiteEvent(slug, "book_click", pageKey, campaign.utm_source ?? "");
+          }}>
           <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-background focus:px-4 focus:py-2 focus:shadow">Skip to content</a>
           <SiteHeader />
           <main id="main" className={cn("flex-1", !inBooking && "pb-20 md:pb-0")}>{children}</main>

@@ -20,7 +20,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field } from "@/components/forms/field";
 import { bookingUrl, type BookingParams } from "@/lib/booking-params";
-import { htmlButtonCode, iframeEmbedCode, liquidButtonCode, normalizeOrigin } from "@/lib/embed-code";
+import { htmlButtonCode, iframeEmbedCode, liquidButtonCode, normalizeOrigin, whatsappShareLink } from "@/lib/embed-code";
+import { whatsappLink } from "@/lib/site-links";
 import { errorMessage } from "@/lib/errors";
 
 const noop = () => () => {};
@@ -40,11 +41,13 @@ export default function BookingPageAdmin() {
   const branches = useQuery({ queryKey: ["branches", orgId, "booking-page"], queryFn: () => catalogService.branches(false), enabled: !!orgId });
   const pros = useQuery({ queryKey: ["professionals", orgId, "booking-page"], queryFn: () => catalogService.professionals(), enabled: !!orgId });
   const [hints, setHints] = useState<BookingParams>({});
+  const [campaign, setCampaign] = useState<Record<string, string>>({});
 
   if (!orgId) return null;
   const slug = org.data?.slug;
   const ready = slug && origin;
-  const link = ready ? bookingUrl(origin, slug, hints) : "";
+  const link = ready ? bookingUrl(origin, slug, hints, false, campaign) : "";
+  const siteLink = ready ? bookingUrl(origin, slug, {}, false, campaign, "site") : "";
   const pageEnabled = settings.data?.general?.booking_page_enabled !== false;
 
   return (
@@ -90,12 +93,29 @@ export default function BookingPageAdmin() {
               <p className="text-xs text-muted-foreground">
                 Preselection only skips a step for the visitor. Prices, free times and who may book are always checked by the server, and unknown values are ignored.
               </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <span className="shrink-0 text-sm font-medium">Clinic website:</span>
+                <Input readOnly value={siteLink} aria-label="Clinic website link" className="font-mono text-xs" data-testid="site-link" onFocus={(e) => e.currentTarget.select()} />
+                <CopyButton text={siteLink} label="Copy" />
+              </div>
+              <details className="rounded-xl border p-4" data-testid="campaign-builder">
+                <summary className="cursor-pointer text-sm font-medium">Track a campaign (optional)</summary>
+                <p className="mt-2 text-xs text-muted-foreground">Adds labels to every link and code on this page, so Website analytics shows which posts, ads or partners bring bookings. Lower-case letters, numbers and dashes.</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  {([["utm_source", "Source", "instagram"], ["utm_medium", "Medium", "social"], ["utm_campaign", "Campaign", "diwali-offer"]] as const).map(([key, label, ph]) => (
+                    <Field key={key} label={label} htmlFor={`c_${key}`}>
+                      <Input id={`c_${key}`} placeholder={ph} value={campaign[key] ?? ""} maxLength={64}
+                        onChange={(e) => setCampaign({ ...campaign, [key]: e.target.value.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+/, "") })} />
+                    </Field>
+                  ))}
+                </div>
+              </details>
             </>
           )}
         </CardContent>
       </Card>
 
-      {ready ? <AddToWebsite origin={origin} slug={slug} hints={hints} /> : null}
+      {ready ? <AddToWebsite origin={origin} slug={slug} hints={hints} campaign={campaign} link={link} clinicName={org.data?.name ?? ""} whatsapp={org.data?.phone ?? ""} /> : null}
 
       {settings.data ? (
         <>
@@ -133,7 +153,11 @@ function Steps({ items }: { items: React.ReactNode[] }) {
   return <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">{items.map((item, i) => <li key={i}>{item}</li>)}</ol>;
 }
 
-function AddToWebsite({ origin, slug, hints }: { origin: string; slug: string; hints: BookingParams }) {
+function AddToWebsite({ origin, slug, hints, campaign, link, clinicName, whatsapp }: { origin: string; slug: string; hints: BookingParams; campaign: Record<string, string>; link: string; clinicName: string; whatsapp: string }) {
+  const [message, setMessage] = useState(`Book your appointment at ${clinicName} online:`);
+  const [chatNumber, setChatNumber] = useState(whatsapp);
+  const chatDigits = chatNumber.replace(/\D/g, "");
+  const chatLink = chatDigits.length >= 8 ? whatsappLink(chatNumber, `Hello ${clinicName}, I would like to book an appointment.`) : "";
   return (
     <Card>
       <CardHeader>
@@ -147,6 +171,7 @@ function AddToWebsite({ origin, slug, hints }: { origin: string; slug: string; h
             <TabsTrigger value="shopify-section">Shopify section</TabsTrigger>
             <TabsTrigger value="iframe">Embed (iframe)</TabsTrigger>
             <TabsTrigger value="html">Any website link</TabsTrigger>
+            <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           </TabsList>
           <TabsContent value="shopify-button" className="space-y-4">
             <Steps items={[
@@ -154,7 +179,7 @@ function AddToWebsite({ origin, slug, hints }: { origin: string; slug: string; h
               <>Under <b>Snippets</b> click <b>Add a new snippet</b>, name it <code>appointment-booking-button</code>, and paste the snippet file below.</>,
               <>Paste this line wherever the button should appear (a product template, the header, a page):</>,
             ]} />
-            <CodeBlock code={liquidButtonCode(origin, slug, hints)} testId="liquid-code" />
+            <CodeBlock code={liquidButtonCode(origin, slug, hints, "Book appointment", campaign)} testId="liquid-code" />
             <Button asChild variant="link" className="h-auto p-0"><a href="/integrations/shopify/appointment-booking-button.liquid" download><Download /> Download the snippet file</a></Button>
           </TabsContent>
           <TabsContent value="shopify-section" className="space-y-4">
@@ -172,11 +197,26 @@ function AddToWebsite({ origin, slug, hints }: { origin: string; slug: string; h
               <>Add your store, e.g. <code>https://yourstore.com</code>, under <b>Allowed websites</b>.</>,
               <>In Shopify, add a <b>Custom Liquid</b> section (or edit a page in HTML view) and paste:</>,
             ]} />
-            <CodeBlock code={iframeEmbedCode(origin, slug, hints)} testId="iframe-code" />
+            <CodeBlock code={iframeEmbedCode(origin, slug, hints, "Book an appointment", campaign)} testId="iframe-code" />
           </TabsContent>
           <TabsContent value="html" className="space-y-4">
             <p className="text-sm text-muted-foreground">For WordPress, Wix, a Linktree or an email signature: a plain link styled as a button.</p>
-            <CodeBlock code={htmlButtonCode(origin, slug, hints)} testId="html-code" />
+            <CodeBlock code={htmlButtonCode(origin, slug, hints, "Book appointment", campaign)} testId="html-code" />
+          </TabsContent>
+          <TabsContent value="whatsapp" className="space-y-6">
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Share your booking link on WhatsApp</p>
+              <p className="text-sm text-muted-foreground">Opens WhatsApp with this message and your booking link, ready to send to a patient, a group or your Status. Tip: set the campaign source to “whatsapp” above.</p>
+              <Field label="Message" htmlFor="wa_msg"><Input id="wa_msg" value={message} maxLength={200} onChange={(e) => setMessage(e.target.value)} /></Field>
+              <CodeBlock code={whatsappShareLink(message, link)} testId="whatsapp-share" />
+              <Button asChild variant="outline"><a href={whatsappShareLink(message, link)} target="_blank" rel="noopener noreferrer"><ExternalLink /> Open WhatsApp</a></Button>
+            </div>
+            <div className="space-y-3 border-t pt-6">
+              <p className="text-sm font-medium">“Chat with us” link to your WhatsApp number</p>
+              <p className="text-sm text-muted-foreground">For your Instagram bio, Google Business Profile or website. Patients who prefer to message can ask and then get the booking link.</p>
+              <Field label="Your WhatsApp number" htmlFor="wa_num"><Input id="wa_num" value={chatNumber} onChange={(e) => setChatNumber(e.target.value)} placeholder="+91 98250 12345" /></Field>
+              {chatLink ? <CodeBlock code={chatLink} testId="whatsapp-chat" /> : <p className="text-xs text-muted-foreground">Enter a number to get the link.</p>}
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>

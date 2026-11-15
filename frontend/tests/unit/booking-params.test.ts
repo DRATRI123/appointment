@@ -34,7 +34,9 @@ describe("booking URL parameters", () => {
 
   it("builds shareable links and embed links", () => {
     expect(bookingUrl("https://booking.example.com", "akshar-clinic", { service: "consultation" }))
-      .toBe("https://booking.example.com/akshar-clinic?service=consultation");
+      .toBe("https://booking.example.com/akshar-clinic/book?service=consultation");
+    expect(bookingUrl("https://booking.example.com", "akshar-clinic", {}, false, { utm_source: "instagram", utm_campaign: "Bad Value!" }, "site"))
+      .toBe("https://booking.example.com/akshar-clinic?utm_source=instagram");
     expect(bookingUrl("https://booking.example.com", "akshar-clinic", { branch: "main" }, true))
       .toBe("https://booking.example.com/embed/akshar-clinic?branch=main");
   });

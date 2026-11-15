@@ -16,6 +16,8 @@
   assign ab_service = section.settings.service | default: '' | handleize
   assign ab_branch = section.settings.branch | default: '' | handleize
   assign ab_doctor = section.settings.doctor | default: '' | handleize
+  assign ab_source = section.settings.source | default: '' | handleize
+  assign ab_campaign = section.settings.campaign | default: '' | handleize
   assign ab_query = ''
   if ab_service != ''
     assign ab_query = ab_query | append: '&service=' | append: ab_service
@@ -25,6 +27,12 @@
   endif
   if ab_doctor != ''
     assign ab_query = ab_query | append: '&doctor=' | append: ab_doctor
+  endif
+  if ab_source != ''
+    assign ab_query = ab_query | append: '&utm_source=' | append: ab_source
+  endif
+  if ab_campaign != ''
+    assign ab_query = ab_query | append: '&utm_campaign=' | append: ab_campaign
   endif
   if ab_query != ''
     assign ab_query = ab_query | remove_first: '&' | prepend: '?'
@@ -67,7 +75,7 @@
       ></iframe>
       <p class="ab-section__fallback">
         Trouble seeing the booking form?
-        <a href="{{ ab_base | append: '/' | append: ab_clinic | append: ab_query | escape }}" target="_blank" rel="noopener">Open it in a new tab</a>.
+        <a href="{{ ab_base | append: '/' | append: ab_clinic | append: '/book' | append: ab_query | escape }}" target="_blank" rel="noopener">Open it in a new tab</a>.
       </p>
       <script>
         (function () {
@@ -90,6 +98,8 @@
           service: section.settings.service,
           branch: section.settings.branch,
           doctor: section.settings.doctor,
+          source: section.settings.source,
+          campaign: section.settings.campaign,
           label: section.settings.button_label,
           style: section.settings.button_style,
           new_tab: section.settings.new_tab
@@ -127,6 +137,9 @@
     { "type": "text", "id": "service", "label": "Service", "placeholder": "consultation" },
     { "type": "text", "id": "branch", "label": "Location", "placeholder": "navrangpura" },
     { "type": "text", "id": "doctor", "label": "Doctor", "placeholder": "dr-meera-joshi" },
+    { "type": "header", "content": "Campaign tracking (optional)" },
+    { "type": "text", "id": "source", "label": "Source", "default": "shopify", "info": "Shows in Website analytics → bookings by source" },
+    { "type": "text", "id": "campaign", "label": "Campaign", "placeholder": "diwali-offer" },
     { "type": "header", "content": "Content" },
     { "type": "text", "id": "heading", "label": "Heading", "default": "Book an appointment" },
     { "type": "richtext", "id": "text", "label": "Text", "default": "<p>Choose a time that suits you. You'll get a confirmation on your phone.</p>" },

@@ -19,6 +19,7 @@ import { errorMessage } from "@/lib/errors";
 import { cn, formatPaise } from "@/lib/utils";
 import { useBooking, addressLine } from "./booking-shell";
 import { e164, stillVerified, type Verified } from "./contact-verification";
+import { rememberCampaign } from "@/lib/campaign";
 import { BranchStep, DoctorStep, DoctorAvatar, ServiceStep, EmptyChoice } from "./steps";
 import { TimePicker } from "./time-picker";
 import { DetailsStep, type Details } from "./details-step";
@@ -45,7 +46,7 @@ function dateTimeLabel(iso: string, tz: string) {
 }
 
 export function BookingFlow() {
-  const { slug, data, base } = useBooking();
+  const { slug, data, base, embedded } = useBooking();
   const router = useRouter();
   const params = useSearchParams();
   const hints = useMemo(() => parseBookingParams(params), [params]);
@@ -148,6 +149,7 @@ export function BookingFlow() {
       customer: { full_name: details.full_name.trim(), mobile: details.mobile ? e164(details.mobile) : undefined, email: details.email.trim() || undefined, whatsapp_opt_in: details.whatsapp },
       customer_notes: details.notes.trim() || undefined, dependent_id: details.dependentId || undefined,
       form_answers: bookingForm.data ? answers : undefined, coupon_code: coupon ?? undefined,
+      attribution: { ...(typeof window === "undefined" ? {} : rememberCampaign(params)), entry: embedded ? "embed" : "website" },
     }),
     onSuccess: (appt) => {
       try { window.localStorage.setItem(`ap.appt.${appt.reference}`, appt.access_token ?? ""); } catch { /* private mode */ }

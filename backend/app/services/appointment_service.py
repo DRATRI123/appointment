@@ -1,6 +1,7 @@
 """Holds, booking, lifecycle, reschedule, recurring series and waitlist."""
 from __future__ import annotations
 
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -63,6 +64,21 @@ TRANSITIONS: dict[str, dict[str, str]] = {
 
 
 log = get_logger(__name__)
+
+ATTRIBUTION_KEYS = ("utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "ref", "entry")
+_ATTR_VALUE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+def clean_attribution(raw: dict[str, str] | None) -> dict[str, str]:
+    """Campaign labels from the booking link. Only known keys with short, plain values are kept; never trusted for
+    anything but reporting."""
+    out: dict[str, str] = {}
+    for key in ATTRIBUTION_KEYS:
+        value = str((raw or {}).get(key) or "").strip().lower()
+        if _ATTR_VALUE.fullmatch(value):
+            out[key] = value
+    return out
+
 
 def _insert_or_conflict(db: Session, row, message: str, code: str = "slot_unavailable") -> None:
     """Insert inside a SAVEPOINT so a unique-index collision only undoes this row, never the caller's work."""
@@ -222,7 +238,7 @@ class AppointmentService:
             pricing_snapshot=q.as_snapshot(), customer_notes=payload.customer_notes, internal_notes=payload.internal_notes if staff else None,
             coupon_code=coupon.code if coupon is not None else None,
             payment_due_at=due_at, confirmed_at=now if status == AppointmentStatus.CONFIRMED else None,
-            metadata_={"access_token": secrets.token_urlsafe(24)},
+            metadata_={"access_token": secrets.token_urlsafe(24), **({"attribution": clean_attribution(payload.attribution)} if not staff and payload.attribution else {})},
         )
         _insert_or_conflict(self.db, appt, "This slot was just taken. Please pick another time.")
         if hold:

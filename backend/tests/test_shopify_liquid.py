@@ -37,14 +37,14 @@ def href(html: str) -> str:
 
 def test_basic_link(env):
     html = render(env, booking_url="https://booking.mydomain.com", clinic="akshar-clinic")
-    assert href(html) == "https://booking.mydomain.com/akshar-clinic"
+    assert href(html) == "https://booking.mydomain.com/akshar-clinic/book"
     assert "Book appointment" in html and 'class="ab-button ab-button--solid"' in html and "target=" not in html
 
 
 def test_preselection_parameters_are_cleaned_individually(env):
     html = render(env, booking_url="https://booking.mydomain.com/", clinic="Akshar Clinic", service="Consultation",
                   branch="Navrangpura Main", doctor="Dr. Meera Joshi", date="2026-11-20", label="Book a consultation", style="outline", new_tab=True)
-    assert href(html) == ("https://booking.mydomain.com/akshar-clinic?service=consultation&branch=navrangpura-main"
+    assert href(html) == ("https://booking.mydomain.com/akshar-clinic/book?service=consultation&branch=navrangpura-main"
                           "&doctor=dr-meera-joshi&date=2026-11-20")
     assert 'target="_blank" rel="noopener"' in html and "ab-button--outline" in html and "Book a consultation" in html
 
@@ -83,7 +83,7 @@ def test_section_schema_is_valid_json(env):
 SECTION_DEFAULTS = {
     "booking_url": "https://booking.mydomain.com", "clinic": "akshar-clinic", "mode": "button", "service": "", "branch": "",
     "doctor": "", "heading": "Book an appointment", "text": "", "align": "center", "button_label": "Book appointment",
-    "button_style": "solid", "button_color": "#0f5132", "button_text_color": "#ffffff", "new_tab": False, "frame_height": 900,
+    "button_style": "solid", "button_color": "#0f5132", "button_text_color": "#ffffff", "new_tab": False, "frame_height": 900, "source": "", "campaign": "",
 }
 
 
@@ -96,8 +96,10 @@ def render_section(env: Environment, **settings) -> str:
 
 def test_section_button_mode_uses_the_snippet(env):
     html = render_section(env, service="Consultation")
-    assert href(html) == "https://booking.mydomain.com/akshar-clinic?service=consultation"
+    assert href(html) == "https://booking.mydomain.com/akshar-clinic/book?service=consultation"
     assert "<iframe" not in html
+    html = render_section(env, source="Shopify", campaign="Diwali Offer!")
+    assert href(html) == "https://booking.mydomain.com/akshar-clinic/book?utm_source=shopify&utm_campaign=diwali-offer"
 
 
 def test_section_embed_mode_frames_the_embed_page_and_checks_the_sender(env):
