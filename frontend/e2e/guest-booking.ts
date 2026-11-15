@@ -53,18 +53,25 @@ export async function fillDetailsAndVerify(page: Page, b: Pick<GuestBooking, "na
   if (b.email) await page.getByLabel("Email (optional)").fill(b.email);
   const code = await sendCode(page);
   await page.getByTestId("otp-input").fill(code); // six digits submit by themselves
-  await expect(page.getByTestId("mobile-verified")).toBeVisible();
+  await expect(page.getByTestId("contact-verified")).toBeVisible();
   await page.getByTestId("details-continue").click();
 }
 
-export async function sendCode(page: Page): Promise<string> {
-  const sent = page.waitForResponse((r) => r.url().endsWith("/verify-mobile") && r.request().method() === "POST");
+/**
+ * Press "Send code" and return the code. The API never returns codes; in development and test the console delivery
+ * provider keeps them in memory and /api/v1/dev/outbox/latest-code hands the latest one to automated tests.
+ */
+export async function sendCode(page: Page, destination?: string): Promise<string> {
+  const sent = page.waitForResponse((r) => r.url().endsWith("/verification/start") && r.request().method() === "POST");
   await page.getByTestId("send-code").click();
   const response = await sent;
   expect(response.status(), await response.text()).toBe(200);
-  const { debug_code } = await response.json();
-  expect(debug_code, "the test server must run with APP_ENV=development or test").toMatch(/^\d{6}$/);
-  return debug_code as string;
+  const body = await response.json();
+  expect(JSON.stringify(body)).not.toMatch(/"code":"\d+"/);
+  const to = destination ?? `+91${(await page.getByLabel("Mobile number").inputValue()).replace(/\D/g, "").slice(-10)}`;
+  const r = await page.request.get(`/api/v1/dev/outbox/latest-code?destination=${encodeURIComponent(to)}`);
+  expect(r.status(), "the test API must run with APP_ENV=development or test").toBe(200);
+  return (await r.json()).code as string;
 }
 
 /** A fresh Indian mobile number, so per-number code limits never carry over between test runs. */

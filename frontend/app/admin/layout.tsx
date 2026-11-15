@@ -76,6 +76,7 @@ const groups = [
       { href: "/admin/staff", label: "Staff", icon: UsersRound },
       { href: "/admin/roles", label: "Roles & permissions", icon: KeyRound },
       { href: "/admin/settings", label: "Organization settings", icon: Settings },
+      { href: "/admin/settings/verification", label: "OTP & verification", icon: ShieldCheck },
       { href: "/admin/audit-logs", label: "Audit logs", icon: ScrollText },
     ],
   },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, Copy, Download, ExternalLink, Globe, Info, Plus, ShieldCheck, Trash2 } from "lucide-react";
@@ -101,7 +102,7 @@ export default function BookingPageAdmin() {
           <AllowedWebsites key={`embed-${settings.dataUpdatedAt}`} orgId={orgId} canWrite={canWrite}
             initial={(settings.data.embed?.allowed_origins as string[] | undefined) ?? []} />
           <MobileVerification key={`otp-${settings.dataUpdatedAt}`} orgId={orgId} canWrite={canWrite}
-            initial={settings.data.booking?.require_mobile_verification !== false} />
+            initial={settings.data.booking?.require_mobile_verification !== false && settings.data.otp?.required_for_booking !== false} />
         </>
       ) : <Skeleton className="h-48" />}
     </div>
@@ -245,7 +246,10 @@ function AllowedWebsites({ orgId, canWrite, initial }: { orgId: string; canWrite
 function MobileVerification({ orgId, canWrite, initial }: { orgId: string; canWrite: boolean; initial: boolean }) {
   const queryClient = useQueryClient();
   const save = useMutation({
-    mutationFn: (on: boolean) => organizationsService.updateSettings(orgId, "booking", { require_mobile_verification: on }),
+    mutationFn: async (on: boolean) => {
+      await organizationsService.updateSettings(orgId, "otp", { required_for_booking: on });
+      return organizationsService.updateSettings(orgId, "booking", { require_mobile_verification: on });
+    },
     onSuccess: (_, on) => { toast.success(on ? "Mobile verification is on" : "Mobile verification is off"); queryClient.invalidateQueries({ queryKey: ["settings", orgId] }); },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -253,7 +257,7 @@ function MobileVerification({ orgId, canWrite, initial }: { orgId: string; canWr
     <Card>
       <CardHeader>
         <CardTitle>Mobile verification</CardTitle>
-        <CardDescription>Guests confirm their mobile number with a one-time code before an online booking is accepted. This keeps fake bookings from blocking your calendar.</CardDescription>
+        <CardDescription>Guests confirm their mobile number or email with a one-time code before an online booking is accepted. Choose SMS, WhatsApp or email and set limits under <Link href="/admin/settings/verification" className="text-primary hover:underline">OTP &amp; verification</Link>.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between rounded-lg border px-4 py-3">

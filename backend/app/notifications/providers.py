@@ -34,6 +34,8 @@ class OutboundMessage:
     template_params: list[str] = field(default_factory=list)  # ordered values for provider templates
     locale: str = "en"
     reference: str | None = None  # our notification id, for provider-side correlation
+    button_params: list[str] = field(default_factory=list)  # WhatsApp template URL-button parameter (copy-code button)
+    sensitive: bool = False  # carries a one-time code: never logged
 
 
 @dataclass
@@ -55,6 +57,30 @@ class Provider(Protocol):
     def configured(self) -> bool: ...
 
 
+class ProviderConfig:
+    """Settings for one provider instance, used when a clinic brings its own SMS / email / WhatsApp account.
+
+    Only the clinic's values are used for anything account-related, so a clinic's sender is never combined with the
+    platform's credentials. Non-secret tuning (ports, timeouts, API version) falls back to the platform defaults.
+    """
+
+    INHERITED = frozenset({"smtp_port", "smtp_security", "smtp_timeout_seconds", "whatsapp_cloud_api_version", "notification_http_timeout_seconds"})
+
+    def __init__(self, values: dict[str, Any] | None = None):
+        self._values = {k: v for k, v in (values or {}).items() if v not in (None, "")}
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name in self._values:
+            return self._values[name]
+        return getattr(get_settings(), name) if name in self.INHERITED else None
+
+
+def _cfg(provider: Any) -> Any:
+    return getattr(provider, "_config", None) or get_settings()
+
+
 # ----------------------------------------------------------------- console
 @dataclass
 class ConsoleProvider:
@@ -73,7 +99,10 @@ class ConsoleProvider:
             return self.fail_next.pop(0)
         self.outbox.append(message)
         del self.outbox[:-200]
-        log.info("notification.console", channel=message.channel, to=message.to, subject=message.subject, body=message.body[:500])
+        if message.sensitive:  # one-time codes never reach the logs; tests read them from the in-memory outbox
+            log.info("notification.console", channel=message.channel, to=message.to, body="[one-time code hidden]")
+        else:
+            log.info("notification.console", channel=message.channel, to=message.to, subject=message.subject, body=message.body[:500])
         return DeliveryResult(provider=self.name, ok=True, message_id=f"console-{len(self.outbox)}")
 
 
@@ -82,12 +111,15 @@ class SMTPEmailProvider:
     name = "smtp"
     channel = "email"
 
+    def __init__(self, config: ProviderConfig | None = None):
+        self._config = config
+
     def configured(self) -> bool:
-        s = get_settings()
+        s = _cfg(self)
         return bool(s.smtp_host and s.smtp_from)
 
     def send(self, message: OutboundMessage) -> DeliveryResult:
-        s = get_settings()
+        s = _cfg(self)
         if not self.configured():
             return DeliveryResult(self.name, False, error="SMTP_HOST and SMTP_FROM are not set.")
         msg = EmailMessage()
@@ -142,8 +174,9 @@ class _HTTPProvider:
     name = "http"
     channel = "sms"
 
-    def __init__(self, client: httpx.Client | None = None):
+    def __init__(self, client: httpx.Client | None = None, config: ProviderConfig | None = None):
         self._client = client
+        self._config = config
 
     def client(self) -> httpx.Client:
         return self._client or httpx.Client(timeout=get_settings().notification_http_timeout_seconds)
@@ -162,21 +195,21 @@ class _HTTPProvider:
 class TwilioProvider(_HTTPProvider):
     """Twilio Programmable Messaging for SMS (``channel='sms'``) or WhatsApp (``channel='whatsapp'``)."""
 
-    def __init__(self, channel: str, client: httpx.Client | None = None):
-        super().__init__(client)
+    def __init__(self, channel: str, client: httpx.Client | None = None, config: ProviderConfig | None = None):
+        super().__init__(client, config)
         self.channel = channel
         self.name = "twilio"
 
     def _from(self) -> str | None:
-        s = get_settings()
+        s = _cfg(self)
         return s.twilio_whatsapp_from if self.channel == "whatsapp" else s.twilio_sms_from
 
     def configured(self) -> bool:
-        s = get_settings()
+        s = _cfg(self)
         return bool(s.twilio_account_sid and s.twilio_auth_token and self._from())
 
     def send(self, message: OutboundMessage) -> DeliveryResult:
-        s = get_settings()
+        s = _cfg(self)
         if not self.configured():
             return DeliveryResult(self.name, False, error="Twilio credentials or sender are not set.")
         sender = self._from() or ""
@@ -218,11 +251,11 @@ class MSG91SMSProvider(_HTTPProvider):
     channel = "sms"
 
     def configured(self) -> bool:
-        s = get_settings()
+        s = _cfg(self)
         return bool(s.msg91_auth_key and s.msg91_sender_id)
 
     def send(self, message: OutboundMessage) -> DeliveryResult:
-        s = get_settings()
+        s = _cfg(self)
         if not self.configured():
             return DeliveryResult(self.name, False, error="MSG91_AUTH_KEY and MSG91_SENDER_ID are not set.")
         if not message.provider_template_id:
@@ -254,11 +287,11 @@ class MetaWhatsAppProvider(_HTTPProvider):
     channel = "whatsapp"
 
     def configured(self) -> bool:
-        s = get_settings()
+        s = _cfg(self)
         return bool(s.whatsapp_cloud_token and s.whatsapp_cloud_phone_number_id)
 
     def send(self, message: OutboundMessage) -> DeliveryResult:
-        s = get_settings()
+        s = _cfg(self)
         if not self.configured():
             return DeliveryResult(self.name, False, error="WHATSAPP_CLOUD_TOKEN and WHATSAPP_CLOUD_PHONE_NUMBER_ID are not set.")
         to = message.to.lstrip("+")
@@ -266,7 +299,8 @@ class MetaWhatsAppProvider(_HTTPProvider):
             name, _, lang = message.provider_template_id.partition(":")
             payload: dict[str, Any] = {"messaging_product": "whatsapp", "to": to, "type": "template", "template": {
                 "name": name, "language": {"code": lang or "en"},
-                "components": [{"type": "body", "parameters": [{"type": "text", "text": v or "-"} for v in message.template_params]}] if message.template_params else [],
+                "components": ([{"type": "body", "parameters": [{"type": "text", "text": v or "-"} for v in message.template_params]}] if message.template_params else [])
+                + [{"type": "button", "sub_type": "url", "index": str(i), "parameters": [{"type": "text", "text": v}]} for i, v in enumerate(message.button_params)],
             }}
         else:
             payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"preview_url": True, "body": message.body[:4096]}}

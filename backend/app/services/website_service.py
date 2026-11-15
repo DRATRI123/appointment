@@ -162,6 +162,12 @@ class WebsiteService:
         self.meta = meta
 
     # ------------------------------------------------------------------------------------------ admin side
+    def _existing(self) -> Website:
+        row = self._row()
+        if row is None:  # _row(create=True) always returns a row; this keeps type checkers and bandit satisfied
+            raise NotFoundError("Website not found.")
+        return row
+
     def _row(self, *, create: bool = True) -> Website | None:
         row = self.db.scalar(select(Website).where(Website.organization_id == self.org.id))
         if row is None and create:
@@ -171,8 +177,7 @@ class WebsiteService:
         return row
 
     def state(self) -> dict[str, Any]:
-        row = self._row()
-        assert row is not None
+        row = self._existing()
         draft = parse_document(row.draft)
         published = parse_document(row.published) if row.published else None
         return {
@@ -183,8 +188,7 @@ class WebsiteService:
         }
 
     def _locked(self, lock_version: int) -> Website:
-        row = self._row()
-        assert row is not None
+        row = self._existing()
         lock_row(self.db, row)
         if row.lock_version != lock_version:
             raise ConflictError("Someone else saved the website since you opened it. Reload to see their changes.", code="website_edit_conflict")

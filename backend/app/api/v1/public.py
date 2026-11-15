@@ -163,50 +163,85 @@ def public_hold(request: Request, response: Response, slug: str, payload: HoldCr
     return hold_read(db, service.create_hold(payload, session_key=payload.session_key, customer=customer))
 
 
-class MobileCodeRequest(APIModel):
-    mobile: str = Field(min_length=6, max_length=20)
+class VerificationOptions(APIModel):
+    required: bool
+    channels: list[str] = Field(description="Methods the clinic enabled and can deliver, in its preferred order")
+    default_channel: str | None
+    code_length: int
+    resend_cooldown_seconds: int
+
+
+class VerificationStart(APIModel):
+    channel: str = Field(pattern=r"^(sms|whatsapp|email)$")
+    destination: str = Field(min_length=3, max_length=254, description="Mobile number for sms/whatsapp, email address for email")
     hold_id: str = Field(max_length=64)
     session_key: str = Field(min_length=8, max_length=64)
 
 
-class MobileCodeConfirm(MobileCodeRequest):
-    code: str = Field(min_length=4, max_length=8, pattern=r"^\d+$")
+class VerificationSession(APIModel):
+    session_key: str = Field(min_length=8, max_length=64)
 
 
-class MobileCodeSent(APIModel):
-    detail: str
+class VerificationCode(VerificationSession):
+    code: str = Field(pattern=r"^\d{4,8}$")
+
+
+class VerificationChallenge(APIModel):
+    challenge_id: str
+    channel: str
+    destination: str = Field(description="Masked, e.g. +91•••••210")
+    code_length: int
     expires_in_seconds: int
     resend_after_seconds: int
-    debug_code: str | None = Field(default=None, description="Only in development/test with the console SMS provider")
+    resends_left: int
 
 
-class MobileVerified(APIModel):
+class VerificationResult(APIModel):
     verification_token: str
-    mobile: str
+    channel: str
+    destination: str
     expires_in_seconds: int
 
 
-@router.post("/organizations/{slug}/verify-mobile", response_model=MobileCodeSent, summary="Send a one-time code to confirm the mobile number for a reserved slot")
+@router.get("/organizations/{slug}/verification", response_model=VerificationOptions, summary="Which verification methods the booking page may offer")
+def verification_options(slug: str, db: DB):
+    from app.services.otp import booking_verification_required, load_policy
+    from app.services.otp.otp_service import available_channels
+
+    org, _ = _org(db, slug)
+    policy = load_policy(db, org)
+    channels = available_channels(db, org, policy)
+    default = policy.get("default_channel") if policy.get("default_channel") in channels else (channels[0] if channels else None)
+    ordered = ([default] if default else []) + [c for c in channels if c != default]
+    return VerificationOptions(required=booking_verification_required(db, org), channels=ordered, default_channel=default,
+                               code_length=policy["code_length"], resend_cooldown_seconds=policy["resend_cooldown_seconds"])
+
+
+@router.post("/organizations/{slug}/verification/start", response_model=VerificationChallenge, summary="Send a one-time code by SMS, WhatsApp or email")
+@limiter.limit("5/minute;30/hour")
+def verification_start(request: Request, response: Response, slug: str, payload: VerificationStart, db: DB, meta: Meta):
+    from app.services.otp import OTPService
+
+    org, _ = _org(db, slug)
+    return OTPService(db, org, meta).start(channel=payload.channel, destination=payload.destination, hold_id=payload.hold_id, session_key=payload.session_key)
+
+
+@router.post("/organizations/{slug}/verification/{challenge_id}/resend", response_model=VerificationChallenge, summary="Send a new code for the same request")
 @limiter.limit("5/minute;20/hour")
-def send_mobile_code(request: Request, response: Response, slug: str, payload: MobileCodeRequest, db: DB, meta: Meta):
-    from app.core.config import get_settings
-    from app.services.booking_verification_service import BookingVerificationService
+def verification_resend(request: Request, response: Response, slug: str, challenge_id: str, payload: VerificationSession, db: DB, meta: Meta):
+    from app.services.otp import OTPService
 
     org, _ = _org(db, slug)
-    debug = BookingVerificationService(db, org, meta).request_code(mobile=payload.mobile, hold_id=payload.hold_id, session_key=payload.session_key)
-    s = get_settings()
-    return MobileCodeSent(detail="Code sent.", expires_in_seconds=s.otp_expire_seconds, resend_after_seconds=s.otp_resend_cooldown_seconds, debug_code=debug)
+    return OTPService(db, org, meta).resend(challenge_id, payload.session_key)
 
 
-@router.post("/organizations/{slug}/verify-mobile/confirm", response_model=MobileVerified, summary="Check the code; returns a token to send with the booking")
+@router.post("/organizations/{slug}/verification/{challenge_id}/verify", response_model=VerificationResult, summary="Check the code; returns the token the booking needs")
 @limiter.limit("10/minute")
-def confirm_mobile_code(request: Request, response: Response, slug: str, payload: MobileCodeConfirm, db: DB, meta: Meta):
-    from app.services.booking_verification_service import TOKEN_MINUTES, BookingVerificationService
+def verification_verify(request: Request, response: Response, slug: str, challenge_id: str, payload: VerificationCode, db: DB, meta: Meta):
+    from app.services.otp import OTPService
 
     org, _ = _org(db, slug)
-    token, mobile = BookingVerificationService(db, org, meta).confirm_code(mobile=payload.mobile, code=payload.code, hold_id=payload.hold_id,
-                                                                         session_key=payload.session_key)
-    return MobileVerified(verification_token=token, mobile=mobile, expires_in_seconds=TOKEN_MINUTES * 60)
+    return OTPService(db, org, meta).verify(challenge_id, payload.code, payload.session_key)
 
 
 class EmbedPolicy(APIModel):
@@ -243,11 +278,11 @@ def public_release_hold(slug: str, hold_id: str, db: DB, meta: Meta, session_key
 @limiter.limit("20/minute")
 def public_book(request: Request, response: Response, slug: str, payload: AppointmentCreate, db: DB, meta: Meta, user: OptionalUser):
     from app.api.v1.appointments import appointment_detail
-    from app.services.booking_verification_service import BookingVerificationService
+    from app.services.otp import check_booking_token
 
     org, _ = _org(db, slug)
-    BookingVerificationService(db, org, meta).check_booking(hold_id=payload.hold_id, customer_mobile=payload.customer.mobile,
-                                                           token=payload.mobile_verification_token, user=user)
+    check_booking_token(db, org, hold_id=payload.hold_id, session_key=payload.session_key, customer_mobile=payload.customer.mobile,
+                        customer_email=payload.customer.email, token=payload.verification_token or payload.mobile_verification_token, user=user)
     service = AppointmentService(db, org, user, meta)
     appt = service.create(payload, user=user, staff=False, session_key=payload.session_key)
     return appointment_detail(db, service.get(appt.public_id), include_token=True, service=service, viewer_is_customer=True)

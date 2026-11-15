@@ -57,6 +57,7 @@ from app.models.scheduling import (
     ScheduleException,
 )
 from app.models.service import Service, ServiceCategory, ServicePackage, ServicePackageItem, ServicePricing
+from app.models.verification import MessagingProviderConfig, OtpChallenge
 from app.models.website import Website, WebsiteVersion
 
 __all__ = [
@@ -78,4 +79,5 @@ __all__ = [
     "AuditLog", "SystemSetting",
     "Coupon",
     "Website", "WebsiteVersion",
+    "OtpChallenge", "MessagingProviderConfig",
 ]

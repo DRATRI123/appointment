@@ -21,8 +21,10 @@ from app.api.v1 import (
     scheduling,
     uploads,
     users,
+    verification,
     website,
 )
+from app.core.config import get_settings
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -52,5 +54,11 @@ api_router.include_router(reports.router)
 api_router.include_router(developers.router)
 api_router.include_router(uploads.router)
 api_router.include_router(website.router)
+api_router.include_router(verification.router)
+
+if get_settings().app_env in ("development", "test"):
+    from app.api.v1 import dev
+
+    api_router.include_router(dev.router)
 api_router.include_router(public.router)
 api_router.include_router(platform.router)

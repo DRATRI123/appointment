@@ -64,7 +64,8 @@ class AppointmentCreate(APIModel):
     session_key: str | None = Field(default=None, max_length=64)
     form_answers: dict[str, Any] | None = None
     coupon_code: str | None = Field(default=None, max_length=32)
-    mobile_verification_token: str | None = Field(default=None, max_length=2048, description="Public bookings: token from /verify-mobile/confirm")
+    verification_token: str | None = Field(default=None, max_length=2048, description="Public bookings: token from /verification/{id}/verify")
+    mobile_verification_token: str | None = Field(default=None, max_length=2048, description="Deprecated name for verification_token")
 
 
 class RecurringCreate(AppointmentCreate):

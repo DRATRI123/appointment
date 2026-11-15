@@ -18,9 +18,10 @@ import { parseBookingParams, matchHint } from "@/lib/booking-params";
 import { errorMessage } from "@/lib/errors";
 import { cn, formatPaise } from "@/lib/utils";
 import { useBooking, addressLine } from "./booking-shell";
+import { e164, stillVerified, type Verified } from "./contact-verification";
 import { BranchStep, DoctorStep, DoctorAvatar, ServiceStep, EmptyChoice } from "./steps";
 import { TimePicker } from "./time-picker";
-import { DetailsStep, digitsOnly, type Details } from "./details-step";
+import { DetailsStep, type Details } from "./details-step";
 import type { Hold, Slot } from "@/types/booking";
 
 type StepKey = "service" | "branch" | "doctor" | "time" | "details" | "review";
@@ -33,13 +34,7 @@ const TITLES: Record<StepKey, { title: string; short: string }> = {
   review: { title: "Review and confirm", short: "Confirm" },
 };
 
-/** "98123 00001" / "098123..." / "+91 98123..." -> "+919812300001" (Indian default), mirroring the server. */
-export function e164(raw: string): string {
-  const v = digitsOnly(raw);
-  if (/^[6-9]\d{9}$/.test(v)) return `+91${v}`;
-  if (/^0[6-9]\d{9}$/.test(v)) return `+91${v.slice(1)}`;
-  return v.startsWith("+") ? v : `+${v}`;
-}
+export { e164 } from "./contact-verification";
 
 function dateTimeLabel(iso: string, tz: string) {
   const d = new Date(iso);
@@ -68,7 +63,7 @@ export function BookingFlow() {
   const [hold, setHold] = useState<Hold | null>(null);
   const [draft, setDraft] = useState<Partial<Details>>({});
   const [detailsDone, setDetailsDone] = useState(false);
-  const [verified, setVerified] = useState<{ mobile: string; token: string } | null>(null);
+  const [verified, setVerified] = useState<Verified | null>(null);
   const [answers, setAnswers] = useState<Answers>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [coupon, setCoupon] = useState<string | null>(null);
@@ -114,11 +109,13 @@ export function BookingFlow() {
   const branch = data.branches.find((b) => b.id === branchId) ?? null;
   const chosenPro = proList.find((p) => p.id === (slot?.professional_id ?? doctor)) ?? null;
 
+  const verification = useQuery({ queryKey: ["pb-verification", slug], queryFn: () => publicBooking.verificationOptions(slug), staleTime: 60_000 });
   const verificationRequired = useMemo(() => {
-    if (booking.require_mobile_verification === false) return false;
+    if (verification.data && !verification.data.required) return false;
+    // A signed-in customer booking with their own, already verified mobile number skips the code (the server agrees).
     if (user?.mobile && user.mobile_verified_at && details.mobile && e164(details.mobile) === user.mobile) return false;
     return true;
-  }, [booking.require_mobile_verification, user, details.mobile]);
+  }, [verification.data, user, details.mobile]);
 
   const steps: StepKey[] = ["service", ...(proList.length === 1 ? [] : (["doctor"] as const)), ...(branchChoices.length > 1 ? (["branch"] as const) : []), "time", "details", "review"];
   const current: StepKey = !serviceId ? "service" : doctor === null ? "doctor" : !branchId ? "branch" : !hold ? "time" : !detailsDone ? "details" : "review";
@@ -147,7 +144,7 @@ export function BookingFlow() {
 
   const book = useMutation({
     mutationFn: () => publicBooking.book(slug, {
-      hold_id: hold!.id, session_key: sessionKey, mobile_verification_token: verified?.token,
+      hold_id: hold!.id, session_key: sessionKey, verification_token: verificationRequired && stillVerified(verified, details.mobile, details.email) ? verified?.token : undefined,
       customer: { full_name: details.full_name.trim(), mobile: details.mobile ? e164(details.mobile) : undefined, email: details.email.trim() || undefined, whatsapp_opt_in: details.whatsapp },
       customer_notes: details.notes.trim() || undefined, dependent_id: details.dependentId || undefined,
       form_answers: bookingForm.data ? answers : undefined, coupon_code: coupon ?? undefined,
@@ -160,7 +157,7 @@ export function BookingFlow() {
       const fe = formErrorsFromApi(e);
       const code = e instanceof ApiError ? e.code : "";
       if (fe) { setFormErrors(fe); setDetailsDone(false); toast.error("Please check the highlighted answers."); return; }
-      if (code === "mobile_not_verified" || code === "mobile_verification_expired") { setVerified(null); setDetailsDone(false); toast.error(errorMessage(e)); return; }
+      if (code === "contact_not_verified" || code === "contact_verification_expired") { setVerified(null); setDetailsDone(false); toast.error(errorMessage(e)); return; }
       if (["hold_expired", "slot_unavailable", "hold_not_found"].includes(code)) { setHold(null); setSlot(null); setDetailsDone(false); toast.error("That time is no longer available. Please choose another."); return; }
       toast.error(errorMessage(e));
     },
@@ -220,7 +217,7 @@ export function BookingFlow() {
 
           {current === "details" && hold ? (
             <DetailsStep slug={slug} holdId={hold.id} sessionKey={sessionKey} details={details} onChange={setDraft}
-              verificationRequired={verificationRequired} verifiedFor={verified?.mobile ?? null} onVerified={(mobile, token) => setVerified({ mobile, token })}
+              verificationRequired={verificationRequired} verification={verification.data} verified={verified} onVerified={setVerified}
               whatsappEnabled={!!data.settings.messaging?.whatsapp_enabled} dependents={dependents.data ?? []}
               form={bookingForm.data} answers={answers} onAnswers={(a) => { setAnswers(a); setFormErrors({}); }} formErrors={formErrors}
               onContinue={() => setDetailsDone(true)} />

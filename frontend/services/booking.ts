@@ -65,10 +65,13 @@ export const publicBooking = {
   hold: (slug: string, body: Body) => api.post<Hold>(`/public/organizations/${slug}/holds`, body),
   releaseHold: (slug: string, id: string, session_key: string) => api.delete<ApiErrorBody>(`/public/organizations/${slug}/holds/${id}`, { searchParams: { session_key } }),
   book: (slug: string, body: Body) => api.post<AppointmentDetail>(`/public/organizations/${slug}/appointments`, body),
-  sendMobileCode: (slug: string, body: { mobile: string; hold_id: string; session_key: string }) =>
-    api.post<{ detail: string; expires_in_seconds: number; resend_after_seconds: number; debug_code: string | null }>(`/public/organizations/${slug}/verify-mobile`, body),
-  confirmMobileCode: (slug: string, body: { mobile: string; code: string; hold_id: string; session_key: string }) =>
-    api.post<{ verification_token: string; mobile: string; expires_in_seconds: number }>(`/public/organizations/${slug}/verify-mobile/confirm`, body),
+  verificationOptions: (slug: string) => api.get<VerificationOptions>(`/public/organizations/${slug}/verification`),
+  startVerification: (slug: string, body: { channel: VerificationChannel; destination: string; hold_id: string; session_key: string }) =>
+    api.post<VerificationChallenge>(`/public/organizations/${slug}/verification/start`, body),
+  resendVerification: (slug: string, challengeId: string, session_key: string) =>
+    api.post<VerificationChallenge>(`/public/organizations/${slug}/verification/${challengeId}/resend`, { session_key }),
+  verifyCode: (slug: string, challengeId: string, body: { code: string; session_key: string }) =>
+    api.post<{ verification_token: string; channel: VerificationChannel; destination: string; expires_in_seconds: number }>(`/public/organizations/${slug}/verification/${challengeId}/verify`, body),
   status: (slug: string, reference: string, access_token?: string | null) =>
     api.get<AppointmentDetail>(`/public/organizations/${slug}/appointments/${reference}`, { searchParams: { access_token: access_token ?? undefined } }),
   cancel: (slug: string, reference: string, access_token: string | null, reason?: string) =>
@@ -91,3 +94,7 @@ export function bookingSessionKey(): string {
     return `anon-${Math.random().toString(36).slice(2)}`;
   }
 }
+
+export type VerificationChannel = "sms" | "whatsapp" | "email";
+export interface VerificationOptions { required: boolean; channels: VerificationChannel[]; default_channel: VerificationChannel | null; code_length: number; resend_cooldown_seconds: number }
+export interface VerificationChallenge { challenge_id: string; channel: VerificationChannel; destination: string; code_length: number; expires_in_seconds: number; resend_after_seconds: number; resends_left: number }

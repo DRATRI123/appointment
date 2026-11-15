@@ -15,7 +15,35 @@ from app.repositories.organizations import MembershipRepository, OrganizationRep
 from app.schemas.organization import DomainCreate, OrganizationCreate, OrganizationUpdate
 from app.services.audit_service import RequestMeta, record_audit
 
-SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed"}
+SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed", "otp"}
+
+# One-time-code policy for public bookings: (default, min, max) for numbers.
+OTP_LIMITS = {
+    "code_length": (6, 4, 6), "expiry_seconds": (300, 60, 900), "resend_cooldown_seconds": (60, 20, 600), "max_attempts": (5, 3, 10),
+    "max_resends": (3, 1, 10), "limit_per_destination_hour": (5, 1, 10), "limit_per_ip_hour": (20, 5, 200), "limit_per_session_hour": (8, 2, 30),
+}
+OTP_CHANNELS = ("sms", "whatsapp", "email")
+
+
+def validate_otp_values(values: dict[str, Any]) -> dict[str, Any]:
+    out = dict(values)
+    for key, (_, lo, hi) in OTP_LIMITS.items():
+        if key in out:
+            v = out[key]
+            if isinstance(v, bool) or not isinstance(v, int) or not lo <= v <= hi:
+                raise ValidationFailed(f"{key.replace('_', ' ').capitalize()} must be a whole number from {lo} to {hi}.", code="invalid_otp_setting")
+    if "code_length" in out and out["code_length"] not in (4, 6):
+        raise ValidationFailed("Codes can have 4 or 6 digits.", code="invalid_otp_setting")
+    for key in ("enabled", "required_for_booking"):
+        if key in out and not isinstance(out[key], bool):
+            raise ValidationFailed(f"{key} must be true or false.", code="invalid_otp_setting")
+    if "channels" in out:
+        ch = out["channels"]
+        if not isinstance(ch, list) or not ch or any(c not in OTP_CHANNELS for c in ch) or len(set(ch)) != len(ch):
+            raise ValidationFailed("Choose at least one of SMS, WhatsApp and email.", code="invalid_otp_setting")
+    if "default_channel" in out and out["default_channel"] not in OTP_CHANNELS:
+        raise ValidationFailed("Choose SMS, WhatsApp or email as the default.", code="invalid_otp_setting")
+    return out
 
 # The public booking page lives at /<slug>, next to the app's own pages. These can never be a clinic's slug.
 RESERVED_SLUGS = frozenset({
@@ -61,6 +89,8 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     },
     # Websites (e.g. a Shopify store) allowed to show the booking page inside an iframe.
     "embed": {"allowed_origins": []},
+    # One-time codes before an online booking is accepted (see app/services/otp).
+    "otp": {"enabled": True, "required_for_booking": True, "channels": ["sms"], "default_channel": "sms", **{k: v[0] for k, v in OTP_LIMITS.items()}},
     "cancellation": {
         "customer_can_cancel": True,
         "cancel_before_hours": 4,
@@ -250,6 +280,11 @@ class OrganizationService:
         before = self.get_settings(org, namespace)[namespace]
         if namespace == "embed" and "allowed_origins" in values:
             values = {**values, "allowed_origins": validate_embed_origins(values["allowed_origins"])}
+        if namespace == "otp":
+            values = validate_otp_values(values)
+            merged = {**before, **values}
+            if merged["default_channel"] not in merged["channels"]:
+                raise ValidationFailed("The default method must be one of the enabled methods.", code="invalid_otp_setting")
         for key, value in values.items():
             if not re.fullmatch(r"[a-z][a-z0-9_]{0,95}", key):
                 raise ValidationFailed(f"Invalid setting key: {key}", code="invalid_setting_key")

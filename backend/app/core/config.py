@@ -116,6 +116,7 @@ class Settings(BaseSettings):
     whatsapp_cloud_token: str | None = None
     whatsapp_cloud_phone_number_id: str | None = None
     whatsapp_cloud_api_version: str = "v21.0"
+    otp_whatsapp_template: str | None = None  # Meta authentication template "name:language" or Twilio content SID (HX...)
     otp_sms_template_id: str | None = None  # DLT / MSG91 flow id for the login-code SMS
     notification_max_attempts: int = 5
     # Developer API and webhooks
