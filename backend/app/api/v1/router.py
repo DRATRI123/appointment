@@ -21,6 +21,7 @@ from app.api.v1 import (
     scheduling,
     uploads,
     users,
+    website,
 )
 
 api_router = APIRouter()
@@ -50,5 +51,6 @@ api_router.include_router(integrations.feeds_router)
 api_router.include_router(reports.router)
 api_router.include_router(developers.router)
 api_router.include_router(uploads.router)
+api_router.include_router(website.router)
 api_router.include_router(public.router)
 api_router.include_router(platform.router)

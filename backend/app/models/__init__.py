@@ -57,6 +57,7 @@ from app.models.scheduling import (
     ScheduleException,
 )
 from app.models.service import Service, ServiceCategory, ServicePackage, ServicePackageItem, ServicePricing
+from app.models.website import Website, WebsiteVersion
 
 __all__ = [
     "Base",
@@ -76,4 +77,5 @@ __all__ = [
     "Integration", "APIKey", "WebhookEndpoint", "WebhookEvent", "IntegrationLog", "AppointmentExternalEvent", "ExternalBusyBlock", "ApiKeyUsage",
     "AuditLog", "SystemSetting",
     "Coupon",
+    "Website", "WebsiteVersion",
 ]

@@ -80,18 +80,27 @@ export function BookingFlow() {
     notes: draft.notes ?? "", whatsapp: draft.whatsapp ?? false, dependentId: draft.dependentId ?? "",
   };
 
-  const branchId = branchSel !== undefined ? branchSel : matchHint(data.branches, hints.branch)?.id ?? (data.branches.length === 1 ? data.branches[0].id : null);
-  const services = useQuery({ queryKey: ["pb-services", slug, branchId], queryFn: () => publicCatalog.services(slug, { branch_id: branchId ?? undefined }) });
+  // Order: service → doctor → location. A location preselected by the link (or the only one) narrows the lists early.
+  const presetBranch = matchHint(data.branches, hints.branch)?.id ?? (data.branches.length === 1 ? data.branches[0].id : undefined);
+  const services = useQuery({ queryKey: ["pb-services", slug, presetBranch ?? null], queryFn: () => publicCatalog.services(slug, { branch_id: presetBranch }) });
   const serviceId = serviceSel !== undefined ? serviceSel : matchHint(services.data, hints.service)?.id ?? null;
   const professionals = useQuery({
-    queryKey: ["pb-pros", slug, branchId, serviceId],
-    queryFn: () => publicCatalog.professionals(slug, { branch_id: branchId ?? undefined, service_id: serviceId ?? undefined }),
-    enabled: !!serviceId && !!branchId,
+    queryKey: ["pb-pros", slug, presetBranch ?? null, serviceId],
+    queryFn: () => publicCatalog.professionals(slug, { branch_id: presetBranch, service_id: serviceId ?? undefined }),
+    enabled: !!serviceId,
   });
-  const proList = professionals.data ?? [];
+  const proList = useMemo(() => professionals.data ?? [], [professionals.data]);
   const doctor = doctorSel !== undefined ? doctorSel : matchHint(proList, hints.doctor)?.id ?? (proList.length === 1 ? proList[0].id : null);
-  const setServiceId = (id: string | null) => { setServiceSel(id); setDoctorSel(undefined); };
-  const setDoctor = (id: string | null) => setDoctorSel(id);
+  // Locations where the chosen doctor (or, for "first available", any doctor offering the service) works.
+  const branchChoices = useMemo(() => {
+    const pros = doctor && doctor !== "any" ? proList.filter((p) => p.id === doctor) : proList;
+    const ids = new Set(pros.flatMap((p) => (p.branches ?? []).filter((b) => b.is_active !== false).map((b) => b.branch_id)));
+    return data.branches.filter((b) => ids.has(b.id));
+  }, [doctor, proList, data.branches]);
+  const branchHint = matchHint(branchChoices, hints.branch)?.id;
+  const branchId = branchSel !== undefined ? branchSel : branchHint ?? (branchChoices.length === 1 ? branchChoices[0].id : null);
+  const setServiceId = (id: string | null) => { setServiceSel(id); setDoctorSel(undefined); setBranchId(undefined); };
+  const setDoctor = (id: string | null) => { setDoctorSel(id); setBranchId(undefined); };
   const quote = useQuery({
     queryKey: ["pb-quote", slug, serviceId, branchId, slot?.professional_id, coupon],
     queryFn: () => publicBooking.quote(slug, { service_id: serviceId!, branch_id: branchId!, professional_id: slot?.professional_id, coupon_code: coupon ?? undefined }),
@@ -111,8 +120,8 @@ export function BookingFlow() {
     return true;
   }, [booking.require_mobile_verification, user, details.mobile]);
 
-  const steps: StepKey[] = ["service", ...(data.branches.length > 1 ? (["branch"] as const) : []), ...(proList.length === 1 ? [] : (["doctor"] as const)), "time", "details", "review"];
-  const current: StepKey = !serviceId ? "service" : !branchId ? "branch" : doctor === null ? "doctor" : !hold ? "time" : !detailsDone ? "details" : "review";
+  const steps: StepKey[] = ["service", ...(proList.length === 1 ? [] : (["doctor"] as const)), ...(branchChoices.length > 1 ? (["branch"] as const) : []), "time", "details", "review"];
+  const current: StepKey = !serviceId ? "service" : doctor === null ? "doctor" : !branchId ? "branch" : !hold ? "time" : !detailsDone ? "details" : "review";
   const index = steps.indexOf(current);
 
   useEffect(() => {
@@ -166,13 +175,12 @@ export function BookingFlow() {
     if (current === "review") return setDetailsDone(false);
     if (current === "details") return release();
     if (current === "time") {
+      if (branchChoices.length > 1) return setBranchId(null);
       if (proList.length > 1) return setDoctor(null);
-      if (data.branches.length > 1) { setDoctor(null); return setBranchId(null); }
-      setDoctor(null);
       return setServiceId(null);
     }
-    if (current === "doctor") return data.branches.length > 1 ? setBranchId(null) : setServiceId(null);
-    if (current === "branch") return setServiceId(null);
+    if (current === "branch") return proList.length > 1 ? setDoctor(null) : setServiceId(null);
+    if (current === "doctor") return setServiceId(null);
   };
 
   const when = slot ? dateTimeLabel(slot.start_at, tz) : null;
@@ -196,7 +204,7 @@ export function BookingFlow() {
             )
           ) : null}
 
-          {current === "branch" ? <BranchStep branches={data.branches} selected={branchId} onSelect={(b) => { setBranchId(b.id); setDoctorSel(undefined); }} /> : null}
+          {current === "branch" ? <BranchStep branches={branchChoices} selected={branchId} onSelect={(b) => setBranchId(b.id)} /> : null}
 
           {current === "doctor" ? (
             professionals.isLoading ? <CardsSkeleton /> : (

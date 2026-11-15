@@ -11,6 +11,7 @@ from app.models import Organization, ServiceCategory
 from app.schemas.catalog import BranchRead, CategoryRead, ProfessionalRead, ServiceRead
 from app.schemas.common import APIModel
 from app.schemas.organization import OrganizationRead
+from app.schemas.website import PublicWebsite
 from app.services.catalog_service import CatalogService, ids_to_public
 from app.services.organization_service import OrganizationService
 
@@ -211,6 +212,15 @@ def confirm_mobile_code(request: Request, response: Response, slug: str, payload
 class EmbedPolicy(APIModel):
     allowed_origins: list[str]
     booking_page_enabled: bool
+
+
+@router.get("/organizations/{slug}/website", response_model=PublicWebsite, summary="The clinic's published website (or a starting site built from its profile)")
+def public_website(slug: str, db: DB, response: Response):
+    from app.services.website_service import WebsiteService
+
+    org, _ = _org(db, slug)
+    response.headers["Cache-Control"] = "public, max-age=30"
+    return WebsiteService(db, org).public()
 
 
 @router.get("/organizations/{slug}/embed-policy", response_model=EmbedPolicy, summary="Websites allowed to show this booking page in an iframe")

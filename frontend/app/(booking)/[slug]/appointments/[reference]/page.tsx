@@ -6,8 +6,10 @@ export const metadata = { title: "Your appointment", robots: { index: false, fol
 export default async function AppointmentPage({ params }: { params: Promise<{ reference: string }> }) {
   const { reference } = await params;
   return (
-    <Suspense>
-      <AppointmentStatus reference={reference} />
-    </Suspense>
+    <div className="mx-auto max-w-6xl px-4 py-10">
+      <Suspense>
+        <AppointmentStatus reference={reference} />
+      </Suspense>
+    </div>
   );
 }

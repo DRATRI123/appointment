@@ -60,6 +60,9 @@ PERMISSIONS: dict[str, str] = {
     "integrations:read": "View integrations",
     "integrations:write": "Connect and configure integrations",
     "api_keys:manage": "Create and revoke API keys and webhooks",
+    # public website
+    "website:write": "Edit the public website draft (content, pages, buttons, images)",
+    "website:publish": "Publish the public website or restore an earlier version",
     # reports
     "reports:read": "View dashboards and reports",
     "reports:export": "Export reports",

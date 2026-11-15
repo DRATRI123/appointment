@@ -13,7 +13,7 @@ from app.schemas.catalog import UploadResponse
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
-WRITE_PERMISSIONS = ("organization:write", "branches:write", "professionals:write", "services:write", "upi_accounts:write")
+WRITE_PERMISSIONS = ("organization:write", "branches:write", "professionals:write", "services:write", "upi_accounts:write", "website:write")
 
 
 @router.post("/images", response_model=UploadResponse, summary="Upload a public image (PNG/JPEG/WebP, max 5 MB)")
@@ -26,5 +26,19 @@ def upload_image(
         raise PermissionDenied("You cannot upload files for this organization.", code="permission_denied")
     data = file.file.read()
     mime = validate_upload(data, allowed=IMAGE_TYPES, max_mb=settings.max_upload_size_mb)
+    stored = get_storage().save(scope=f"org/{ctx.organization.public_id}", visibility="public", data=data, mime_type=mime)
+    return UploadResponse(url=stored.url or "", key=stored.key, mime_type=stored.mime_type, size_bytes=stored.size_bytes)
+
+
+@router.post("/documents", response_model=UploadResponse, summary="Upload a public PDF for the website (max 10 MB)")
+def upload_document(
+    settings: AppSettings,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    file: UploadFile = File(...),
+) -> UploadResponse:
+    if not ctx.has("website:write"):
+        raise PermissionDenied("You cannot upload files for this organization.", code="permission_denied")
+    data = file.file.read()
+    mime = validate_upload(data, allowed={"application/pdf"}, max_mb=min(10, settings.max_upload_size_mb * 2))
     stored = get_storage().save(scope=f"org/{ctx.organization.public_id}", visibility="public", data=data, mime_type=mime)
     return UploadResponse(url=stored.url or "", key=stored.key, mime_type=stored.mime_type, size_bytes=stored.size_bytes)

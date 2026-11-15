@@ -46,7 +46,7 @@ export function screenFor(a: AppointmentDetail, checkout: Checkout | null | unde
 }
 
 export function AppointmentStatus({ reference }: { reference: string }) {
-  const { slug, data, base } = useBooking();
+  const { slug, data, bookPath } = useBooking();
   const params = useSearchParams();
   const queryClient = useQueryClient();
   const token = useMemo(() => {
@@ -88,7 +88,7 @@ export function AppointmentStatus({ reference }: { reference: string }) {
         <span className="mx-auto grid size-14 place-items-center rounded-full bg-muted"><Link2Off className="size-7 text-muted-foreground" aria-hidden /></span>
         <h1 className="text-2xl font-semibold tracking-tight" data-testid="booking-heading">We couldn&apos;t open this booking</h1>
         <p className="text-muted-foreground">The link may be incomplete or out of date. Use the full link from your confirmation message, or contact {data.organization.name}{data.organization.phone ? ` on ${data.organization.phone}` : ""}.</p>
-        <Button asChild><Link href={base}>Book an appointment</Link></Button>
+        <Button asChild><Link href={bookPath}>Book an appointment</Link></Button>
       </div>
     );
   }
@@ -142,7 +142,7 @@ export function AppointmentStatus({ reference }: { reference: string }) {
         </section>
       ) : null}
 
-      {closed ? <Button asChild size="lg" className="w-full"><Link href={base}>Book again</Link></Button> : null}
+      {closed ? <Button asChild size="lg" className="w-full"><Link href={bookPath}>Book again</Link></Button> : null}
 
       <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-sm text-muted-foreground">
         <AlertTriangle className="size-4" aria-hidden /> Keep this page&apos;s link to manage your booking.

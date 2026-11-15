@@ -4,22 +4,24 @@ import { createContext, useContext, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, CalendarOff, Globe, Mail, MapPin, Phone, ShieldCheck } from "lucide-react";
+import { Building2, CalendarOff, Globe, Mail, MapPin, Phone } from "lucide-react";
 import { publicCatalog, mediaUrl } from "@/services/catalog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { safeHex, textOn } from "./brand";
 import type { PublicOrganization } from "@/types/catalog";
 
-interface BookingContextValue {
+export interface BookingContextValue {
   slug: string;
   data: PublicOrganization;
   /** Base path for links inside the booking experience: "/akshar-clinic" or "/embed/akshar-clinic". */
   base: string;
+  /** Where "Book" links go: "/akshar-clinic/book" on the clinic website, the frame's own page when embedded. */
+  bookPath: string;
   embedded: boolean;
 }
 
-const BookingContext = createContext<BookingContextValue | null>(null);
+export const BookingContext = createContext<BookingContextValue | null>(null);
 
 export function useBooking() {
   const ctx = useContext(BookingContext);
@@ -94,13 +96,11 @@ export function BookingShell({ slug, embedded = false, children }: { slug: strin
     return <Notice icon={CalendarOff} title={`${data.organization.name} is not taking online bookings right now`} body={data.organization.phone ? `Please call ${data.organization.phone} to book.` : "Please contact the clinic to book."} />;
   }
   const base = embedded ? `/embed/${slug}` : `/${slug}`;
-  // The big clinic hero belongs on the booking page itself; the appointment/payment page stays focused.
   const onBookingPage = pathname === base;
   return (
-    <BookingContext.Provider value={{ slug, data, base, embedded }}>
-      <div className={cn("flex min-h-dvh flex-col bg-[oklch(0.985_0.004_160)] dark:bg-background", embedded && "min-h-0", onBookingPage && "pb-20 lg:pb-0")} data-testid="booking-shell">
+    <BookingContext.Provider value={{ slug, data, base, bookPath: base, embedded }}>
+      <div className={cn("flex min-h-dvh flex-col bg-[oklch(0.985_0.004_160)] dark:bg-background", embedded && "min-h-0", onBookingPage && !embedded && "pb-20 lg:pb-0")} data-testid="booking-shell">
         <ClinicHeader />
-        {!embedded && onBookingPage ? <Hero /> : null}
         <main className={cn("mx-auto w-full max-w-6xl flex-1 px-4", embedded ? "py-4" : "py-8 sm:py-10")}>{children}</main>
         <ClinicFooter />
       </div>
@@ -147,44 +147,6 @@ function ClinicHeader() {
         </div>
       </div>
     </header>
-  );
-}
-
-function Hero() {
-  const { data } = useBooking();
-  const org = data.organization;
-  const branding = data.settings.branding ?? {};
-  const brand = safeHex(branding.primary_color);
-  const accent = safeHex(branding.accent_color, "#14b8a6");
-  const cover = typeof branding.cover_image_url === "string" ? mediaUrl(branding.cover_image_url) : undefined;
-  const tagline = (typeof branding.tagline === "string" && branding.tagline) || org.description;
-  const city = ((data.branches[0]?.address ?? {}) as Record<string, string>).city;
-  // Text colour follows the brand colour for contrast; over a photo a dark scrim keeps white text readable.
-  const ink = cover ? "#ffffff" : textOn(brand);
-  return (
-    <section className="relative isolate overflow-hidden" style={{ color: ink }} aria-labelledby="clinic-name">
-      {cover ? (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={cover} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" />
-          <div className="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-black/45 to-black/25" />
-        </>
-      ) : (
-        <div className="absolute inset-0 -z-10" style={{ background: `radial-gradient(1200px 400px at 85% -20%, ${accent}55, transparent 60%), linear-gradient(135deg, ${brand}, ${brand})` }} />
-      )}
-      <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-10 sm:flex-row sm:items-end sm:py-14">
-        <Logo size="lg" onBrand />
-        <div className="min-w-0 flex-1 space-y-2">
-          <h1 id="clinic-name" className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{org.name}</h1>
-          {tagline ? <p className="max-w-2xl text-base text-pretty opacity-90 sm:text-lg">{tagline}</p> : null}
-          <ul className="flex flex-wrap gap-x-5 gap-y-1.5 pt-1 text-sm opacity-90">
-            {city ? <li className="flex items-center gap-1.5"><MapPin className="size-4" aria-hidden />{city}{data.branches.length > 1 ? ` · ${data.branches.length} locations` : ""}</li> : null}
-            {org.phone ? <li className="flex items-center gap-1.5"><Phone className="size-4" aria-hidden />{org.phone}</li> : null}
-            <li className="flex items-center gap-1.5"><ShieldCheck className="size-4" aria-hidden />Book online in a few steps</li>
-          </ul>
-        </div>
-      </div>
-    </section>
   );
 }
 
