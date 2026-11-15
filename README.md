@@ -65,6 +65,10 @@ appointment-platform/
 
 ## Run locally on Windows 10
 
+**Easiest:** install Python 3.11+ and Node.js 22, then double-click **`START-APP.bat`** in this folder. The first
+time it installs everything; every time it updates the database and opens the API, the worker and the website
+(http://localhost:3000). Close its 3 windows to stop. The steps below do the same by hand.
+
 Prerequisites: [Python 3.11+](https://www.python.org/downloads/windows/) (tick "Add to PATH"),
 [Node.js 22 LTS](https://nodejs.org/) (22.12 or newer), Git. Open **PowerShell**.
 
