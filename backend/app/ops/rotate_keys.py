@@ -1,6 +1,6 @@
 """Re-encrypt every protected field with the current DATA_ENCRYPTION_KEY: ``python -m app.ops.rotate_keys``.
 
-Rotating the key (documentation/security.md):
+Rotating the key (docs/security.md):
   1. Back up (``python -m app.ops.backup create``) and keep the old key.
   2. Set DATA_ENCRYPTION_KEY to a new key and put the old one in DATA_ENCRYPTION_PREVIOUS_KEYS; restart the API and
      worker. Everything keeps working: old values are read with the old key, new values use the new key.

@@ -48,7 +48,7 @@ chose the same time.
 | Availability queried busy time professional by professional | One query per kind of busy time for all professionals | 75 ms → 47 ms |
 | One API process used one core | `WEB_CONCURRENCY` worker processes (default 2) with Prometheus multi-process metrics | capacity 45 → 88 requests/s on 2 cores |
 | The response could reach the client before the database commit | Commit before responding (`scope="function"`) | no more "Hold not found" right after creating a hold; never "created" for data whose commit failed |
-| Idle connections closed by the API while the proxy reused them | API keep-alive 75 s, Caddy 60 s | no connection resets under load |
+| Idle connections closed by the API while the proxy reused them | API keep-alive 75 s, proxy 60 s (Nginx today; Caddy when measured) | no connection resets under load |
 | Revenue-by-date and first-visit queries scanned a clinic's whole history | Indexes `ix_payments_org_verified` and `ix_appointments_org_customer_start` (built `CONCURRENTLY`) | 5.4 ms → 0.05 ms; 13.6 ms → 8.3 ms (index-only) |
 
 Database time is small at these volumes (the most expensive query averages 3.5 ms); the API's Python CPU time is

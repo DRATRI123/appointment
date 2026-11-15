@@ -9,6 +9,9 @@ from app.security.permissions import PERMISSIONS
 router = APIRouter(prefix="/meta", tags=["meta"])
 
 
+# Also without the trailing slash: the website's /api proxy (Next.js) strips it, and a redirect back would point the
+# browser at the API's own address, which the Content-Security-Policy correctly blocks.
+@router.get("", include_in_schema=False)
 @router.get("/", summary="Public application metadata")
 def meta(settings: AppSettings) -> dict:
     return {

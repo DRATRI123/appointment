@@ -356,12 +356,12 @@ downtime for bookings.
    python -m app.ops.migrate_data --prepare-sqlite data\app.db
    ```
 
-2. **On the server**, install as in `deployment.md` (sections 2 and 3) with the **same** `DATA_ENCRYPTION_KEY` and
+2. **On the server**, install as in `production-deployment.md` (sections 2 and 3) with the **same** `DATA_ENCRYPTION_KEY` and
    `SECRET_KEY` as the PC's `backend/.env` (clinical notes are encrypted with it; a different key makes them
    unreadable). Start once so the database is created, then stop everything except the database:
 
    ```bash
-   docker compose up -d && docker compose stop caddy web api worker backup
+   docker compose up -d && docker compose stop nginx web api worker backup
    ```
 
 3. **Copy the SQLite file and the uploads to the server** (PowerShell on the PC):

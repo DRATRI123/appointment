@@ -17,16 +17,21 @@ appointment is confirmed.
 
 ## Documentation
 
-* [Architecture, diagrams, workflows and roadmap](documentation/architecture.md)
-* [Database design and ER diagram](documentation/database.md)
-* [Security architecture](documentation/security.md)
-* [API overview](documentation/api.md)
-* [Developer guide: API keys, webhooks, code samples, go-live checklist](documentation/developer-guide.md) (also in the admin under **Developer docs**)
-* [Public booking API with example requests](documentation/public-booking-api.md)
-* [Shopify and website integration (no app needed)](documentation/shopify-integration.md)
-* [Clinic website, website builder, OTP & verification, analytics](documentation/website-and-verification.md)
-* [Deployment](documentation/deployment.md)
-* [Performance, security and encryption review: audit, load tests, before/after](documentation/optimization-report.md)
+* [Architecture, diagrams, workflows and roadmap](docs/architecture.md)
+* [Database design and ER diagram](docs/database.md)
+* [Security architecture](docs/security.md)
+* [API overview](docs/api.md)
+* [Developer guide: API keys, webhooks, code samples, go-live checklist](docs/developer-guide.md) (also in the admin under **Developer docs**)
+* [Public booking API with example requests](docs/public-booking-api.md)
+* [Shopify and website integration (no app needed)](docs/shopify-integration.md)
+* [Clinic website, website builder, OTP & verification, analytics](docs/website-and-verification.md)
+* [Local development on Windows](docs/local-development.md) and [with Docker](docs/docker-development.md)
+* [Environment configuration: templates and the checks per environment](docs/environment-configuration.md)
+* [Production deployment (future VPS): setup, deploy, update, rollback](docs/production-deployment.md)
+* [Super admin setup and recovery](docs/superadmin-setup.md) · [Who may do what (permissions matrix)](docs/permissions-matrix.md)
+* [Backups and restore](docs/backup-restore.md) · [Database migrations](docs/database-migrations.md) · [Encryption and keys](docs/encryption.md)
+* [Security and load testing report, remaining risks](docs/security-testing-report.md) · [Troubleshooting](docs/troubleshooting.md)
+* [Performance, security and encryption review: audit, load tests, before/after](docs/optimization-report.md)
 
 ## Status
 
@@ -44,10 +49,11 @@ appointment is confirmed.
 | 10 | Admin dashboard (KPIs vs previous period, daily trends, utilization, busiest times, needs-attention list), professional stats, 10 reports with CSV/Excel export (audit-logged), platform dashboard, subscription plans with enforced limits, organization detail, platform settings and announcement | ✅ done |
 | 11 | Developer portal: scoped API keys (hashed, IP allowlist, per-key rate limit, usage), signed webhooks with outbox delivery, retries, SSRF protection and delivery logs, API docs; platform API usage; trusted-proxy client IPs | ✅ done |
 | 12 | Security hardening and testing: security counters survive failed requests, cross-tenant sweep of every ID route, forwarded-IP spoofing fix, no input echo in errors, generic 500s, CSP and safe post-login redirects, accessibility (axe) and CSP checks in the browser suite, customer data erasure, bandit / pip-audit / npm audit / ruff / coverage gates in CI | ✅ done |
-| 13 | Production: Docker stack with automatic HTTPS (Caddy), PostgreSQL 17, Redis, worker and one-shot migrations; startup refuses unsafe settings; encrypted, verified, pruned daily backups with restore and off-site copy; S3-compatible uploads; System health page, Prometheus metrics and alert rules, optional Sentry (scrubbed); nonce-based CSP; shared Redis rate limits; deployment runbook | ✅ done |
-| 14 | PostgreSQL and performance: whole suite runs on PostgreSQL in CI; real concurrency races fixed with row locks (payments verified twice, refunds beyond the amount paid, coupon limits, double cancel) and proven by parallel tests; commit before the response is sent; SQLite → PostgreSQL migration tool with checksum verification; N+1 queries removed; indexes; multi-process API; load-tested to 150 simultaneous users on 2 cores (`documentation/performance.md`) | ✅ done |
-| 15 | Public booking page and Shopify: premium mobile-first booking at `/{clinic}` (doctor profiles, services with prices, branch choice, day strip and grouped times, mobile one-time code, review with server price, own UPI QR + UTR, clear success/pending/failed screens); preselection by URL (`?service=&branch=&doctor=&date=`), validated and never trusted for price; embeddable `/embed/{clinic}` with per-clinic allowed websites (`frame-ancestors`, fail closed) and auto-resize; Shopify Liquid button snippet and theme section; admin *Booking page & Shopify* screen with generated code (`documentation/shopify-integration.md`) | ✅ done |
-| 16 | Clinic website and builder: a full public website per clinic at `/{clinic}` (hero, about, services, doctors, categories, facilities, gallery, approved testimonials, FAQ, locations with hours, contact, custom pages, policy and location pages, SEO), booking at `/{clinic}/book` (service → doctor → location → time); Website Management with templates, drag-and-drop, buttons, pages, device preview, draft/publish/restore; OTP by SMS, WhatsApp or email with clinic-owned encrypted provider accounts and test sends; campaign tracking, WhatsApp links and cookie-free website analytics (`documentation/website-and-verification.md`) | ✅ done |
+| 13 | Production: Docker stack with automatic HTTPS (now Nginx + Let's Encrypt, see 17), PostgreSQL 17, Redis, worker and one-shot migrations; startup refuses unsafe settings; encrypted, verified, pruned daily backups with restore and off-site copy; S3-compatible uploads; System health page, Prometheus metrics and alert rules, optional Sentry (scrubbed); nonce-based CSP; shared Redis rate limits; deployment runbook | ✅ done |
+| 14 | PostgreSQL and performance: whole suite runs on PostgreSQL in CI; real concurrency races fixed with row locks (payments verified twice, refunds beyond the amount paid, coupon limits, double cancel) and proven by parallel tests; commit before the response is sent; SQLite → PostgreSQL migration tool with checksum verification; N+1 queries removed; indexes; multi-process API; load-tested to 150 simultaneous users on 2 cores (`docs/performance.md`) | ✅ done |
+| 15 | Public booking page and Shopify: premium mobile-first booking at `/{clinic}` (doctor profiles, services with prices, branch choice, day strip and grouped times, mobile one-time code, review with server price, own UPI QR + UTR, clear success/pending/failed screens); preselection by URL (`?service=&branch=&doctor=&date=`), validated and never trusted for price; embeddable `/embed/{clinic}` with per-clinic allowed websites (`frame-ancestors`, fail closed) and auto-resize; Shopify Liquid button snippet and theme section; admin *Booking page & Shopify* screen with generated code (`docs/shopify-integration.md`) | ✅ done |
+| 16 | Clinic website and builder: a full public website per clinic at `/{clinic}` (hero, about, services, doctors, categories, facilities, gallery, approved testimonials, FAQ, locations with hours, contact, custom pages, policy and location pages, SEO), booking at `/{clinic}/book` (service → doctor → location → time); Website Management with templates, drag-and-drop, buttons, pages, device preview, draft/publish/restore; OTP by SMS, WhatsApp or email with clinic-owned encrypted provider accounts and test sends; campaign tracking, WhatsApp links and cookie-free website analytics (`docs/website-and-verification.md`) | ✅ done |
+| 17 | Enterprise hardening: four environments with strict per-environment checks; branch isolation for single-branch staff; super admin MFA, IP allow-list and recovery (no public sign-up); permissions matrix tested for every role; Docker for dev/test/production with non-root, read-only, capability-free containers and internal database network; Nginx + Let's Encrypt; deploy/update/rollback/backup/restore/health scripts for a future Ubuntu VPS (rehearsed, not deployed); Semgrep, Gitleaks, Trivy, ZAP in CI; abuse tests (same-slot race, duplicate UTR, code guessing, 100 users) (`docs/security-testing-report.md`) | ✅ done |
 
 ## Repository layout
 
@@ -56,11 +62,11 @@ appointment-platform/
 ├── frontend/            Next.js app: (public), (auth), customer, professional, admin, super-admin
 ├── backend/             FastAPI app: api, core, models, schemas, repositories, services, security,
 │                        payments, notifications, integrations, workers; migrations; tests
-├── infrastructure/      docker, deployment, monitoring
-├── documentation/       architecture, database, api, security, deployment
+├── deployment/          docker (Dockerfiles), nginx, scripts (setup/deploy/update/rollback/backup/restore/health), monitoring
+├── docs/                all documentation
 ├── scripts/             seed, backup, dev helpers (PowerShell + bash)
-├── docker-compose.yml   postgres + redis + backend + frontend
-└── .env.example
+├── compose.yaml         Docker: shared + compose.dev / compose.test / compose.production.yaml
+└── .env.*.example       one template per environment (.env.example documents every setting)
 ```
 
 ## Run locally on Windows 10
@@ -87,11 +93,12 @@ py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-Copy-Item .env.development .env
+Copy-Item ..\.env.development.example .env
 ```
 
-`.env.development` holds safe local defaults (SQLite, plain HTTP on localhost, messages printed instead of sent).
-`.env.example` documents every option; `.env.production.example` is the template for a real server.
+`.env.development.example` holds safe local defaults (SQLite, plain HTTP on localhost, messages printed instead of
+sent). `.env.example` documents every option; staging and production have their own templates
+([docs/environment-configuration.md](docs/environment-configuration.md)).
 
 Generate a secret and paste it into `.env` as `SECRET_KEY` (required outside development, recommended
 always):
@@ -136,7 +143,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` loads `frontend/.env.development` automatically; put personal overrides in `.env.local`.
+The website needs no env file locally (defaults point at the API on port 8000); put personal overrides in `frontend/.env.local`.
 
 Open http://localhost:3000. The frontend proxies `/api/*` to the backend
 (`API_INTERNAL_URL`, default `http://127.0.0.1:8000`), so the browser only talks to one origin.
@@ -197,7 +204,7 @@ npm run start
 Remove the `WORKER_THREADS=8` line from `backend/.env` when you use `--workers` (8 threads suit one process; with
 several processes the default of 40 measured best). SQLite works with several processes (WAL mode); keep the database
 on the PC's own disk, never on a network drive.
-Measured results and limits: [`documentation/optimization-report.md`](documentation/optimization-report.md).
+Measured results and limits: [`docs/optimization-report.md`](docs/optimization-report.md).
 
 ## First sign-in
 
@@ -232,7 +239,9 @@ in-app bell notifications appear immediately either way.
 ### Sending real email, SMS and WhatsApp
 
 Development uses `console` providers: every message is written to the API/worker log and shown in the
-outbox. To deliver for real, set these in `backend/.env` and restart the API and worker:
+outbox. To deliver for real from your PC, set `DEV_ALLOW_REAL_MESSAGES=true` (the app refuses real providers in
+development otherwise, so a copied production file cannot message real patients by accident), then these in
+`backend/.env`, and restart the API and worker:
 
 * Email: `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY` (`starttls`, `ssl` or `none`),
   `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`.
@@ -267,17 +276,20 @@ Calendar events and meetings are created by the worker, so keep it running.
 
 ## Run in production (Docker, HTTPS, backups, monitoring)
 
-On a Linux server with Docker and a domain pointing at it:
+Not deployed yet. When you have an Ubuntu 24.04 VPS and a domain pointing at it:
 
 ```bash
-python3 scripts/generate_env.py --domain book.yourclinic.in
-docker compose up -d --build
-docker compose run --rm api python -m app.ops.platform_admin --email you@example.com
+sudo deployment/scripts/setup-server.sh --user deploy
 ```
 
-That starts HTTPS (automatic certificates), the web app, API, background worker, daily encrypted and verified
-backups, PostgreSQL 17 and Redis. The full guide, including restore drills, updates, rollback and monitoring, is
-`documentation/deployment.md`.
+```bash
+deployment/scripts/deploy.sh --domain book.yourclinic.in --email you@yourclinic.in
+```
+
+The first deploy creates `.env` with fresh secrets and stops so you can add your email/SMS details; the next run
+builds, backs up before migrations, gets the HTTPS certificate, starts Nginx, the website, API, worker, daily
+encrypted backups, PostgreSQL 17 and Redis, and checks health. Updates: `update.sh`; going back: `rollback.sh`.
+Full guide: [docs/production-deployment.md](docs/production-deployment.md).
 
 ## Database migrations
 
@@ -291,7 +303,7 @@ alembic downgrade -1
 ## Switching to PostgreSQL
 
 Set `DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname` in `backend/.env` and run
-`alembic upgrade head`. No code changes are needed; see `documentation/database.md`.
+`alembic upgrade head`. No code changes are needed; see `docs/database.md`.
 
 ## Non-negotiable rules baked into the code
 

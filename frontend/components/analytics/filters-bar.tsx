@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/components/auth/auth-provider";
 import { catalogService } from "@/services/catalog";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -10,7 +11,21 @@ import type { AnalyticsFilters } from "@/types/analytics";
 export type Preset = "today" | "7d" | "30d" | "90d" | "month" | "last_month" | "custom";
 export const PRESET_LABEL: Record<Preset, string> = { today: "Today", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days", month: "This month", last_month: "Last month", custom: "Custom range" };
 
-export function presetRange(p: Preset, now = new Date()): { from: string; to: string } {
+/** Today's calendar date in the clinic's time zone (not the browser's: an owner abroad, or a browser set to UTC,
+ *  would otherwise get a range that ends a day early and misses the newest bookings and payments). */
+function clinicToday(now: Date, timeZone?: string | null): Date {
+  if (!timeZone) return new Date(now);
+  try {
+    const [y, m, day] = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" })
+      .format(now).split("-").map(Number);
+    return new Date(y, m - 1, day, 12); // that day at local noon: safe for day arithmetic across DST changes
+  } catch {
+    return new Date(now); // unknown time zone name: fall back to the browser's date
+  }
+}
+
+export function presetRange(p: Preset, now = new Date(), timeZone?: string | null): { from: string; to: string } {
+  now = clinicToday(now, timeZone);
   const d = (n: number) => { const x = new Date(now); x.setDate(x.getDate() - n); return toISODate(x); };
   switch (p) {
     case "today": return { from: d(0), to: d(0) };
@@ -26,11 +41,12 @@ export function presetRange(p: Preset, now = new Date()): { from: string; to: st
 export function FiltersBar({ preset, onPreset, filters, onChange, showProfessional = true, showBranch = true }: {
   preset: Preset; onPreset: (p: Preset) => void; filters: AnalyticsFilters; onChange: (f: AnalyticsFilters) => void; showProfessional?: boolean; showBranch?: boolean;
 }) {
+  const timeZone = useAuth().currentMembership?.organization?.timezone;
   const branches = useQuery({ queryKey: ["branches", "filter"], queryFn: () => catalogService.branches(false), enabled: showBranch });
   const pros = useQuery({ queryKey: ["professionals", "filter"], queryFn: () => catalogService.professionals(), enabled: showProfessional });
   return (
     <div className="flex flex-wrap items-end gap-2" data-testid="filters-bar">
-      <NativeSelect aria-label="Date range" className="w-40" value={preset} onChange={(e) => { const p = e.target.value as Preset; onPreset(p); if (p !== "custom") onChange({ ...filters, ...presetRange(p) }); }}>
+      <NativeSelect aria-label="Date range" className="w-40" value={preset} onChange={(e) => { const p = e.target.value as Preset; onPreset(p); if (p !== "custom") onChange({ ...filters, ...presetRange(p, new Date(), timeZone) }); }}>
         {(Object.keys(PRESET_LABEL) as Preset[]).map((p) => <option key={p} value={p}>{PRESET_LABEL[p]}</option>)}
       </NativeSelect>
       {preset === "custom" ? (

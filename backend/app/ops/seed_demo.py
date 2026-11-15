@@ -71,7 +71,11 @@ def run() -> str:
             "(shown once; everything is marked as sample data and exists only on this computer).")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    argparse.ArgumentParser(prog="python -m app.ops.seed_demo", description=__doc__,
+                            formatter_class=argparse.RawDescriptionHelpFormatter).parse_args(argv)  # --help only describes
     print(run())
     return 0
 

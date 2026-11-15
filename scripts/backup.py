@@ -5,7 +5,7 @@
     python ..\\scripts\\backup.py restore <file> --yes
     python ..\\scripts\\backup.py list
 
-Same as ``python -m app.ops.backup``; see backend/app/ops/backup.py and documentation/deployment.md.
+Same as ``python -m app.ops.backup``; see backend/app/ops/backup.py and docs/backup-restore.md.
 """
 from __future__ import annotations
 

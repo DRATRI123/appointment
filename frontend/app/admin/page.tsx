@@ -83,7 +83,7 @@ export default function AdminOverview() {
 function AdminDashboard() {
   const { currentMembership, currentOrganizationId: orgId, hasPermission } = useAuth();
   const [preset, setPreset] = useState<Preset>("30d");
-  const [filters, setFilters] = useState<AnalyticsFilters>(() => presetRange("30d"));
+  const [filters, setFilters] = useState<AnalyticsFilters>(() => presetRange("30d", new Date(), currentMembership?.organization?.timezone));
   const dash = useQuery({ queryKey: ["dashboard", orgId, filters], queryFn: () => analyticsService.dashboard(filters), enabled: !!orgId, placeholderData: keepPreviousData, retry: false });
   const org = currentMembership?.organization;
   const d = dash.data;

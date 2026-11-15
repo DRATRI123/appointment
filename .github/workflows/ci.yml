@@ -99,6 +99,7 @@ jobs:
     env:
       APP_ENV: development          # console OTP provider returns debug codes the tests read
       RATE_LIMIT_ENABLED: "false"
+      PLATFORM_ADMIN_REQUIRE_MFA: "false"   # as in .env.development.example; servers always require it
       DATABASE_URL: sqlite:///./data/e2e.db
     steps:
       - uses: actions/checkout@v4

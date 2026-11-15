@@ -30,11 +30,11 @@ function cell(value: string | number | null | undefined, col: ReportColumn) {
 const numeric = (c: ReportColumn) => ["int", "money", "percent"].includes(c.type);
 
 export default function ReportsPage() {
-  const { currentOrganizationId: orgId } = useAuth();
+  const { currentOrganizationId: orgId, currentMembership } = useAuth();
   const reports = useQuery({ queryKey: ["reports-list", orgId], queryFn: analyticsService.reports, enabled: !!orgId });
   const [selected, setSelected] = useState<string | null>(null);
   const [preset, setPreset] = useState<Preset>("30d");
-  const [filters, setFilters] = useState<AnalyticsFilters>(() => presetRange("30d"));
+  const [filters, setFilters] = useState<AnalyticsFilters>(() => presetRange("30d", new Date(), currentMembership?.organization?.timezone));
   const [page, setPage] = useState(1);
   const active: ReportInfo | undefined = reports.data?.find((r) => r.key === (selected ?? reports.data?.[0]?.key));
   const result = useQuery({

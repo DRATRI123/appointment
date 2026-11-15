@@ -5,7 +5,7 @@
 
 Each virtual user loops: patients browse a clinic page, search availability and book (hold, then confirm);
 staff open the day's appointments, the payment verification queue, a patient search and the dashboard.
-Prints p50/p95/p99 per action and checks them against the targets in documentation/performance.md.
+Prints p50/p95/p99 per action and checks them against the targets in docs/performance.md.
 Run the API with RATE_LIMIT_ENABLED=false: every virtual user shares one IP address.
 
 --full-flow runs the complete public journey instead, with rate limits left ON (each virtual user gets its own
@@ -36,7 +36,7 @@ import httpx
 
 IST = ZoneInfo("Asia/Kolkata")
 PASSWORD = "PerfTest-2026!"
-# p95 targets in milliseconds (documentation/performance.md)
+# p95 targets in milliseconds (docs/performance.md)
 TARGETS = {"clinic page": 300, "availability": 300, "book (hold+confirm)": 800, "staff: day's appointments": 500,
            "staff: verification queue": 500, "staff: patient search": 500, "staff: dashboard": 1500}
 FULL_FLOW_TARGETS = {"booking page (HTML)": 800, "clinic page": 300, "doctors": 300, "services": 300, "availability": 300, "hold slot": 500,

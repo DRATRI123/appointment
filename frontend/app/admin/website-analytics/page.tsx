@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BarChart3, Info } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { presetRange } from "@/components/analytics/filters-bar";
 import { api } from "@/lib/api-client";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -24,12 +25,12 @@ interface Report {
   campaigns: { campaign: string; bookings: number }[];
 }
 
-const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10);
-
 export default function WebsiteAnalyticsPage() {
-  const { currentOrganizationId: orgId } = useAuth();
-  const [from, setFrom] = useState(day(29));
-  const [to, setTo] = useState(day(0));
+  const { currentOrganizationId: orgId, currentMembership } = useAuth();
+  // The clinic's own dates: toISOString() would give UTC, a day behind India between midnight and 05:30.
+  const initial = presetRange("30d", new Date(), currentMembership?.organization?.timezone);
+  const [from, setFrom] = useState(initial.from);
+  const [to, setTo] = useState(initial.to);
   const report = useQuery({ queryKey: ["website-analytics", orgId, from, to], queryFn: () => api.get<Report>("/website/analytics", { searchParams: { from_date: from, to_date: to } }), enabled: !!orgId });
   const r = report.data;
   return (

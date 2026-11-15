@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     public_cache_seconds: int = 5
     data_encryption_key: str = ""  # base64 32-byte key for field-level encryption (Phase 5)
     # Older keys, still used to READ data encrypted before a key rotation (comma-separated, newest first). New data is
-    # always written with DATA_ENCRYPTION_KEY. See documentation/security.md, "Rotating the encryption key".
+    # always written with DATA_ENCRYPTION_KEY. See docs/security.md, "Rotating the encryption key".
     data_encryption_previous_keys: Annotated[list[str], NoDecode] = Field(default_factory=list)
     cookie_secure: bool = False
     cookie_domain: str | None = None

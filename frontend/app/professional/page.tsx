@@ -53,7 +53,8 @@ export default function ProfessionalToday() {
 }
 
 function MyMonth({ orgId }: { orgId: string | null }) {
-  const stats = useQuery({ queryKey: ["dashboard", "mine", orgId], queryFn: () => analyticsService.dashboard(presetRange("30d"), true), enabled: !!orgId, retry: false });
+  const timeZone = useAuth().currentMembership?.organization?.timezone;
+  const stats = useQuery({ queryKey: ["dashboard", "mine", orgId], queryFn: () => analyticsService.dashboard(presetRange("30d", new Date(), timeZone), true), enabled: !!orgId, retry: false });
   const k = stats.data?.kpis;
   if (!k || stats.data?.scope !== "professional") return null;
   const pro = stats.data.by_professional[0];

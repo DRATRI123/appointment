@@ -35,3 +35,20 @@ def test_sample_data_refuses_to_run_outside_development(monkeypatch):
     monkeypatch.setattr(get_settings(), "app_env", "production")
     with pytest.raises(SystemExit, match="only for development"):
         seed_demo.run()
+
+
+def test_sample_data_help_changes_nothing(monkeypatch):
+    from app.ops import seed_demo
+
+    called = []
+    monkeypatch.setattr(seed_demo, "run", lambda: called.append(1) or "ran")
+    with pytest.raises(SystemExit) as exc:
+        seed_demo.main(["--help"])
+    assert exc.value.code == 0 and called == []
+
+
+def test_meta_answers_with_and_without_trailing_slash(client):
+    """The website's proxy strips the slash; a redirect would send the browser to the API host (blocked by CSP)."""
+    for path in ("/api/v1/meta", "/api/v1/meta/"):
+        r = client.get(path, follow_redirects=False)
+        assert r.status_code == 200 and r.json()["environment"] == "test", path

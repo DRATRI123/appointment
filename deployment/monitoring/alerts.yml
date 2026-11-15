@@ -75,7 +75,7 @@ groups:
         labels: {severity: warning}
         annotations:
           summary: "Public booking pages take over 2 seconds for 1 in 20 visitors"
-          action: "Check server CPU/memory and database size; see documentation/deployment.md → Performance."
+          action: "Check server CPU/memory and database size; see docs/performance.md and docs/troubleshooting.md."
 
   - name: security
     rules:

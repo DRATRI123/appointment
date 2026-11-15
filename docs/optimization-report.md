@@ -63,7 +63,7 @@ public booking, Shopify links, uploads, webhooks). The gaps against the brief we
 * **Production** (`backend/.env.production.example`): `COOKIE_SECURE=true` (which also adds HSTS), `FRONTEND_URL`
   and `CORS_ORIGINS` must be `https://`, `TRUSTED_HOSTS` is required, and `FORWARDED_ALLOW_IPS` must list the reverse
   proxy. The API refuses to start and lists every violation (verified: the template without secrets is rejected).
-* **TLS** 1.2/1.3 is terminated by the reverse proxy of your choice. A Caddy example is in `infrastructure/docker`.
+* **TLS** 1.2/1.3 is terminated by Nginx (`deployment/nginx`, see docs/production-deployment.md).
 * **No mixed content:** the browser only talks to the Next.js origin, which proxies `/api` server-side.
   `NEXT_PUBLIC_API_URL` stays empty.
 * **Shopify links** are built from `booking_url`, which must start with `https://`.
@@ -118,7 +118,7 @@ Notifications were already in the background: after each load test the outbox he
 Already built and tested; nothing was migrated automatically.
 
 * **Data:** `python -m app.ops.migrate_data` copies SQLite to PostgreSQL with row counts and checksums
-  (documentation/database.md).
+  (docs/database.md).
 * **Proof:** the whole test suite passes on PostgreSQL (**310 passed** in this review), including the parallel race
   tests that prove exactly one winner per slot under real concurrency.
 * **Compatibility:** the same Alembic migrations run on both. Times are stored as UTC with time zone. The partial
@@ -218,7 +218,7 @@ Tests:
 * Frontend: `e2e/mfa.spec.ts`.
 
 Tooling and docs: `scripts/perf/load_test.py` (`--full-flow`, `--otp-code`, CPU/RAM sampling, queue backlog),
-`scripts/dev-*.ps1|sh`, `README.md`, `documentation/security.md`, this report.
+`scripts/dev-*.ps1|sh`, `README.md`, `docs/security.md`, this report.
 
 ## 13. Database migrations
 
@@ -240,8 +240,8 @@ covers running with `--workers 4`, the background worker, and `npm run build; np
 
 Provider-neutral. Copy `backend/.env.production.example` and `frontend/.env.production.example`, fill the secrets
 (the API lists anything missing), and put any TLS reverse proxy in front. Run one API process per core, plus the
-worker. Use PostgreSQL for more than one server or heavy write traffic. The Docker stack in `infrastructure/docker`
-is one option; documentation/deployment.md covers it and running without Docker.
+worker. Use PostgreSQL for more than one server or heavy write traffic. The Docker stack (`compose.production.yaml`)
+is one option; docs/production-deployment.md covers it and running without Docker.
 
 ## 16. Backup and recovery (tested in this review)
 

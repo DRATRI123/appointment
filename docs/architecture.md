@@ -8,7 +8,7 @@ collection (no third-party payment gateway).
 
 ```
                          ┌──────────────────────────────────────────────────┐
-                         │                  Next.js 15 (App Router)         │
+                         │                  Next.js 16 (App Router)         │
                          │  (public) │ (auth) │ customer │ professional │    │
                          │  admin │ super-admin   — TanStack Query, RHF+Zod │
                          └───────────────────────┬──────────────────────────┘
@@ -286,7 +286,34 @@ their manual link), or an explicit choice. A link staff set on one appointment a
 | 13 | Production deployment, backups, monitoring | Docker + runbooks |
 | 14 | PostgreSQL migration, performance tuning | Load test targets met (see `performance.md`) |
 
-## 10. Project folder structure
+## 10. Deployment architecture (servers)
 
-See the repository root `README.md`; the layout follows the agreed structure:
-`frontend/` (Next.js), `backend/` (FastAPI), `infrastructure/`, `documentation/`, `scripts/`.
+```
+Internet ──80/443──▶ nginx ──▶ web (Next.js)          "public" network: reaches the internet (messages, webhooks,
+                         └───▶ api (FastAPI x2) ┐      certificates); the API trusts forwarded IPs only from here
+                     worker ────────────────────┤
+                     backup ────────────────────┼──▶ postgres, redis   "data" network: internal, no internet,
+                     migrate (once per release) ┘                      no published ports
+                     certbot (renewals)
+```
+
+One image each for the API (also worker, backup and migrate, with different commands), the website and Nginx, tagged
+with the git commit. Every container runs non-root, without Linux capabilities, on a read-only filesystem, with
+memory/CPU/process limits. Development and the test suite use the same `compose.yaml` with their own overrides.
+Details: [production-deployment.md](production-deployment.md), [docker-development.md](docker-development.md).
+
+## 11. Project folder structure
+
+```
+backend/        FastAPI app (api, core, models, services, security, payments, notifications, workers, ops),
+                Alembic migrations, tests; requirements.txt (ranges) and requirements.lock (exact, hashed)
+frontend/       Next.js app: public site and booking, customer, professional, admin, super admin
+deployment/     docker/ (Dockerfiles), nginx/ (proxy config), scripts/ (setup, deploy, update, rollback, backup,
+                restore, health check), monitoring/ (Prometheus, alert rules), backup/, documentation/
+docs/           all documentation (this folder)
+scripts/        seed, env generator, dev helpers, perf/ (load and abuse tests)
+integrations/   Shopify Liquid snippets
+compose*.yaml   Docker Compose: shared + dev / test / production
+.env.*.example  one template per environment (real .env files are never committed)
+START-APP.bat   Windows: double-click to run everything locally
+```

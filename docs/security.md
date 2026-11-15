@@ -4,6 +4,29 @@
 > statement. Obtain an independent legal and security review before claiming compliance with the
 > Indian DPDP Act 2023 or any healthcare regulation.
 
+## The eight layers at a glance (current)
+
+No system is unhackable. These layers make each kind of attack harder, contain the damage when one layer fails, and
+leave a trail. What was tested, and what risks remain: [security-testing-report.md](security-testing-report.md).
+
+| # | Layer | What is in place | Proven by |
+|---|---|---|---|
+| 1 | **Network** | ufw (SSH/80/443 only); only Nginx publishes ports; PostgreSQL/Redis on an internal network with no internet; Prometheus on localhost | rehearsal: Nginx cannot reach PostgreSQL, web cannot reach Redis, PostgreSQL has no internet |
+| 2 | **HTTPS and the proxy** | TLS 1.2/1.3, HSTS, unknown host names refused, HTTP→HTTPS, client `X-Forwarded-For` replaced, per-IP limits (strict on sign-in and code POSTs), slow-client timeouts, path-only access logs | TLS 1.1 refused, spoofed IP ignored, 429 after the sign-in burst; ZAP baseline 0 failures |
+| 3 | **Authentication** | Argon2id passwords, account lock-out, short-lived tokens with rotating refresh tokens (reuse revokes the family), one-time codes as keyed hashes with attempt limits, two-step sign-in | `test_auth.py`, `test_mfa.py`, `test_otp.py` |
+| 4 | **Authorization** | permissions checked on the server for every request (never trusted from the browser); tenant isolation; **branch isolation** for staff assigned to one branch (enforced in the database session for every query) | `test_permissions_matrix.py` (8 roles x 13 endpoints), `test_branch_isolation.py`, `test_rbac_tenant.py` |
+| 5 | **Super admin** | no sign-up page and no default account; created only by a server command; MFA required (servers refuse to turn it off); optional IP allow-list; recovery command; everything audit-logged | `test_superadmin.py`; [superadmin-setup.md](superadmin-setup.md) |
+| 6 | **API** | input validation, rate limits per IP and per API key, idempotency keys, CSRF protection for cookie sessions, CSP with per-request nonces, safe error messages, scoped API keys with IP allow-lists | `test_security.py`, `test_idempotency.py`, `test_rate_limit*.py` |
+| 7 | **Data and encryption** | AES-256-GCM field encryption with key ids and rotation; encrypted, verified backups; secrets only in `.env`; nothing sensitive in logs | `test_key_rotation.py`, `test_backup.py`; [encryption.md](encryption.md) |
+| 8 | **Payments and codes** | own UPI QR only (no gateway); never marked paid without staff verification; duplicate UTR refused; amounts in integer paise; code guessing locked after 5 tries; per-address and per-victim send limits | abuse test: 10 identical submissions gave 1 payment; same-slot race gave 1 winner of 60 |
+
+Environment separation (development, test, staging and production each refuse the others' unsafe settings):
+[environment-configuration.md](environment-configuration.md). Who may do what: [permissions-matrix.md](permissions-matrix.md).
+Security events (failed sign-ins, lock-outs, code abuse, refused access, token reuse, rejected payments) are counted in
+`app_security_events_total` and have alert rules in `deployment/monitoring/alerts.yml`.
+
+The sections below record how each control was built, phase by phase.
+
 ## Authentication
 
 | Control | Implementation |
@@ -206,7 +229,7 @@ whose last chunk is marked, so truncation, reordering or any altered byte makes 
 restore partially. Every backup is verified after writing; restore verifies again, refuses a backup for the other
 database kind, and keeps the previous data aside. Archive extraction uses Python's `data` filter (no absolute paths,
 `..` or links outside the folder). Retention: daily/weekly/monthly. Optional off-site copy to S3-compatible storage.
-Outcomes are recorded for the System health page and the `BackupMissing` alert. Details: `deployment.md` section 5.
+Outcomes are recorded for the System health page and the `BackupMissing` alert. Details: `backup-restore.md`.
 
 ## Phase 13: production hardening
 
@@ -216,7 +239,7 @@ Outcomes are recorded for the System health page and the `BackupMissing` alert. 
 | Script injection | Per-request CSP nonce (`frontend/proxy.ts`): `script-src 'self' 'nonce-…' 'strict-dynamic'`, no `'unsafe-inline'`; every page renders per request so it can carry the nonce | `frontend/tests/unit/csp.test.ts`; `e2e/quality.spec.ts` fails on any violation |
 | Shared rate limits | API-key limits are counted in Redis when configured, so several API containers share one limit; Redis outages fall back to in-memory counting instead of failing requests (route limits likewise) | `tests/test_rate_limit_redis.py` (real Redis in CI) |
 | Images | `.dockerignore` keeps `.env`, databases, uploads and virtualenvs out of images (previously `COPY . .` could include them); non-root users; exec-form commands for clean shutdown | CI `docker` job checks the built image |
-| Network exposure | Only Caddy publishes ports; database, Redis, API and `/metrics` stay on the internal network; Caddy replaces client-supplied `X-Forwarded-For`; the API trusts forwarded IPs only from the Docker subnet | verified on the running stack: a spoofed `X-Forwarded-For` was ignored in audit logs |
+| Network exposure | Only the reverse proxy publishes ports (Nginx; Caddy until November 2026); database, Redis, API and `/metrics` stay on the internal network; the proxy replaces client-supplied `X-Forwarded-For`; the API trusts forwarded IPs only from the Docker subnet | verified on the running stack: a spoofed `X-Forwarded-For` was ignored in audit logs |
 | Monitoring data | `/metrics` needs a bearer token and uses route templates, never raw paths, so IDs and personal data never become labels; Sentry events are stripped of bodies, cookies, auth headers, query strings, user and local variables | `tests/test_monitoring.py` |
 | Uploads in S3 | Private bucket, server-side encryption, keys validated against `..`; public files streamed by the API so no public bucket policy is needed | `tests/test_storage_s3.py` |
 | Configuration isolation | The backend reads only `backend/.env`; the root `.env` (Docker, production values) never applies to a local run | |

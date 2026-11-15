@@ -42,3 +42,18 @@ describe("timeAgo", () => {
     expect(timeAgo("2026-11-14T12:05:00Z", now)).toBe("just now"); // clock skew never shows negative times
   });
 });
+
+describe("presetRange in the clinic's time zone", () => {
+  it("uses the clinic's date, not the browser's", () => {
+    // 20:00 UTC on 15 Nov is already 16 Nov (01:30) in India
+    const now = new Date(Date.UTC(2026, 10, 15, 20, 0));
+    expect(presetRange("today", now, "Asia/Kolkata")).toEqual({ from: "2026-11-16", to: "2026-11-16" });
+    expect(presetRange("30d", now, "Asia/Kolkata").to).toBe("2026-11-16");
+    expect(presetRange("today", now, "America/New_York")).toEqual({ from: "2026-11-15", to: "2026-11-15" });
+  });
+
+  it("falls back to the browser's date for an unknown zone", () => {
+    const now = new Date(2026, 2, 15, 10);
+    expect(presetRange("today", now, "Not/AZone")).toEqual({ from: "2026-03-15", to: "2026-03-15" });
+  });
+});
