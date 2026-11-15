@@ -20,20 +20,15 @@ import { cn, formatPaise } from "@/lib/utils";
 import { useBooking, addressLine } from "./booking-shell";
 import { e164, stillVerified, type Verified } from "./contact-verification";
 import { rememberCampaign } from "@/lib/campaign";
-import { BranchStep, DoctorStep, DoctorAvatar, ServiceStep, EmptyChoice } from "./steps";
-import { TimePicker } from "./time-picker";
+import { DoctorAvatar } from "./steps";
+import { DoctorBrowser, DoctorPhoto, servicesOf } from "./doctor-browser";
+import { DoctorDetail } from "./doctor-detail";
+import { BottomNav } from "@/components/website/bottom-nav";
 import { DetailsStep, type Details } from "./details-step";
 import type { Hold, Slot } from "@/types/booking";
 
-type StepKey = "service" | "branch" | "doctor" | "time" | "details" | "review";
-const TITLES: Record<StepKey, { title: string; short: string }> = {
-  service: { title: "What would you like to book?", short: "Service" },
-  branch: { title: "Choose a location", short: "Location" },
-  doctor: { title: "Choose your doctor", short: "Doctor" },
-  time: { title: "Pick a date and time", short: "Date & time" },
-  details: { title: "Your details", short: "Details" },
-  review: { title: "Review and confirm", short: "Confirm" },
-};
+type Screen = "browse" | "doctor" | "details" | "review";
+const SCREENS: Record<Screen, string> = { browse: "Doctors", doctor: "Date & time", details: "Your details", review: "Confirm" };
 
 export { e164 } from "./contact-verification";
 
@@ -57,9 +52,10 @@ export function BookingFlow() {
 
   // Each choice is `undefined` until the visitor makes it; until then a matching URL hint (or the only option) is used.
   // Going back sets an explicit `null`, so a hint never overrides what the visitor did.
-  const [branchSel, setBranchId] = useState<string | null | undefined>(undefined);
-  const [serviceSel, setServiceSel] = useState<string | null | undefined>(undefined);
   const [doctorSel, setDoctorSel] = useState<string | null | undefined>(undefined);
+  const [serviceSel, setServiceSel] = useState<string | null | undefined>(undefined);
+  const [branchSel, setBranchSel] = useState<string | null | undefined>(undefined);
+  const [picked, setPicked] = useState<Slot | null>(null);
   const [slot, setSlot] = useState<Slot | null>(null);
   const [hold, setHold] = useState<Hold | null>(null);
   const [draft, setDraft] = useState<Partial<Details>>({});
@@ -76,39 +72,47 @@ export function BookingFlow() {
     notes: draft.notes ?? "", whatsapp: draft.whatsapp ?? false, dependentId: draft.dependentId ?? "",
   };
 
-  // Order: service → doctor → location. A location preselected by the link (or the only one) narrows the lists early.
-  const presetBranch = matchHint(data.branches, hints.branch)?.id ?? (data.branches.length === 1 ? data.branches[0].id : undefined);
-  const services = useQuery({ queryKey: ["pb-services", slug, presetBranch ?? null], queryFn: () => publicCatalog.services(slug, { branch_id: presetBranch }) });
-  const serviceId = serviceSel !== undefined ? serviceSel : matchHint(services.data, hints.service)?.id ?? null;
-  const professionals = useQuery({
-    queryKey: ["pb-pros", slug, presetBranch ?? null, serviceId],
-    queryFn: () => publicCatalog.professionals(slug, { branch_id: presetBranch, service_id: serviceId ?? undefined }),
-    enabled: !!serviceId,
-  });
-  const proList = useMemo(() => professionals.data ?? [], [professionals.data]);
-  const doctor = doctorSel !== undefined ? doctorSel : matchHint(proList, hints.doctor)?.id ?? (proList.length === 1 ? proList[0].id : null);
-  // Locations where the chosen doctor (or, for "first available", any doctor offering the service) works.
+  // Catalogue: every bookable doctor and service; choices narrow each other below.
+  const servicesQ = useQuery({ queryKey: ["pb-services", slug, null], queryFn: () => publicCatalog.services(slug) });
+  const prosQ = useQuery({ queryKey: ["site-pros", slug], queryFn: () => publicCatalog.professionals(slug) });
+  const allServices = useMemo(() => servicesQ.data ?? [], [servicesQ.data]);
+  const allPros = useMemo(() => prosQ.data ?? [], [prosQ.data]);
+  const hintService = matchHint(allServices, hints.service) ?? null;
+  const offering = useMemo(() => (hintService ? allPros.filter((p) => servicesOf(p, allServices).some((s) => s.id === hintService.id)) : allPros), [hintService, allPros, allServices]);
+
+  // Doctor: chosen, or from the link, or the only one (for the service in the link).
+  const doctor = doctorSel !== undefined ? doctorSel : matchHint(allPros, hints.doctor)?.id ?? (offering.length === 1 ? offering[0].id : null);
+  const pro = doctor && doctor !== "any" ? allPros.find((p) => p.id === doctor) ?? null : null;
+  const serviceOptions = useMemo(() => (pro ? servicesOf(pro, allServices) : allServices), [pro, allServices]);
+  const serviceId = serviceSel !== undefined ? serviceSel : (hintService && serviceOptions.some((s) => s.id === hintService.id) ? hintService.id : serviceOptions.length === 1 ? serviceOptions[0].id : null);
+  // Locations where this doctor (or, for "first available", any doctor offering the service) works.
   const branchChoices = useMemo(() => {
-    const pros = doctor && doctor !== "any" ? proList.filter((p) => p.id === doctor) : proList;
+    const pros = pro ? [pro] : serviceId ? allPros.filter((p) => servicesOf(p, allServices).some((s) => s.id === serviceId)) : allPros;
     const ids = new Set(pros.flatMap((p) => (p.branches ?? []).filter((b) => b.is_active !== false).map((b) => b.branch_id)));
     return data.branches.filter((b) => ids.has(b.id));
-  }, [doctor, proList, data.branches]);
-  const branchHint = matchHint(branchChoices, hints.branch)?.id;
-  const branchId = branchSel !== undefined ? branchSel : branchHint ?? (branchChoices.length === 1 ? branchChoices[0].id : null);
-  const setServiceId = (id: string | null) => { setServiceSel(id); setDoctorSel(undefined); setBranchId(undefined); };
-  const setDoctor = (id: string | null) => { setDoctorSel(id); setBranchId(undefined); };
+  }, [pro, serviceId, allPros, allServices, data.branches]);
+  const branchId = branchSel !== undefined ? branchSel : matchHint(branchChoices, hints.branch)?.id ?? (branchChoices.length === 1 ? branchChoices[0].id : null);
+  const browseSkipped = doctorSel === undefined && doctor !== null;
+
+  const choose = {
+    doctor: (id: string | null) => { setDoctorSel(id); setServiceSel(undefined); setBranchSel(undefined); setPicked(null); },
+    service: (id: string) => { setServiceSel(id); setBranchSel(undefined); setPicked(null); },
+    branch: (id: string) => { setBranchSel(id); setPicked(null); },
+  };
+
+  const priced = slot ?? picked;
   const quote = useQuery({
-    queryKey: ["pb-quote", slug, serviceId, branchId, slot?.professional_id, coupon],
-    queryFn: () => publicBooking.quote(slug, { service_id: serviceId!, branch_id: branchId!, professional_id: slot?.professional_id, coupon_code: coupon ?? undefined }),
+    queryKey: ["pb-quote", slug, serviceId, branchId, priced?.professional_id ?? pro?.id, coupon],
+    queryFn: () => publicBooking.quote(slug, { service_id: serviceId!, branch_id: branchId!, professional_id: priced?.professional_id ?? pro?.id, coupon_code: coupon ?? undefined }),
     enabled: !!serviceId && !!branchId,
     retry: false,
   });
   const bookingForm = useQuery({ queryKey: ["pb-form", slug, serviceId, branchId], queryFn: () => publicForms.form(slug, { service_id: serviceId!, branch_id: branchId! }), enabled: !!serviceId && !!branchId });
   const dependents = useQuery({ queryKey: ["pb-dependents", data.organization.id], queryFn: () => customerSelfService.dependents(data.organization.id), enabled: !!user, retry: false });
 
-  const service = services.data?.find((s) => s.id === serviceId) ?? null;
+  const service = allServices.find((s) => s.id === serviceId) ?? null;
   const branch = data.branches.find((b) => b.id === branchId) ?? null;
-  const chosenPro = proList.find((p) => p.id === (slot?.professional_id ?? doctor)) ?? null;
+  const chosenPro = allPros.find((p) => p.id === (slot?.professional_id ?? doctor)) ?? null;
 
   const verification = useQuery({ queryKey: ["pb-verification", slug], queryFn: () => publicBooking.verificationOptions(slug), staleTime: 60_000 });
   const verificationRequired = useMemo(() => {
@@ -118,12 +122,12 @@ export function BookingFlow() {
     return true;
   }, [verification.data, user, details.mobile]);
 
-  const steps: StepKey[] = ["service", ...(proList.length === 1 ? [] : (["doctor"] as const)), ...(branchChoices.length > 1 ? (["branch"] as const) : []), "time", "details", "review"];
-  const current: StepKey = !serviceId ? "service" : doctor === null ? "doctor" : !branchId ? "branch" : !hold ? "time" : !detailsDone ? "details" : "review";
-  const index = steps.indexOf(current);
+  const current: Screen = doctor === null ? "browse" : !hold ? "doctor" : !detailsDone ? "details" : "review";
+  const order: Screen[] = browseSkipped ? ["doctor", "details", "review"] : ["browse", "doctor", "details", "review"];
+  const index = order.indexOf(current);
 
   useEffect(() => {
-    // Keep the active step in view on phones after each choice.
+    // Each screen starts at the top on phones.
     if (index > 0) top.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [index]);
 
@@ -140,7 +144,7 @@ export function BookingFlow() {
   const reserve = useMutation({
     mutationFn: (s: Slot) => publicBooking.hold(slug, { professional_id: s.professional_id, branch_id: branchId, service_id: serviceId, start_at: s.start_at, session_key: sessionKey }),
     onSuccess: (h, s) => { setHold(h); setSlot(s); setVerified(null); setDetailsDone(false); },
-    onError: (e) => toast.error(e instanceof ApiError && e.status === 409 ? "Someone just booked that time. Please choose another." : errorMessage(e)),
+    onError: (e) => { setPicked(null); toast.error(e instanceof ApiError && e.status === 409 ? "Someone just booked that time. Please choose another." : errorMessage(e)); },
   });
 
   const book = useMutation({
@@ -160,83 +164,80 @@ export function BookingFlow() {
       const code = e instanceof ApiError ? e.code : "";
       if (fe) { setFormErrors(fe); setDetailsDone(false); toast.error("Please check the highlighted answers."); return; }
       if (code === "contact_not_verified" || code === "contact_verification_expired") { setVerified(null); setDetailsDone(false); toast.error(errorMessage(e)); return; }
-      if (["hold_expired", "slot_unavailable", "hold_not_found"].includes(code)) { setHold(null); setSlot(null); setDetailsDone(false); toast.error("That time is no longer available. Please choose another."); return; }
+      if (["hold_expired", "slot_unavailable", "hold_not_found"].includes(code)) { setHold(null); setSlot(null); setPicked(null); setDetailsDone(false); toast.error("That time is no longer available. Please choose another."); return; }
       toast.error(errorMessage(e));
     },
   });
 
   const onExpire = useCallback(() => {
     toast.warning("Your reserved time expired. Please choose a time again.");
-    setHold(null); setSlot(null); setDetailsDone(false); setVerified(null);
+    setHold(null); setSlot(null); setPicked(null); setDetailsDone(false); setVerified(null);
   }, []);
 
   const back = async () => {
     if (current === "review") return setDetailsDone(false);
     if (current === "details") return release();
-    if (current === "time") {
-      if (branchChoices.length > 1) return setBranchId(null);
-      if (proList.length > 1) return setDoctor(null);
-      return setServiceId(null);
-    }
-    if (current === "branch") return proList.length > 1 ? setDoctor(null) : setServiceId(null);
-    if (current === "doctor") return setServiceId(null);
+    if (current === "doctor") return choose.doctor(null);
   };
 
   const when = slot ? dateTimeLabel(slot.start_at, tz) : null;
 
+  if (current === "browse") {
+    return (
+      <div ref={top} className="pb-24 md:pb-0">
+        <DoctorBrowser slug={slug} clinicName={data.organization.name} base={base} professionals={offering} services={allServices} categories={data.categories}
+          loading={prosQ.isLoading || servicesQ.isLoading} allowAny={booking.allow_any_professional !== false} serviceFilter={hintService}
+          onPick={(p) => choose.doctor(p.id)} onAny={() => choose.doctor("any")} bookingsHref={`${base}/bookings`} />
+        {!embedded ? <BottomNav /> : null}
+      </div>
+    );
+  }
+
+  if (current === "doctor") {
+    return (
+      <div ref={top}>
+        <DoctorDetail slug={slug} pro={pro} doctorCount={offering.length} services={serviceOptions} serviceId={serviceId} onService={choose.service}
+          branches={branchChoices} branchId={branchId} onBranch={choose.branch} initialDate={hints.date} picked={picked} onPick={setPicked}
+          onBook={() => { if (picked) reserve.mutate(picked); }} booking={reserve.isPending} quote={quote.data} tz={tz}
+          onBack={browseSkipped ? null : () => void back()} />
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]" ref={top}>
       <div className="min-w-0 space-y-6 pb-28 lg:pb-0">
-        <Stepper steps={steps} index={index} />
-        <section key={current} className="pb-enter space-y-5" aria-labelledby="step-title">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              {index > 0 ? <Button type="button" size="icon" variant="ghost" className="-ml-2 rounded-full" onClick={back} aria-label="Back"><ArrowLeft /></Button> : null}
-              <h2 id="step-title" className="text-2xl font-semibold tracking-tight">{TITLES[current].title}</h2>
-            </div>
-            {hold && (current === "details" || current === "review") ? <HoldTimer expiresAt={hold.expires_at} onExpire={onExpire} /> : null}
-          </div>
-
-          {current === "service" ? (
-            services.isLoading ? <CardsSkeleton /> : services.isError ? <EmptyChoice text="We couldn't load the services. Please refresh the page." /> : (
-              <ServiceStep services={services.data ?? []} categories={data.categories} selected={serviceId} branchId={branchId} onSelect={(s) => setServiceId(s.id)} />
-            )
-          ) : null}
-
-          {current === "branch" ? <BranchStep branches={branchChoices} selected={branchId} onSelect={(b) => setBranchId(b.id)} /> : null}
-
-          {current === "doctor" ? (
-            professionals.isLoading ? <CardsSkeleton /> : (
-              <DoctorStep professionals={proList} allowAny={booking.allow_any_professional !== false} selected={doctor} onSelect={setDoctor} />
-            )
-          ) : null}
-
-          {current === "time" && serviceId && branchId ? (
-            <TimePicker slug={slug} serviceId={serviceId} branchId={branchId} professionalId={doctor === "any" ? undefined : doctor ?? undefined}
-              initialDate={hints.date} busy={reserve.isPending} selected={slot} onSelect={(s) => reserve.mutate(s)} />
-          ) : null}
-          {current === "time" && reserve.isPending ? <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Loader2 className="size-4 animate-spin" />Reserving your time…</p> : null}
-
+        <ScreenHeader title={SCREENS[current]} step={index + 1} of={order.length} onBack={() => void back()}
+          right={hold ? <HoldTimer expiresAt={hold.expires_at} onExpire={onExpire} /> : null} />
+        <section key={current} className="pb-enter space-y-5">
           {current === "details" && hold ? (
+            <div className="rounded-3xl bg-white p-5 shadow-[0_8px_30px_-14px_rgb(0_0_0/0.18)] ring-1 ring-black/5 sm:p-7">
             <DetailsStep slug={slug} holdId={hold.id} sessionKey={sessionKey} details={details} onChange={setDraft}
               verificationRequired={verificationRequired} verification={verification.data} verified={verified} onVerified={setVerified}
               whatsappEnabled={!!data.settings.messaging?.whatsapp_enabled} dependents={dependents.data ?? []}
               form={bookingForm.data} answers={answers} onAnswers={(a) => { setAnswers(a); setFormErrors({}); }} formErrors={formErrors}
               onContinue={() => setDetailsDone(true)} />
+            </div>
           ) : null}
 
           {current === "review" && hold && slot && service && branch && when ? (
             <div className="space-y-5" data-testid="review">
-              <div className="divide-y rounded-2xl border bg-card">
-                <ReviewRow icon={Stethoscope} label="Service" value={`${service.name} · ${service.duration_minutes} min`} onEdit={() => { void release(); setServiceId(null); }} />
-                <ReviewRow icon={UserRound} label="Doctor" value={chosenPro?.display_name ?? "First available"} onEdit={proList.length > 1 ? () => { void release(); setDoctor(null); } : undefined} />
+              <div className="flex items-center gap-4 rounded-3xl bg-[var(--primary)] p-5 text-[var(--primary-foreground)]">
+                {chosenPro ? <DoctorPhoto pro={chosenPro} className="size-16" rounded="rounded-2xl" /> : null}
+                <div className="min-w-0">
+                  <p className="text-lg font-semibold">{chosenPro?.display_name ?? "Your doctor"}</p>
+                  <p className="text-sm">{when.date} · {when.time}</p>
+                </div>
+              </div>
+              <div className="divide-y rounded-3xl border bg-white">
+                <ReviewRow icon={Stethoscope} label="Service" value={`${service.name} · ${service.duration_minutes} min`} onEdit={() => void release()} />
                 <ReviewRow icon={CalendarDays} label="Date & time" value={`${when.date}, ${when.time}`} onEdit={() => void release()} />
                 <ReviewRow icon={MapPin} label="Location" value={[branch.name, addressLine(branch.address)].filter(Boolean).join(" · ")} />
                 <ReviewRow icon={ShieldCheck} label="Patient" value={`${details.full_name} · ${e164(details.mobile)}${details.email ? ` · ${details.email}` : ""}`} onEdit={() => setDetailsDone(false)} />
               </div>
               <PriceBlock quote={quote.data} loading={quote.isLoading} error={quote.isError && coupon ? errorMessage(quote.error) : null} coupon={coupon} onCoupon={setCoupon} free={service.payment_mode === "free"} />
               <Policy cancellation={data.settings.cancellation ?? {}} />
-              <Button size="lg" className="h-12 w-full text-base" onClick={() => book.mutate()} disabled={book.isPending || (quote.isError && !!coupon)} data-testid="confirm-booking">
+              <Button size="lg" className="h-13 w-full rounded-full text-base shadow-[0_10px_24px_-10px_color-mix(in_oklab,var(--primary)_80%,transparent)]" onClick={() => book.mutate()} disabled={book.isPending || (quote.isError && !!coupon)} data-testid="confirm-booking">
                 {book.isPending ? <Loader2 className="animate-spin" /> : <Check />} Confirm booking{quote.data && quote.data.advance_due_paise > 0 ? ` · pay ${formatPaise(quote.data.advance_due_paise)} next` : ""}
               </Button>
               <p className="text-center text-xs text-muted-foreground">By confirming you agree to the clinic&apos;s cancellation policy above.</p>
@@ -251,23 +252,16 @@ export function BookingFlow() {
 }
 
 // -------------------------------------------------------------------------------------------------- pieces
-function Stepper({ steps, index }: { steps: StepKey[]; index: number }) {
+function ScreenHeader({ title, step, of, onBack, right }: { title: string; step: number; of: number; onBack: () => void; right?: React.ReactNode }) {
   return (
-    <nav aria-label="Booking progress">
-      <p className="mb-2 text-sm text-muted-foreground sm:hidden">Step {index + 1} of {steps.length} · {TITLES[steps[index]].short}</p>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted sm:hidden" aria-hidden><div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${((index + 1) / steps.length) * 100}%` }} /></div>
-      <ol className="hidden items-center gap-2 sm:flex">
-        {steps.map((s, i) => (
-          <li key={s} className="flex items-center gap-2" aria-current={i === index ? "step" : undefined}>
-            <span className={cn("flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              i < index && "bg-accent text-accent-foreground", i === index && "bg-primary text-primary-foreground shadow-sm", i > index && "text-muted-foreground")}>
-              {i < index ? <Check className="size-3.5" aria-hidden /> : <span className="tabular-nums">{i + 1}</span>} {TITLES[s].short}
-            </span>
-            {i < steps.length - 1 ? <span className="h-px w-4 bg-border" aria-hidden /> : null}
-          </li>
-        ))}
-      </ol>
-    </nav>
+    <div className="flex items-center gap-3">
+      <button type="button" onClick={onBack} aria-label="Back" className="grid size-11 shrink-0 place-items-center rounded-full border border-black/10 bg-white shadow-sm transition-colors hover:bg-gray-50"><ArrowLeft className="size-5" /></button>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Step {step} of {of}</p>
+        <h2 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">{title}</h2>
+      </div>
+      {right}
+    </div>
   );
 }
 
@@ -413,8 +407,4 @@ function SumRow({ icon: Icon, label, value, muted, avatar }: { icon: React.Compo
       <dd className={cn("font-medium", muted && "font-normal text-muted-foreground")}>{value}</dd>
     </div>
   );
-}
-
-function CardsSkeleton() {
-  return <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}</div>;
 }

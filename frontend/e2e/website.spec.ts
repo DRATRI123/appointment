@@ -119,7 +119,6 @@ test("patients can verify by email when the clinic offers it, and analytics coun
   await guest.goto(`/${slug}?utm_source=instagram&utm_campaign=spring`);
   await guest.getByRole("link", { name: "Book appointment" }).first().click();
   await guest.waitForURL(new RegExp(`/${slug}/book`));
-  await guest.getByTestId("pick-service").first().click();
   await pickFirstSlot(guest);
   const email = `patient${Date.now()}@example.com`;
   await guest.getByLabel("Patient's full name").fill("Email Patient");

@@ -15,14 +15,12 @@ export interface GuestBooking {
 }
 
 /**
- * Book as a guest through the public booking page: service → (doctor) → time → details + mobile code → review → confirm.
- * The one-time code is read from the API response (`debug_code`), which the server includes only in development and
- * test. The page itself never shows it.
+ * Book as a guest through the public booking page: doctor → (service, location) → date and time → details + code →
+ * review → confirm. The code is read from the development outbox; the page and the API never show it.
  */
 export async function bookAsGuest(page: Page, slug: string, b: GuestBooking): Promise<string> {
   // The booking steps live at /{clinic}/book (the clinic website is /{clinic}); the frame page is /embed/{clinic}.
   await page.goto(b.base ? `${b.base}/${slug}${b.query ?? ""}` : `/${slug}/book${b.query ?? ""}`);
-  if (!b.servicePreselected) await page.getByTestId("pick-service").first().click();
   await pickFirstSlot(page);
   await fillDetailsAndVerify(page, b);
   await expect(page.getByTestId("review")).toBeVisible();
@@ -36,14 +34,24 @@ export async function bookAsGuest(page: Page, slug: string, b: GuestBooking): Pr
   return page.url().match(/APT-[A-Z0-9-]+/)![0];
 }
 
-/** On the doctor or time step: pick the only/first doctor if asked, then the first free time. */
+/**
+ * From the doctor list or a doctor's page: pick the first doctor (if the list is shown), the first service and location
+ * (if there is a choice), the first free time, then "Book appointment".
+ */
 export async function pickFirstSlot(page: Page) {
-  const slot = page.getByTestId("slot").first();
+  const detail = page.getByTestId("doctor-detail");
   const doctor = page.getByTestId("pick-professional").first();
-  await expect(slot.or(doctor)).toBeVisible({ timeout: 15_000 });
-  if (await doctor.isVisible()) await doctor.click();
+  await expect(detail.or(doctor)).toBeVisible({ timeout: 15_000 });
+  if (!(await detail.isVisible())) await doctor.click();
+  await expect(detail).toBeVisible();
+  const services = detail.getByTestId("pick-service");
+  if ((await services.count()) && !(await detail.locator('[data-testid="pick-service"][aria-checked="true"]').count())) await services.first().click();
+  const branches = detail.getByTestId("pick-branch");
+  if ((await branches.count()) && !(await detail.locator('[data-testid="pick-branch"][aria-checked="true"]').count())) await branches.first().click();
+  const slot = page.getByTestId("slot").first();
   await expect(slot).toBeVisible({ timeout: 15_000 });
   await slot.click();
+  await page.getByTestId("book-slot").click();
   await expect(page.getByTestId("details-form")).toBeVisible();
   await expect(page.getByTestId("hold-countdown")).toBeVisible();
 }

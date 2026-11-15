@@ -69,14 +69,12 @@ test("branch, category, service and professional appear on the public page", asy
   await page.getByTestId("site-service").getByRole("link", { name: "Book now" }).click();
   await expect(page).toHaveURL(new RegExp(`/${slug}/book\\?service=`));
   await page.goto(`/${slug}/book`);
-  await expect(page.getByTestId("pick-service")).toHaveCount(1);
-  await expect(page.getByTestId("pick-service")).toContainText("Acne consultation");
-  await page.getByTestId("pick-service").click();
-  // One branch and one doctor: both are chosen automatically and shown in the summary.
-  const summary = page.getByRole("complementary", { name: "Booking summary" });
-  await expect(summary.getByText("Dr. Kavya Nair")).toBeVisible();
-  await expect(summary.getByText("Koramangala")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Pick a date and time" })).toBeVisible();
+  // One doctor, one service, one branch: straight to the doctor's page with everything chosen.
+  await expect(page.getByTestId("doctor-name")).toHaveText("Dr. Kavya Nair");
+  const selection = page.getByRole("complementary", { name: "Your selection" });
+  await expect(selection).toContainText("Acne consultation");
+  await expect(selection).toContainText("Koramangala");
+  await expect(page.getByRole("heading", { name: "Choose date and time" })).toBeVisible();
 
   // Old links keep working: /o/{clinic}/book → /{clinic}, and booking-hint links → /{clinic}/book.
   await page.goto(`/o/${slug}/book`);

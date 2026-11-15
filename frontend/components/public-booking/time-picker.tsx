@@ -65,7 +65,7 @@ export function TimePicker({ slug, serviceId, branchId, professionalId, initialD
   return (
     <div className="space-y-5" data-testid="slot-picker">
       <div className="flex items-center gap-2">
-        <Button type="button" size="icon" variant="outline" className="shrink-0 rounded-full" disabled={offset <= 0} onClick={() => setOffset((o) => Math.max(0, o - WINDOW))} aria-label="Earlier dates"><ChevronLeft /></Button>
+        <Button type="button" size="icon" variant="outline" className="hidden shrink-0 rounded-full bg-white sm:inline-flex" disabled={offset <= 0} onClick={() => setOffset((o) => Math.max(0, o - WINDOW))} aria-label="Earlier dates"><ChevronLeft /></Button>
         <div ref={strip} className="flex flex-1 snap-x gap-2 overflow-x-auto scroll-smooth py-1 [scrollbar-width:none]" role="listbox" aria-label="Choose a date">
           {days.map((d) => {
             const iso = toISODate(d);
@@ -75,19 +75,19 @@ export function TimePicker({ slug, serviceId, branchId, professionalId, initialD
             return (
               <button key={iso} type="button" role="option" aria-selected={active} data-date={iso} data-testid={`day-${iso}`} disabled={!open}
                 onClick={() => setChosen(iso)}
-                className={cn("flex w-[4.25rem] shrink-0 snap-start flex-col items-center gap-0.5 rounded-2xl border bg-card px-1 py-2.5 transition-all",
-                  active ? "border-primary bg-primary text-primary-foreground shadow-md" : "hover:border-primary/50 hover:bg-accent/40",
-                  !open && "cursor-not-allowed opacity-40 hover:border-border hover:bg-card")}>
+                className={cn("flex w-[4.25rem] shrink-0 snap-start flex-col items-center gap-1 rounded-[1.25rem] border px-1 py-3 transition-all",
+                  active ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_10px_20px_-10px_color-mix(in_oklab,var(--primary)_80%,transparent)]" : "border-black/5 bg-white text-gray-900 shadow-sm hover:border-[var(--primary)]",
+                  !open && "cursor-not-allowed opacity-40 shadow-none hover:border-black/5")}>
                 <span className="text-[11px] font-medium uppercase tracking-wide">{d.toLocaleDateString("en-IN", { weekday: "short" })}</span>
                 <span className="text-xl font-semibold leading-none">{d.getDate()}</span>
-                <span className={cn("text-[11px]", active ? "text-primary-foreground" : "text-muted-foreground")}>
+                <span className={cn("text-[11px]", active ? "text-[var(--primary-foreground)]" : "text-gray-500")}>
                   {s ? (s.available ? `${s.slot_count} open` : "Full") : summary.isLoading ? "…" : d.toLocaleDateString("en-IN", { month: "short" })}
                 </span>
               </button>
             );
           })}
         </div>
-        <Button type="button" size="icon" variant="outline" className="shrink-0 rounded-full" onClick={() => setOffset((o) => o + WINDOW)} aria-label="Later dates"><ChevronRight /></Button>
+        <Button type="button" size="icon" variant="outline" className="hidden shrink-0 rounded-full bg-white sm:inline-flex" onClick={() => setOffset((o) => o + WINDOW)} aria-label="Later dates"><ChevronRight /></Button>
       </div>
 
       {day.isLoading || summary.isLoading ? (
@@ -110,13 +110,13 @@ export function TimePicker({ slug, serviceId, branchId, professionalId, initialD
                 return (
                   <div key={part.key} className="space-y-2">
                     <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground"><Icon className="size-3.5" aria-hidden />{part.label}</p>
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-5">
+                    <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 xl:grid-cols-5">
                       {slots.map((slot) => {
                         const active = selected?.start_at === slot.start_at && selected?.professional_id === slot.professional_id;
                         return (
                           <button key={slot.start_at + slot.professional_id} type="button" data-testid="slot" aria-pressed={active} onClick={() => onSelect(slot, day.data!)}
-                            className={cn("rounded-xl border bg-card px-2 py-2.5 text-sm font-medium tabular-nums transition-all hover:border-primary hover:bg-accent/50",
-                              active && "border-primary bg-primary text-primary-foreground hover:bg-primary")}>
+                            className={cn("rounded-full border border-black/10 bg-white px-2 py-2.5 text-sm font-semibold tabular-nums text-gray-800 transition-all hover:border-[var(--primary)]",
+                              active && "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_8px_18px_-8px_color-mix(in_oklab,var(--primary)_80%,transparent)] hover:border-[var(--primary)]")}>
                             {timeLabel(slot.start_at, tz)}
                             {slot.remaining > 1 ? <span className="block text-[10px] font-normal opacity-75">{slot.remaining} left</span> : null}
                           </button>

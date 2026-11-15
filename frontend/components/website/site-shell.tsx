@@ -68,7 +68,7 @@ export function SiteShell({ slug, children, previewDocument }: { slug: string; c
       </div>
     );
   }
-  const inBooking = pathname.startsWith(`${value.base}/book`) || pathname.startsWith(`${value.base}/appointments`);
+  const inBooking = pathname.startsWith(`${value.base}/book`) || pathname.startsWith(`${value.base}/appointments`);  // includes /bookings
   return (
     <SiteContext.Provider value={value}>
       <BookingContext.Provider value={{ slug, data: value.org, base: value.base, bookPath: `${value.base}/book`, embedded: false }}>

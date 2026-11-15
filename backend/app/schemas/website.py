@@ -22,7 +22,7 @@ ICONS = (
     "none", "calendar", "phone", "message-circle", "mail", "map-pin", "external-link", "file-text", "arrow-right",
     "stethoscope", "heart-pulse", "leaf", "shield-check", "clock", "star", "award", "users", "sparkles", "home",
 )
-RESERVED_PAGE_SLUGS = frozenset({"book", "appointments", "embed", "p", "preview", "api", "media", "admin"})
+RESERVED_PAGE_SLUGS = frozenset({"book", "bookings", "appointments", "embed", "p", "preview", "api", "media", "admin"})
 MAX_DOCUMENT_BYTES = 400_000
 
 Markdown = Annotated[str, Field(max_length=20_000)]

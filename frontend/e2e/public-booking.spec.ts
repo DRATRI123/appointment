@@ -48,34 +48,50 @@ async function allowEmbedding(page: Page, clinic: Clinic, origins: string[]) {
   expect(status).toBe(200);
 }
 
-test("every step appears in order and the visitor can go back and change a choice", async ({ page, browser }) => {
+test("find a doctor, see their details, pick a time and book; back keeps choices editable", async ({ page, browser }) => {
   const clinic = await seedClinic(page);
   const guest = await (await browser.newContext()).newPage();
   await guest.goto(`/${clinic.slug}/book`);
-  // Order: service → doctor → location → date and time.
-  await expect(guest.getByRole("heading", { level: 2, name: "What would you like to book?" })).toBeVisible();
-  await expect(guest.getByTestId("pick-service")).toHaveCount(2);
-  await guest.getByTestId("pick-service").filter({ hasText: "Consultation" }).click();
-  await expect(guest.getByRole("heading", { name: "Choose your doctor" })).toBeVisible();
+  // Doctors first, with search and speciality filters.
+  await expect(guest.getByTestId("doctor-browser")).toBeVisible();
   await expect(guest.getByTestId("pick-professional")).toHaveCount(2);
-  await expect(guest.getByText("BAMS, MD")).toBeVisible();
-  await expect(guest.getByText("12+ yrs experience")).toBeVisible();
+  await expect(guest.getByTestId("pick-any")).toBeVisible();
+  await guest.getByTestId("doctor-search").fill("panchakarma");
+  await expect(guest.getByTestId("pick-professional")).toHaveCount(1);
+  await expect(guest.getByTestId("pick-professional")).toContainText("Dr. Vikram Iyer");
+  await guest.getByTestId("doctor-search").fill("");
+  await expect(guest.getByTestId("pick-professional")).toHaveCount(2);
+
+  // "First available" → choose service and location → times across doctors.
   await guest.getByTestId("pick-any").click();
-  await expect(guest.getByRole("heading", { name: "Choose a location" })).toBeVisible();
+  await expect(guest.getByTestId("doctor-name")).toHaveText("First available doctor");
+  await guest.getByTestId("pick-service").filter({ hasText: "Consultation" }).click();
   await guest.getByTestId("pick-branch").filter({ hasText: "East Side" }).click();
-  await expect(guest.getByRole("heading", { name: "Pick a date and time" })).toBeVisible();
-  // Back returns to the previous step with the choice editable.
-  await guest.getByRole("button", { name: "Back" }).click();
-  await expect(guest.getByRole("heading", { name: "Choose a location" })).toBeVisible();
-  await guest.getByRole("button", { name: "Back" }).click();
-  await expect(guest.getByRole("heading", { name: "Choose your doctor" })).toBeVisible();
+  await expect(guest.getByTestId("slot").first()).toBeVisible();
+  await expect(guest.getByTestId("book-slot")).toBeDisabled();
+  await guest.getByRole("button", { name: "Back to doctors" }).click();
+
+  // A doctor's page shows their real profile facts, then service, location, date and time.
   await guest.getByTestId("pick-professional").filter({ hasText: "Dr. Asha Rao" }).click();
+  await expect(guest.getByTestId("doctor-name")).toHaveText("Dr. Asha Rao");
+  await expect(guest.getByText("BAMS, MD")).toBeVisible();
+  await expect(guest.getByTestId("doctor-detail").getByRole("term").filter({ hasText: "Years exp." })).toBeVisible();
+  await guest.getByTestId("pick-service").filter({ hasText: "Consultation" }).click();
   await guest.getByTestId("pick-branch").filter({ hasText: "East Side" }).click();
-  await pickFirstSlot(guest);
+  await guest.getByTestId("slot").first().click();
+  const selection = guest.getByRole("complementary", { name: "Your selection" });
+  await expect(selection).toContainText("Consultation");
+  await expect(selection).toContainText("East Side");
+  await expect(selection).toContainText("₹600.00");
+  await guest.getByTestId("book-slot").click();
+  await expect(guest.getByTestId("details-form")).toBeVisible();
   const summary = guest.getByRole("complementary", { name: "Booking summary" });
-  await expect(summary).toContainText("East Side");
   await expect(summary).toContainText("Dr. Asha Rao");
   await expect(summary.getByTestId("summary-total")).toHaveText("₹600.00");
+  // Back releases the reserved time and returns to the doctor's page with the choices kept.
+  await guest.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(guest.getByTestId("doctor-name")).toHaveText("Dr. Asha Rao");
+  await expect(guest.locator('[data-testid="pick-branch"][aria-checked="true"]')).toContainText("East Side");
   await guest.context().close();
 });
 
@@ -85,21 +101,21 @@ test("URL parameters preselect real choices and are ignored when they do not mat
 
   // Service, branch and doctor preselected: straight to the calendar.
   await guest.goto(`/${clinic.slug}?service=${clinic.services.consult}&branch=${clinic.branches.main}&doctor=${clinic.pros.vikram}`);
-  await expect(guest.getByRole("heading", { name: "Pick a date and time" })).toBeVisible();
-  const summary = guest.getByRole("complementary", { name: "Booking summary" });
+  await expect(guest.getByRole("heading", { name: "Choose date and time" })).toBeVisible();
+  const summary = guest.getByRole("complementary", { name: "Your selection" });
   await expect(summary).toContainText("Consultation");
   await expect(summary).toContainText("Main Road");
   await expect(summary).toContainText("Dr. Vikram Iyer");
 
   // Aliases work too.
   await guest.goto(`/${clinic.slug}?service=${clinic.services.therapy}&location=${clinic.branches.east}`);
-  await expect(guest.getByRole("heading", { name: "Pick a date and time" })).toBeVisible(); // only Dr. Asha offers therapy
+  await expect(guest.getByRole("heading", { name: "Choose date and time" })).toBeVisible(); // only Dr. Asha offers therapy
   await expect(summary).toContainText("Dr. Asha Rao");
 
   // Unknown, malformed and price-like parameters change nothing.
   await guest.goto(`/${clinic.slug}?service=does-not-exist&branch=%3Cscript%3E&doctor=x&price=1&amount=1`);
-  await expect(guest.getByRole("heading", { name: "What would you like to book?" })).toBeVisible();
-  await expect(guest.getByTestId("pick-service")).toHaveCount(2);
+  await expect(guest.getByTestId("doctor-browser")).toBeVisible();
+  await expect(guest.getByTestId("pick-professional")).toHaveCount(2);
 
   // A preselected paid service still costs what the clinic charges, whatever the link says.
   const reference = await bookAsGuest(guest, clinic.slug, {
@@ -157,9 +173,9 @@ test.describe("on a phone", () => {
     await guest.keyboard.press("Escape");
     await guest.getByTestId("floating-book").getByRole("link", { name: "Book appointment" }).click();
     await guest.waitForURL(new RegExp(`/${clinic.slug}/book`));
-    await expect(guest.getByTestId("mobile-summary")).toBeVisible();
-    await guest.getByTestId("pick-service").filter({ hasText: "Consultation" }).click();
+    await expect(guest.getByTestId("bottom-nav")).toBeVisible();
     await guest.getByTestId("pick-professional").first().click();
+    await guest.getByTestId("pick-service").filter({ hasText: "Consultation" }).click();
     await guest.getByTestId("pick-branch").first().click();
     await pickFirstSlot(guest);
     expect(await noSideScroll()).toBe(true);
@@ -172,6 +188,12 @@ test.describe("on a phone", () => {
     await guest.waitForURL(/\/appointments\/APT-/);
     await expect(guest.getByTestId("upi-qr")).toBeVisible();
     expect(await noSideScroll()).toBe(true);
+    // "My bookings" lists it from this device, and the doctor list shows it as the upcoming appointment.
+    await guest.goto(`/${clinic.slug}/bookings`);
+    await expect(guest.getByTestId("device-booking")).toHaveCount(1);
+    await expect(guest.getByTestId("device-booking")).toContainText("Payment due");
+    await guest.getByTestId("bottom-nav").getByRole("link", { name: "Doctors" }).click();
+    await expect(guest.getByTestId("upcoming-card")).toBeVisible();
     await guest.context().close();
   });
 });
@@ -214,9 +236,11 @@ test.describe("embedding", () => {
     const store = await ctx.newPage();
     await store.goto("http://shop.localhost:4999/pages/book");
     const frame = store.frameLocator("#booking");
-    await expect(frame.getByRole("heading", { name: "Choose your doctor" })).toBeVisible({ timeout: 15_000 });
+    await expect(frame.getByTestId("doctor-browser")).toBeVisible({ timeout: 15_000 });
+    await expect(frame.getByTestId("pick-professional")).toHaveCount(2);
+    await expect(frame.getByTestId("bottom-nav")).toHaveCount(0); // no app tab bar inside a store's page
     await expect(frame.getByTestId("booking-shell")).toBeVisible();
-    await expect(frame.getByRole("heading", { level: 1 })).toHaveCount(0); // no clinic hero/header inside the frame
+    await expect(frame.getByTestId("site-shell")).toHaveCount(0); // the frame shows the booking steps, not the whole clinic website
     await expect.poll(async () => store.locator("#booking").evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(320);
 
     const evil = await ctx.newPage();
