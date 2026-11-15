@@ -9,7 +9,8 @@ import pytest
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
-os.environ.setdefault("PUBLIC_CACHE_SECONDS", "0")  # tests share one uncommitted session; test_public_cache.py covers the cache
+os.environ.setdefault("PUBLIC_CACHE_SECONDS", "0")
+os.environ.setdefault("PLATFORM_ADMIN_REQUIRE_MFA", "false")  # most tests make quick super admins; test_superadmin.py turns it on  # tests share one uncommitted session; test_public_cache.py covers the cache
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, event  # noqa: E402
@@ -85,6 +86,7 @@ def client(db: Session) -> Generator[TestClient, None, None]:
     def _override() -> Generator[Session, None, None]:
         """Mirror production get_db: each request runs in a SAVEPOINT that is rolled back on error (unless the error
         asks for its changes to persist), so tests see exactly what a real request would have saved."""
+        db.info.pop("branch_scope", None)  # in production every request has its own session; here they share one
         savepoint = db.begin_nested()
         try:
             yield db

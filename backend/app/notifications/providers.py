@@ -81,6 +81,22 @@ def _cfg(provider: Any) -> Any:
     return getattr(provider, "_config", None) or get_settings()
 
 
+# ----------------------------------------------------------------- disabled
+@dataclass
+class DisabledProvider:
+    """The platform has no account for this channel (production: clinics may still bring their own). Nothing is sent
+    and nothing is written to the log; the message is recorded as failed with a clear reason."""
+
+    channel: str
+    name: str = "disabled"
+
+    def configured(self) -> bool:
+        return False
+
+    def send(self, message: OutboundMessage) -> DeliveryResult:
+        return DeliveryResult(self.name, False, error=f"No {self.channel} provider is set up (the platform's {self.channel.upper()}_PROVIDER is 'disabled').")
+
+
 # ----------------------------------------------------------------- console
 @dataclass
 class ConsoleProvider:
@@ -344,6 +360,8 @@ def get_provider(channel: str) -> Provider:
     choice = {"email": s.email_provider, "sms": s.sms_provider, "whatsapp": s.whatsapp_provider}.get(channel, "console")
     if choice == "console":
         return _console[channel]
+    if choice == "disabled":
+        return DisabledProvider(channel)
     if channel == "email" and choice == "smtp":
         return SMTPEmailProvider()
     if channel in ("sms", "whatsapp") and choice == "twilio":

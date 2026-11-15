@@ -12,6 +12,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
+import app.core.branch_scope  # noqa: F401  (registers the branch isolation filter)
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
@@ -136,7 +137,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
     if settings.rate_limit_enabled:
         app.add_middleware(SlowAPIMiddleware)
-        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+        def _limited(request, exc):
+            from app.core.observability import security_event
+
+            security_event("rate_limited")
+            return _rate_limit_exceeded_handler(request, exc)
+
+        app.add_exception_handler(RateLimitExceeded, _limited)
     app.add_middleware(SavingPausedMiddleware, api_prefix=settings.api_v1_prefix)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(MetricsMiddleware)  # outermost: times everything, including errors

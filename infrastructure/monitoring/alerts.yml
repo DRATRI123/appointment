@@ -76,3 +76,47 @@ groups:
         annotations:
           summary: "Public booking pages take over 2 seconds for 1 in 20 visitors"
           action: "Check server CPU/memory and database size; see documentation/deployment.md → Performance."
+
+  - name: security
+    rules:
+      - alert: ManyFailedLogins
+        expr: sum(increase(app_security_events_total{event=~"login_failed|mfa_failed"}[10m])) > 30
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 30 wrong passwords or authenticator codes in 10 minutes (password guessing?)"
+          action: "Look at Platform audit logs for auth.lockout entries; consider PLATFORM_ADMIN_ALLOWED_IPS and blocking the source IP in the firewall."
+
+      - alert: AccountsBeingLocked
+        expr: sum(increase(app_security_events_total{event="login_locked"}[15m])) > 5
+        labels: {severity: warning}
+        annotations:
+          summary: "Several accounts hit the login lockout in 15 minutes"
+          action: "Someone may be trying passwords on many accounts. Check audit logs (auth.lockout) and the Nginx access log."
+
+      - alert: OneTimeCodeAbuse
+        expr: sum(increase(app_security_events_total{event=~"otp_failed|otp_locked|otp_rate_limited"}[15m])) > 50
+        labels: {severity: warning}
+        annotations:
+          summary: "Many wrong or blocked one-time codes in 15 minutes (SMS pumping or code guessing?)"
+          action: "Check OTP & verification limits in the clinic settings and your SMS provider's usage; tighten limits if needed."
+
+      - alert: RefreshTokenReused
+        expr: sum(increase(app_security_events_total{event="refresh_token_reused"}[1h])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "A sign-in token was used after it had been replaced (possible stolen session)"
+          action: "The affected sessions were revoked automatically. Check which user in the logs (auth.refresh_reuse_detected) and ask them to change their password."
+
+      - alert: AccessDeniedBurst
+        expr: sum(increase(app_security_events_total{event=~"access_denied|ip_blocked|api_key_invalid|csrf_failed"}[10m])) > 100
+        labels: {severity: warning}
+        annotations:
+          summary: "Many refused requests in 10 minutes (probing for other clinics' data or a broken integration?)"
+          action: "Find the source in the Nginx access log; check Developers → API key usage for a misconfigured key."
+
+      - alert: PaymentsRejectedSpike
+        expr: sum(increase(app_security_events_total{event=~"payment_rejected|payment_duplicate_utr"}[1h])) > 10
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 10 rejected payments or reused UPI references in an hour"
+          action: "Patients may be submitting fake UTRs. Review Payments → Verification and the duplicate-UTR flags."

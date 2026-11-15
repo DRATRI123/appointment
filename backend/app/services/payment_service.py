@@ -297,7 +297,10 @@ class PaymentService:
             self._notifications().emit("payment.verified", appointment=appt, payment=payment)
 
     def reject(self, payment: Payment, req: RejectRequest) -> Payment:
+        from app.core.observability import security_event
+
         lock_row(self.db, payment)
+        security_event("payment_rejected")
         if payment.status not in IN_REVIEW_STATUSES:
             raise ConflictError("Only submitted payments can be rejected.", code="invalid_transition")
         now = utcnow()

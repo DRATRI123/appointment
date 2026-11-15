@@ -31,7 +31,7 @@ echo  [1/4] First start: installing the backend. This happens only once...
 "backend\.venv\Scripts\python.exe" -m pip install --upgrade pip
 "backend\.venv\Scripts\python.exe" -m pip install -r "backend\requirements.txt" || goto :failed
 :backend_ready
-if not exist "backend\.env" copy /y "backend\.env.development" "backend\.env" >nul
+if not exist "backend\.env" copy /y ".env.development.example" "backend\.env" >nul
 
 rem ---- 3. Database: apply updates (safe to run every time) ---------------------
 echo  [2/4] Updating the database...

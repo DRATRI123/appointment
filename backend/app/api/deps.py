@@ -159,9 +159,22 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 OptionalUser = Annotated[User | None, Depends(get_optional_user)]
 
 
-def require_platform_admin(user: CurrentUser) -> User:
+def check_platform_admin_access(request: Request, user: User) -> None:
+    """Extra gates for the platform super admin, on top of being one: the optional IP allow-list and two-step
+    sign-in (required everywhere except local development and tests)."""
+    from app.security.api_keys import ip_allowed
+
+    settings = get_settings()
+    if settings.platform_admin_allowed_ips and not ip_allowed(get_request_meta(request).ip_address, settings.platform_admin_allowed_ips):
+        raise PermissionDenied("Super admin access is not allowed from this network.", code="ip_not_allowed")
+    if settings.platform_admin_require_mfa and user.mfa_enabled_at is None:
+        raise PermissionDenied("Super admins must use two-step sign-in. Turn it on under Profile & security.", code="mfa_setup_required")
+
+
+def require_platform_admin(request: Request, user: CurrentUser) -> User:
     if not user.is_platform_admin:
         raise PermissionDenied("Platform administrator access required.", code="platform_admin_required")
+    check_platform_admin_access(request, user)
     return user
 
 
@@ -226,6 +239,7 @@ def resolve_tenant(
     if membership is None:
         if not user.is_platform_admin:
             raise PermissionDenied("You do not belong to this organization.", code="not_a_member")
+        check_platform_admin_access(request, user)
         record_audit(
             db, action="platform.impersonate", actor=user, organization_id=org.id, entity_type="organization",
             entity_id=org.public_id, purpose=f"{request.method} {request.url.path}", meta=get_request_meta(request),
@@ -245,6 +259,9 @@ def resolve_tenant(
     ctx = TenantContext(
         user=user, organization=org, membership=membership, permissions=permissions, is_platform_admin=user.is_platform_admin
     )
+    from app.core.branch_scope import set_branch_scope
+
+    set_branch_scope(db, membership.branch_id if membership is not None else None)  # staff of one branch see only it
     request.state.tenant = ctx
     return ctx
 
@@ -265,6 +282,9 @@ def _resolve_api_key_tenant(request: Request, db: Session, user: User, key, orga
     role_permissions = {p.code for p in membership.role.permissions}
     permissions = set(key.scopes or []) & role_permissions & set(API_SCOPES)
     ctx = TenantContext(user=user, organization=org, membership=membership, permissions=permissions, is_platform_admin=False)
+    from app.core.branch_scope import set_branch_scope
+
+    set_branch_scope(db, membership.branch_id)  # a key never sees more branches than the person who created it
     request.state.tenant = ctx
     return ctx
 

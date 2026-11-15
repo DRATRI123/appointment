@@ -4,6 +4,8 @@ import { Logo } from "./logo";
 import { HeaderUser } from "@/components/auth/header-user";
 import { AnnouncementBanner } from "@/components/layout/announcement-banner";
 import { SidebarNav, type NavGroup } from "./sidebar-nav";
+import { EnvironmentBadge } from "./environment-badge";
+import { useAuth } from "@/components/auth/auth-provider";
 
 export type { NavGroup, NavItem } from "./sidebar-nav";
 
@@ -15,11 +17,14 @@ export function DashboardShell({
   children,
 }: {
   title: string;
-  roleLabel: string;
+  /** Fixed label (platform, patient); by default the signed-in person's role in the current clinic. */
+  roleLabel?: string;
   groups: NavGroup[];
   showOrgSwitcher?: boolean;
   children: React.ReactNode;
 }) {
+  const { currentMembership } = useAuth();
+  const label = roleLabel ?? (currentMembership ? `${currentMembership.role_name}${currentMembership.branch_id ? " · one branch" : ""}` : "");
   return (
     <div className="flex min-h-screen w-full">
       <aside className="hidden w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground lg:flex">
@@ -27,7 +32,7 @@ export function DashboardShell({
           <Logo href="/" />
         </div>
         <div className="px-5 py-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{roleLabel}</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground" data-testid="role-label">{label}</p>
         </div>
         <SidebarNav groups={groups} />
       </aside>
@@ -38,6 +43,7 @@ export function DashboardShell({
               <Logo labelClassName="hidden sm:inline" />
             </span>
             <h1 className="hidden truncate text-base font-semibold sm:block md:text-lg">{title}</h1>
+            <EnvironmentBadge />
           </div>
           <HeaderUser showOrgSwitcher={showOrgSwitcher} />
         </header>

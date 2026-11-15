@@ -39,6 +39,30 @@ LATENCY = Histogram("app_http_request_duration_seconds", "Time to produce a resp
                     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10))
 
 
+# Security events, counted by kind (never with user, IP or values as labels: only the kind of event). Prometheus alert
+# rules (deployment/monitoring/alerts.yml) watch for bursts: password guessing, code guessing, scraping, payment fraud.
+SECURITY_EVENTS = Counter("app_security_events_total", "Refused or suspicious requests by kind", ("event",), registry=REGISTRY)
+_SECURITY_CODES = {
+    "invalid_credentials": "login_failed", "account_locked": "login_locked", "mfa_code_invalid": "mfa_failed",
+    "otp_incorrect": "otp_failed", "otp_locked": "otp_locked", "otp_destination_limit": "otp_rate_limited",
+    "otp_ip_limit": "otp_rate_limited", "otp_session_limit": "otp_rate_limited", "otp_cooldown": "otp_rate_limited",
+    "rate_limited": "rate_limited", "invalid_api_key": "api_key_invalid", "ip_not_allowed": "ip_blocked",
+    "csrf_failed": "csrf_failed", "permission_denied": "access_denied", "platform_admin_required": "access_denied",
+    "not_a_member": "access_denied", "wrong_organization": "access_denied", "api_key_not_allowed": "access_denied",
+    "duplicate_utr": "payment_duplicate_utr", "token_invalid": "token_invalid", "refresh_reused": "refresh_token_reused",
+    "maintenance": "maintenance",
+}
+
+
+def security_event(event: str) -> None:
+    SECURITY_EVENTS.labels(event=event).inc()
+
+
+def security_event_for_code(code: str | None) -> None:
+    if code and (event := _SECURITY_CODES.get(code)):
+        security_event(event)
+
+
 def _route_template(scope: Scope) -> str:
     """The matched route pattern with its full prefix, e.g. /api/v1/branches/{branch_id}. Unmatched paths share one
     label so random URLs cannot create unlimited time series."""

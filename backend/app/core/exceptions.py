@@ -87,6 +87,9 @@ def _payload(detail: str, code: str, errors: Any = None, request: Request | None
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
+        from app.core.observability import security_event_for_code
+
+        security_event_for_code(exc.code)
         return JSONResponse(
             status_code=exc.status_code,
             content={**(getattr(exc, "data", None) or {}), **_payload(exc.detail, exc.code, exc.errors, request)},

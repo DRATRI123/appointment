@@ -9,6 +9,7 @@ import base64
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -16,6 +17,16 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
 # bandit B105 false positive: placeholder; rejected at startup outside development
 INSECURE_DEFAULT_SECRET = "change-me-to-a-random-string-of-at-least-32-bytes"  # nosec B105
+
+
+def _remote_database_host(url: str) -> str | None:
+    """The host of a database on another machine, or None for SQLite, this machine or a Docker service name."""
+    if url.startswith("sqlite"):
+        return None
+    host = (urlsplit(url.replace("+psycopg", "").replace("+asyncpg", "")).hostname or "").lower()
+    if host in ("", "localhost", "127.0.0.1", "::1") or "." not in host and ":" not in host:
+        return None
+    return host
 
 
 def _is_key32(value: str | None) -> bool:
@@ -57,6 +68,15 @@ class Settings(BaseSettings):
     # Development and load tests only: every booking verification code is this value (no real message is sent by the
     # console providers anyway). The server refuses to start with it outside development/test.
     otp_test_code: str | None = None
+    # Development only: allow real SMS/email/WhatsApp providers or a database on another machine. Off by default so
+    # production credentials copied into a laptop's .env cannot message real patients or touch real data.
+    dev_allow_real_messages: bool = False
+    dev_allow_remote_database: bool = False
+    # Super admin protection. Two-step sign-in is required for every platform super admin (switch off only for local
+    # development and automated tests; staging and production refuse to start without it). Optionally, super admin
+    # pages only answer from these IP addresses / ranges (comma-separated, e.g. your office IP).
+    platform_admin_require_mfa: bool = True
+    platform_admin_allowed_ips: Annotated[list[str], NoDecode] = Field(default_factory=list)
     # Worker threads per API process for request handling (0 = the framework default of 40).
     worker_threads: int = 0
     # Seconds the public clinic profile, services and doctors lists are cached per API process (0 = off).
@@ -163,11 +183,27 @@ class Settings(BaseSettings):
     # --- frontend ----------------------------------------------------------
     frontend_url: str = "http://localhost:3000"
 
-    @field_validator("cors_origins", "trusted_hosts", "forwarded_allow_ips", "data_encryption_previous_keys", mode="before")
+    @field_validator("cors_origins", "trusted_hosts", "forwarded_allow_ips", "data_encryption_previous_keys", "platform_admin_allowed_ips", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("otp_provider")
+    @classmethod
+    def _known_otp_provider(cls, value: str) -> str:
+        if value not in ("console", "notifications"):
+            raise ValueError("OTP_PROVIDER must be console or notifications (codes go out through the SMS/email providers)")
+        return value
+
+    @field_validator("email_provider", "sms_provider", "whatsapp_provider")
+    @classmethod
+    def _known_message_provider(cls, value: str, info) -> str:
+        allowed = {"email_provider": ("console", "smtp", "disabled"), "sms_provider": ("console", "msg91", "twilio", "disabled"),
+                   "whatsapp_provider": ("console", "meta", "twilio", "disabled")}[info.field_name]
+        if value not in allowed:
+            raise ValueError(f"{info.field_name.upper()} must be one of: {', '.join(allowed)}")
         return value
 
     @model_validator(mode="after")
@@ -176,10 +212,17 @@ class Settings(BaseSettings):
 
         Every problem is reported at once so a deployment can be fixed in one pass."""
         if self.app_env in {"development", "test"}:
+            self._check_local()
             return self
         problems: list[str] = []
+        for name, provider in (("EMAIL_PROVIDER", self.email_provider), ("SMS_PROVIDER", self.sms_provider), ("WHATSAPP_PROVIDER", self.whatsapp_provider)):
+            if provider == "console":
+                problems.append(f"{name} cannot be console here (messages would only be written to the log): "
+                                "set a real provider, or 'disabled' if clinics bring their own accounts")
         if self.otp_test_code:
             problems.append("OTP_TEST_CODE must not be set (it is for local load tests only)")
+        if not self.platform_admin_require_mfa:
+            problems.append("PLATFORM_ADMIN_REQUIRE_MFA must be true (super admins must use two-step sign-in)")
         if self.secret_key == INSECURE_DEFAULT_SECRET or len(self.secret_key) < 32:
             problems.append("SECRET_KEY must be a random value of at least 32 characters")
         if not self.cookie_secure:
@@ -224,6 +267,28 @@ class Settings(BaseSettings):
         if problems:
             raise ValueError(f"Unsafe {self.app_env} configuration:\n  - " + "\n  - ".join(problems))
         return self
+
+    def _check_local(self) -> None:
+        """Development and test must not touch real people or real data by accident (production credentials copied
+        into a laptop's .env). Development can opt in on purpose; the test environment never can."""
+        real = [n for n, p in (("OTP_PROVIDER", self.otp_provider), ("EMAIL_PROVIDER", self.email_provider),
+                               ("SMS_PROVIDER", self.sms_provider), ("WHATSAPP_PROVIDER", self.whatsapp_provider)) if p not in ("console", "disabled")]
+        remote = _remote_database_host(self.database_url)
+        problems: list[str] = []
+        if self.app_env == "test":
+            if real:
+                problems.append(f"{', '.join(real)} must be console in tests (no real SMS, email or WhatsApp)")
+            if remote:
+                problems.append(f"DATABASE_URL points at {remote}: tests may only use a local or Docker database")
+        else:
+            if real and not self.dev_allow_real_messages:
+                problems.append(f"{', '.join(real)} would send real messages from a development machine: use console, "
+                                "or set DEV_ALLOW_REAL_MESSAGES=true on purpose")
+            if remote and not self.dev_allow_remote_database:
+                problems.append(f"DATABASE_URL points at {remote}: development uses a local database. If this is on "
+                                "purpose (never a production database), set DEV_ALLOW_REMOTE_DATABASE=true")
+        if problems:
+            raise ValueError(f"Unsafe {self.app_env} configuration:\n  - " + "\n  - ".join(problems))
 
     @property
     def is_sqlite(self) -> bool:

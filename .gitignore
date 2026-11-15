@@ -14,7 +14,9 @@ htmlcov/
 .env
 .env.*
 !.env.example
-!.env.development
+!.env.development.example
+!.env.test.example
+!.env.staging.example
 !.env.production.example
 
 # Databases & uploads

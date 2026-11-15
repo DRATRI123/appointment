@@ -19,7 +19,10 @@ GOOD_PRODUCTION = {
     "trusted_hosts": ["clinic.example.com"],
     "forwarded_allow_ips": ["172.16.0.0/12"],
     "frontend_url": "https://clinic.example.com",
-    "otp_provider": "msg91",
+    "otp_provider": "notifications",
+    "email_provider": "smtp",
+    "sms_provider": "msg91",
+    "whatsapp_provider": "disabled",
     "backup_encryption_key": base64.b64encode(os.urandom(32)).decode(),
 }
 
@@ -107,3 +110,31 @@ def test_the_load_test_otp_code_is_refused_outside_development():
     with pytest.raises(ValidationError, match="OTP_TEST_CODE"):
         _settings(otp_test_code="123456")
     assert Settings(_env_file=None, app_env="development", otp_test_code="123456").otp_test_code == "123456"
+
+
+def test_production_refuses_mock_message_providers():
+    with pytest.raises(ValidationError, match="EMAIL_PROVIDER cannot be console"):
+        _settings(email_provider="console")
+    assert _settings(whatsapp_provider="disabled").whatsapp_provider == "disabled"
+
+
+def _local(**kw) -> Settings:
+    return Settings(_env_file=None, **{"email_provider": "console", "sms_provider": "console", "whatsapp_provider": "console",
+                                      "otp_provider": "console", **kw})
+
+
+def test_tests_never_use_real_providers_or_remote_databases():
+    with pytest.raises(ValidationError, match="must be console in tests"):
+        _local(app_env="test", sms_provider="msg91")
+    with pytest.raises(ValidationError, match="db.example.com"):
+        _local(app_env="test", database_url="postgresql+psycopg://u:p@db.example.com/app")
+    assert _local(app_env="test", database_url="postgresql+psycopg://u:p@postgres:5432/app_test").app_env == "test"  # Docker service
+    assert _local(app_env="test", database_url="postgresql+psycopg://u:p@127.0.0.1/app_test").app_env == "test"
+
+
+def test_development_needs_an_explicit_choice_for_real_messages_or_remote_data():
+    with pytest.raises(ValidationError, match="DEV_ALLOW_REAL_MESSAGES"):
+        _local(app_env="development", email_provider="smtp")
+    assert _local(app_env="development", email_provider="smtp", dev_allow_real_messages=True).email_provider == "smtp"
+    with pytest.raises(ValidationError, match="DEV_ALLOW_REMOTE_DATABASE"):
+        _local(app_env="development", database_url="postgresql+psycopg://u:p@10.0.0.5/live")
