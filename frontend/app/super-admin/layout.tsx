@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Building2, CreditCard, Gauge, Home, ScrollText, Settings2, Users } from "lucide-react";
+import { Activity, Building2, CreditCard, Database, Gauge, Home, ScrollText, Settings2, Users } from "lucide-react";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { RequireAuth } from "@/components/auth/require-auth";
 
@@ -13,6 +13,7 @@ const groups = [
       { href: "/super-admin/subscriptions", label: "Subscriptions", icon: CreditCard },
       { href: "/super-admin/usage", label: "Usage & API", icon: Gauge },
       { href: "/super-admin/health", label: "System health", icon: Activity },
+      { href: "/super-admin/database", label: "Database", icon: Database },
       { href: "/super-admin/audit-logs", label: "Platform audit logs", icon: ScrollText },
       { href: "/super-admin/settings", label: "Platform settings", icon: Settings2 },
     ],

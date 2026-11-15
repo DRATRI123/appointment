@@ -39,3 +39,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Progress of Super admin → Database tasks (local state, not code)
+database-task.json
+saving-paused.json

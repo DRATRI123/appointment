@@ -24,6 +24,7 @@ import hashlib
 import json
 import sqlite3
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -162,14 +163,19 @@ def _reset_sequences(conn: Connection) -> int:
     return n
 
 
-def migrate(source: Engine, target: Engine, *, dry_run: bool = False, migrate_target_schema: bool = True) -> Report:
+def migrate(source: Engine, target: Engine, *, dry_run: bool = False, migrate_target_schema: bool = True,
+            progress: Callable[[str], None] | None = None) -> Report:
+    """``progress`` (optional) receives short plain-language updates, e.g. for the Super admin Database page."""
     from app.core.observability import migration_head
+
+    say = progress or (lambda _msg: None)
 
     head = migration_head()
     report = Report(dry_run=dry_run)
     if target.dialect.name != "postgresql":
         raise MigrationError("The target must be a PostgreSQL database (postgresql+psycopg://...).")
 
+    say("Reading the current database")
     with source.connect() as src:
         rev = _revision(src)
         if rev != head:
@@ -188,6 +194,7 @@ def migrate(source: Engine, target: Engine, *, dry_run: bool = False, migrate_ta
         return report
 
     if migrate_target_schema:
+        say("Creating the tables in PostgreSQL")
         _migrate_schema(target.url.render_as_string(hide_password=False))
     with target.connect() as tgt:
         if _revision(tgt) != head:
@@ -200,6 +207,8 @@ def migrate(source: Engine, target: Engine, *, dry_run: bool = False, migrate_ta
         for table in reversed([t for t in _tables() if t.name in SEED_TABLES]):  # children first
             tgt.execute(table.delete())
         for table in _tables():
+            if report.tables.get(table.name):
+                say(f"Copying {table.name} ({report.tables[table.name]:,} rows)")
             batch: list[dict[str, Any]] = []
             for row in src.execute(select(table)).mappings().yield_per(BATCH):
                 batch.append(dict(row))
@@ -209,6 +218,7 @@ def migrate(source: Engine, target: Engine, *, dry_run: bool = False, migrate_ta
             if batch:
                 tgt.execute(table.insert(), batch)
         report.sequences_reset = _reset_sequences(tgt)
+        say("Checking every table matches the original exactly")
         for table in _tables():
             copied = table_checksum(tgt, table)
             if copied != source_sums[table.name]:

@@ -51,6 +51,11 @@ class Runner:
         return True
 
     def run_cycle(self) -> dict[str, bool]:
+        from app.ops.db_move import saving_paused
+
+        if saving_paused():  # the super admin is moving or updating the database: touch nothing until it is done
+            log.info("worker.paused_for_database_task")
+            return {}
         self._record(ops_service.record_heartbeat, interval_seconds=self.interval)
         outcome: dict[str, bool] = {}
         for name in jobs.PERIODIC_JOBS:

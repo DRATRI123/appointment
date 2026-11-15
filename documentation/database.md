@@ -311,6 +311,35 @@ slower statements with their SQL text (never their parameter values, which hold 
 `WEB_CONCURRENCY` worker processes the API can open up to `WEB_CONCURRENCY × (pool size + overflow)` connections;
 PostgreSQL's default limit is 100.
 
+## Super admin → Database (no commands)
+
+Signed in as the platform super admin, open **Super admin → Database**:
+
+* **Current database**: SQLite or PostgreSQL, where it is, and any waiting database updates, with an
+  **Apply updates** button (saving pauses for a moment while they run).
+* **Move to PostgreSQL** (shown while the app uses SQLite):
+  1. Enter the PostgreSQL server, port, database name, user and password.
+  2. **Test connection**. If the database does not exist yet, **Create the database** (when that user may).
+  3. Tick "I understand", type your own password (and authenticator code if you use one), and press
+     **Copy to PostgreSQL and switch**.
+
+  The page then:
+  * pauses saving (patients and staff see "back in a few minutes"; reading still works);
+  * applies waiting updates;
+  * keeps a snapshot of the SQLite file as a backup;
+  * copies every table and checks that the row counts and checksums match (all or nothing);
+  * writes the new `DATABASE_URL` into `backend/.env`, keeping the old file as `.env.before-postgresql`.
+
+  Then restart the app (close its windows and double-click `START-APP.bat`). Until the restart, saving stays
+  paused, so nothing is written to the old database. **Undo, keep SQLite** puts the old `.env` back and resumes
+  saving.
+* Every action asks for your password and is recorded in the platform audit log. The PostgreSQL password is only
+  written into `backend/.env`, never logged or shown again.
+* If `DATABASE_URL` is set outside `backend/.env` (Docker, a Windows service, a hosting panel), the page copies and
+  checks the data, then tells you to change it there.
+
+The same steps by hand are below.
+
 ## Moving existing data from SQLite to PostgreSQL
 
 For a clinic that started on the Windows/SQLite setup and is moving to the production server. Plan 15 minutes of

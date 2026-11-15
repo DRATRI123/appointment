@@ -27,4 +27,22 @@ export const platformService = {
   exportUrl: (format: "csv" | "xlsx") => `${apiBase}/platform/exports/organizations?format=${format}`,
   publicInfo: () => api.get<PublicPlatform>("/meta/platform"),
   systemStatus: () => api.get<SystemStatus>("/platform/system-status"),
+  database: () => api.get<DatabaseOverview>("/platform/database"),
+  databaseTest: (t: PostgresTarget) => api.post<DatabaseTestResult>("/platform/database/test", t),
+  databaseCreate: (t: PostgresTarget) => api.post<DatabaseTestResult>("/platform/database/create", t),
+  databaseUpdates: (c: DatabaseConfirm) => api.post<DatabaseOverview>("/platform/database/updates", c),
+  databaseMove: (target: PostgresTarget, c: DatabaseConfirm) => api.post<DatabaseOverview>("/platform/database/move", { target, ...c, i_understand: true }),
+  databaseUndo: (c: DatabaseConfirm) => api.post<DatabaseOverview>("/platform/database/undo", c),
 };
+
+export interface PostgresTarget { host: string; port: number; database: string; user: string; password: string }
+export interface DatabaseConfirm { confirm_password: string; mfa_code?: string }
+export interface DatabaseTestResult { ok: boolean; exists?: boolean; version?: string; message: string }
+export interface DatabaseTask {
+  kind: "move" | "updates"; state: "running" | "done" | "failed" | "undone"; started_at: string; finished_at?: string;
+  log: string[]; error?: string; switched?: boolean; rows?: number; target?: string; snapshot?: string;
+}
+export interface DatabaseOverview {
+  engine: "sqlite" | "postgresql" | string; location: string; size_bytes?: number; pending_updates: string[]; error?: string;
+  saving_paused: boolean; can_switch_automatically: boolean; env_backup_exists: boolean; task: DatabaseTask | null;
+}

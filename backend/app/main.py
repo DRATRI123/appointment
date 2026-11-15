@@ -43,6 +43,29 @@ async def lifespan(app: FastAPI):
 log = get_logger("app")
 
 
+class SavingPausedMiddleware:
+    """While the super admin moves or updates the database (Super admin → Database), refuse anything that would
+    save, with a friendly "back in a few minutes". Reading keeps working, and so do sign-in and the Database page."""
+
+    def __init__(self, app, api_prefix: str):
+        self.app, self.prefix = app, api_prefix
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["method"] not in ("GET", "HEAD", "OPTIONS"):
+            path = scope.get("path", "")
+            if path.startswith(self.prefix) and not path.startswith((f"{self.prefix}/platform/database", f"{self.prefix}/auth/")):
+                from app.ops.db_move import saving_paused
+
+                if saving_paused():
+                    from starlette.responses import JSONResponse
+
+                    response = JSONResponse({"detail": "We are upgrading the system. Please try again in a few minutes.", "code": "maintenance"},
+                                            status_code=503, headers={"Retry-After": "120"})
+                    await response(scope, receive, send)
+                    return
+        await self.app(scope, receive, send)
+
+
 def commit_in_handler(app: FastAPI) -> None:
     """Commit each sync endpoint's request session in the endpoint's own worker thread, right after it returns.
 
@@ -114,6 +137,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.rate_limit_enabled:
         app.add_middleware(SlowAPIMiddleware)
         app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SavingPausedMiddleware, api_prefix=settings.api_v1_prefix)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(MetricsMiddleware)  # outermost: times everything, including errors
     init_sentry(settings)
