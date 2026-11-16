@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
@@ -74,7 +74,7 @@ def save(section: str, payload: SectionSave, db: DB, admin: PlatformAdmin, meta:
 
 @router.post("/{section}/test", summary="Test the saved settings for real (write/read a file, ask Google, send a message)")
 @limiter.limit("10/minute")
-def test(request: Request, section: str, payload: TestRequest, db: DB, admin: PlatformAdmin, meta: Meta) -> dict[str, Any]:
+def test(request: Request, response: Response, section: str, payload: TestRequest, db: DB, admin: PlatformAdmin, meta: Meta) -> dict[str, Any]:
     from app.services import platform_tests
 
     if section not in pc.SECTIONS:

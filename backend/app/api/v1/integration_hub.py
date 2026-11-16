@@ -135,7 +135,7 @@ def enabled(key: str, body: EnabledBody, db: DB, ctx: Tenant, meta: Meta) -> dic
 
 @router.post("/{key}/test", summary="Test the connection for real")
 @limiter.limit("10/minute")
-def test(request: Request, key: str, body: TestBody, db: DB, ctx: Tenant, meta: Meta) -> dict[str, Any]:
+def test(request: Request, response: Response, key: str, body: TestBody, db: DB, ctx: Tenant, meta: Meta) -> dict[str, Any]:
     return _svc(db, ctx, meta).test(key, body.to)
 
 

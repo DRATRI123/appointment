@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 
 from app.api.deps import DB, CurrentUser, Meta, TenantContext, get_tenant_context
@@ -54,7 +54,7 @@ class PrintAttempt(BaseModel):
 
 @router.post("/me/privacy/print-attempt", summary="Record that a staff screen was printed (or printing was tried)")
 @limiter.limit("30/minute")
-def print_attempt(request: Request, payload: PrintAttempt, db: DB, ctx: Annotated[TenantContext, Depends(get_tenant_context)], meta: Meta) -> dict:
+def print_attempt(request: Request, response: Response, payload: PrintAttempt, db: DB, ctx: Annotated[TenantContext, Depends(get_tenant_context)], meta: Meta) -> dict:
     """The page path only (never query strings, which could carry search terms)."""
     from app.services.privacy_service import policy
 
