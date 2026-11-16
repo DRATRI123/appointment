@@ -5,8 +5,8 @@ Gmail or Google Workspace address, through the official Gmail API (`users.messag
 
 ## Setup
 
-1. The platform needs Google set up (see [google-integration.md](google-integration.md)) with the Gmail API enabled and
-   the `gmail.send` scope on the consent screen.
+1. The clinic's own Google Cloud app must be set up (Admin → Integrations → Google Cloud app, see
+   [google-integration.md](google-integration.md)) with the Gmail API enabled and the `gmail.send` scope on its consent screen.
 2. Admin → Integrations → **Gmail** → **Connect Google account** → sign in with the address that should send.
 3. Enter your address under "Send a test email to" and press **Test connection**: a real email is sent.
 4. "Send all clinic emails through Gmail" is on by default. Off = Gmail is used only for test emails.

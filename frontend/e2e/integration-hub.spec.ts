@@ -48,6 +48,19 @@ test("the hub lists every integration by category; Tally and Google Analytics ar
   await page.getByTestId("hub-test").click();
   await expect(page.getByTestId("status-pill").first()).toHaveText(/Active/);
 
+  // Levels: Google connections need the clinic's own Google Cloud app; the platform's key is only for sign-in.
+  await page.goto("/admin/integrations/google_contacts");
+  await expect(page.getByText("First add your clinic's own Google Cloud app")).toBeVisible();
+  await expect(page.getByTestId("hub-connect")).toBeDisabled();
+  await page.goto("/admin/integrations/google_app");
+  await expect(page.getByText("Authorized redirect URI (add it to your Google OAuth client)")).toBeVisible();
+  // A clinic may keep its private files in its own bucket; until then the platform storage is used.
+  await page.goto("/admin/integrations/own_storage");
+  await expect(page.getByTestId("clinic-storage-where")).toHaveText("Platform storage");
+  await expect(page.getByTestId("clinic-storage-switch")).toBeDisabled();
+  await page.goto("/admin/integrations");
+  await expect(page.getByTestId("hub-card-google_signin")).toHaveCount(0); // a platform setting, not on the clinic page
+
   await page.goto(`/${slug}`);
   const banner = page.getByTestId("analytics-consent");
   await expect(banner).toBeVisible();

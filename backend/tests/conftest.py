@@ -111,9 +111,11 @@ def client(db: Session) -> Generator[TestClient, None, None]:
 def _reset_platform_integrations():
     """Panel values (Super admin -> Integrations) are cached per process; each test starts from .env values only."""
     from app.core.storage import reset_storage
-    from app.services import platform_config
+    from app.services import clinic_storage, platform_config
 
     platform_config.reset_cache()
+    clinic_storage.reset_cache()
     yield
     platform_config.reset_cache()
+    clinic_storage.reset_cache()
     reset_storage()

@@ -38,3 +38,9 @@ Temporary errors retry (1, 2, 4, 8 minutes); template or number errors stop at o
 
 Meta limits business-initiated conversations per day by your number's quality tier, and charges per conversation.
 Delivery reports for Twilio WhatsApp are not received yet.
+
+## The clinic's own account sends all its messages
+
+When a clinic sets up its own WhatsApp account (Admin → Settings → OTP & verification) and switches it on,
+it sends **all** of that clinic's WhatsApp messages: sign-in codes, confirmations, reminders, cancellations, reschedules and
+payment messages. If the clinic's account fails, the platform's default provider (super admin) sends the message instead.

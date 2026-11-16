@@ -57,9 +57,9 @@ def test_panel_values_win_over_env_and_secrets_never_come_back(client, db):
     assert google["status"] == "untested"  # Connected only after a real test
     # Every part of the app now uses the panel values.
     assert pc.runtime_settings().google_client_id == CLIENT_ID
-    from app.integrations import google_calendar
+    from app.security.google import get_google_verifier  # Sign in with Google reads the same value
 
-    assert google_calendar.configured()
+    assert get_google_verifier() is not None
     # Stored encrypted; the audit log has names only.
     raw = db.scalar(select(__import__("app.models", fromlist=["SystemSetting"]).SystemSetting.value).where(
         __import__("app.models", fromlist=["SystemSetting"]).SystemSetting.key == pc.KEY))

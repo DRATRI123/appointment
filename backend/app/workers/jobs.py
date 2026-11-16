@@ -128,10 +128,13 @@ def sync_integrations() -> dict:
 @job("storage_switch")
 def storage_switch() -> dict | None:
     """Carry out a file-storage switch requested in Super admin -> Integrations (copy, verify, then switch)."""
+    from app.services import clinic_storage
     from app.services.storage_migration import run_pending
 
     with session_scope() as db:
-        return run_pending(db, commit=db.commit)
+        result = run_pending(db, commit=db.commit)
+        clinic_storage.run_pending(db, commit=db.commit)  # clinics moving files to (or from) their own bucket
+        return result
 
 
 PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "pull_calendar_busy", "sync_external",

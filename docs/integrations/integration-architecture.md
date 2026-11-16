@@ -4,6 +4,19 @@ Simple version: the appointment app stays the boss. Every outside service (Googl
 accounting, storage, analytics) is a plug-in that can be switched on and off, tested, and watched, without changing how
 bookings, payments or permissions work.
 
+## Two levels: platform (super admin) and clinic (admin)
+
+| What | Super admin (platform) | Clinic admin (each clinic) |
+|---|---|---|
+| Google | **Google sign-in only**: the key behind the "Sign in with Google" button | **Google Cloud app** (own client ID and secret) for doctors' Calendar and Meet, Gmail, Contacts, Drive. Required: the platform's key is never used for clinic connections |
+| File storage | Platform storage (this server or an S3 bucket) and the off-site backup copy | Optional **own S3 bucket** for the clinic's private files; without it the platform storage is used |
+| Email / SMS / WhatsApp | Default providers for clinics without their own account | Own SMTP / MSG91 / Twilio / Meta WhatsApp account (Settings → OTP & verification) and Gmail: they send **all** the clinic's messages; the platform's provider is the fallback |
+| Error tracking | Sentry | – |
+| n8n, HubSpot, Zoho CRM, Zoho Books, Tally, GA4 / Tag Manager, Zoom, webhooks, API keys, Shopify / website | – | Each clinic its own |
+
+Rule of thumb: the super admin sets what the platform itself needs; everything that acts for one clinic, with that
+clinic's own accounts and data, is set by that clinic.
+
 ## Where to find it
 
 | Who | Screen | What |

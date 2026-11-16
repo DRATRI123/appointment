@@ -28,6 +28,12 @@ class Connector:
 
 
 CONNECTORS: dict[str, Connector] = {c.key: c for c in (
+    Connector("google_app", "Google Cloud app", "google", "Your clinic's own Google OAuth client. Every Google connection of this clinic "
+              "(doctors' Calendar and Meet, Gmail, Contacts, Drive) uses it. The platform's Google key is only for Sign in with Google.",
+              "fields", "app.connectors.google_app:GoogleApp",
+              fields=(F("client_id", "OAuth client ID", required=True, help="Google Cloud Console → APIs & Services → Credentials → OAuth client (Web application)"),
+                      F("client_secret", "OAuth client secret", "secret", required=True)),
+              docs="docs/integrations/google-integration.md"),
     Connector("gmail", "Gmail", "email", "Send the clinic's emails (confirmations, reminders, sign-in codes) from your own Gmail or "
               "Google Workspace address.", "google", "app.connectors.google:Gmail",
               fields=(F("use_for_all", "Send all clinic emails through Gmail", "bool", help="Off: Gmail is used only for test emails"),),
@@ -47,6 +53,17 @@ CONNECTORS: dict[str, Connector] = {c.key: c for c in (
               scopes=("https://www.googleapis.com/auth/drive.file",), syncs=("document",), docs="docs/integrations/google-integration.md",
               privacy="Patient documents are copied (readable) to the connected Google account. Access in this app still needs clinical permission.",
               permission="customers:clinical_write"),
+    Connector("own_storage", "Your own S3 bucket", "storage", "Keep this clinic's private files (patient documents, payment screenshots, "
+              "refund proofs) in your own S3-compatible bucket: AWS S3, Cloudflare R2, Backblaze B2, MinIO. Without it, the platform storage is used.",
+              "fields", "app.connectors.storage:ClinicBucket",
+              fields=(F("s3_bucket", "Bucket name", required=True), F("s3_region", "Region", help="e.g. ap-south-1 · Cloudflare R2: auto"),
+                      F("s3_endpoint_url", "Endpoint URL", help="Empty for AWS. R2: https://<account id>.r2.cloudflarestorage.com"),
+                      F("s3_prefix", "Folder inside the bucket", help="Optional"),
+                      F("s3_access_key_id", "Access key ID", required=True),
+                      F("s3_secret_access_key", "Secret access key", "secret", required=True)),
+              docs="docs/integrations/s3-storage-integration.md",
+              privacy="Files are encrypted by this app before upload; the bucket holds only ciphertext. Back up the bucket yourself (versioning).",
+              permission="organization:write"),
     Connector("n8n", "n8n automation", "automation", "Send booking, patient and payment events to your n8n workflows, and let approved "
               "workflows send notifications, create follow-up tasks and read appointment details.", "fields", "app.connectors.n8n:N8n",
               fields=(F("url", "n8n Webhook URL", required=True, help="The Production URL of your n8n Webhook node (https://…)"),

@@ -106,7 +106,10 @@ def _online(c: Clinic):
     c.client.patch(f"/api/v1/services/{c.service['id']}", json={"consultation_mode": "online", "payment_mode": "pay_at_clinic"}, headers=c.h)
 
 
-def _connect_google(client, c: Clinic, fake: FakeProviders):
+def _connect_google(client, c: Clinic, fake: FakeProviders, db):
+    from tests.helpers import clinic_google_app
+
+    clinic_google_app(db, c.org["id"], client_id="client-123.apps.googleusercontent.com")
     r = client.post("/api/v1/integrations/google/connect", json={"professional_id": c.pro["id"]}, headers=c.h)
     assert r.status_code == 200, r.text
     url = urlparse(r.json()["authorization_url"])
@@ -139,7 +142,7 @@ def test_ics_output_and_downloads(client, db):
 def test_google_calendar_connect_events_meet_busy_and_sync(client, db, fake):
     c = Clinic(client, email="gcal-owner@example.com", name="GCal Clinic")
     _online(c)
-    state = _connect_google(client, c, fake)
+    state = _connect_google(client, c, fake, db)
     integ = db.scalar(select(Integration).where(Integration.provider == "google_calendar"))
     assert integ.status == "connected" and integ.external_account_id == "dr.slot@gmail.com"
     assert "rt-secret" not in (integ.credentials_encrypted or "") and integ.credentials_encrypted.startswith("enc:")
@@ -254,6 +257,9 @@ def test_zoom_meetings(client, db, fake):
 # --------------------------------------------------- manual links + access
 def test_manual_links_feeds_and_permissions(client, db, fake):
     c = Clinic(client, email="manual-owner@example.com", name="Manual Clinic")
+    from tests.helpers import clinic_google_app
+
+    clinic_google_app(db, c.org["id"])
     _online(c)
     client.put("/api/v1/notifications/settings", json={"email_enabled": True}, headers=c.h)
     bad = client.put(f"/api/v1/integrations/professionals/{c.pro['id']}/meeting", json={"provider": "manual", "manual_url": "http://insecure.test/room"}, headers=c.h)
@@ -303,7 +309,9 @@ def test_manual_links_feeds_and_permissions(client, db, fake):
 
 
 def test_google_not_configured(client, monkeypatch):
-    monkeypatch.setattr(get_settings(), "google_client_id", None)
+    # The platform's Google key is only for Sign in with Google: without the clinic's own Google app, no connection.
+    monkeypatch.setattr(get_settings(), "google_client_id", "platform-signin.apps.googleusercontent.com")
+    monkeypatch.setattr(get_settings(), "google_client_secret", "platform-secret")
     c = Clinic(client, email="nogoogle@example.com", name="No Google")
     r = client.post("/api/v1/integrations/google/connect", json={"professional_id": c.pro["id"]}, headers=c.h)
     assert r.status_code == 422 and r.json()["code"] == "google_not_configured"

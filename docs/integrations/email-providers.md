@@ -38,3 +38,9 @@ Each message has a status (pending, sent, failed, cancelled) and a log of attemp
 
 Start in the SES sandbox (only verified recipients) and request production access. The sender must be a verified
 identity in the same region. The access key needs `ses:SendEmail`.
+
+## The clinic's own account sends all its messages
+
+When a clinic sets up its own email account (Admin → Settings → OTP & verification, or Gmail in Integrations) and switches it on,
+it sends **all** of that clinic's email messages: sign-in codes, confirmations, reminders, cancellations, reschedules and
+payment messages. If the clinic's account fails, the platform's default provider (super admin) sends the message instead.

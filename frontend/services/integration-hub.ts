@@ -41,6 +41,9 @@ export interface HubDetail extends HubCard {
   logs: { action: string; status: string; error: string | null; duration_ms: number | null; at: string }[];
   problems: { id: number; entity_type: string; entity_id: number; status: string; attempts: number; error: string | null; next_attempt_at: string | null }[];
   redirect_uri?: string;
+  javascript_origin?: string;
+  google_ready?: boolean;
+  storage?: { active: boolean; migration: { status: string; direction?: string; total?: number; copied?: number; skipped?: number; bytes?: number; error?: string | null; finished_at?: string } };
   incoming_url?: string | null;
   actions?: Record<string, string>;
   events?: Record<string, string>;
@@ -75,6 +78,8 @@ export const hubService = {
   syncAll: (key: string) => api.post<HubDetail>(`${base}/${key}/sync-all`),
   tasks: (status = "open") => api.get<FollowUpTask[]>(`${base}/tasks`, { searchParams: { status } }),
   taskDone: (id: string) => api.post<{ detail: string }>(`${base}/tasks/${id}/done`),
+  storageSwitch: (on: boolean) => api.post<HubDetail>(`${base}/own_storage/switch`, { on }),
+  storageUsage: () => api.get<{ where: string; files: number; bytes: number }>(`${base}/own_storage/usage`),
   tallyUrl: (from: string, to: string, includeExported: boolean) =>
     `${apiBase}${base}/tally/export?from=${from}&to=${to}&include_exported=${includeExported}`,
 };

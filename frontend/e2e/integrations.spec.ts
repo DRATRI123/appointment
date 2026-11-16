@@ -27,7 +27,7 @@ test("manual video link reaches the customer, feeds and calendar files work, sta
   const { slug } = await seedClinic(page);
 
   await page.goto("/admin/integrations/calendar");
-  await expect(page.getByText("Google is not set up on this platform yet.")).toBeVisible();
+  await expect(page.getByText("Add your clinic's Google Cloud app first.")).toBeVisible();
   await expect(page.getByTestId("connect-google")).toBeDisabled();
   await expect(page.getByTestId("zoom-card")).toBeVisible();
   const card = page.getByTestId("professional-connections").filter({ hasText: "Dr. Video" });

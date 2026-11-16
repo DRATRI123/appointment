@@ -43,7 +43,7 @@ def _overview(db) -> dict[str, Any]:
     return {
         "sections": sections,
         "storage": {"active": active_backend(), "fallback": pc.overrides().get("storage_previous_backend"), "migration": sm.state(db)},
-        "google": {"calendar_redirect_uri": redirect_uri(), "javascript_origin": base,
+        "google": {"clinic_redirect_uri": redirect_uri(), "javascript_origin": base,
                    "sign_in_enabled": bool(runtime_settings().google_client_id)},
         "whatsapp_webhook_url": f"{base}/api/v1/webhooks/whatsapp",
         "environment": runtime_settings().app_env,

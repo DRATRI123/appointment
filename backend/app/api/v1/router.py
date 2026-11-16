@@ -52,6 +52,7 @@ api_router.include_router(refunds.router)
 api_router.include_router(reconciliation.router)
 api_router.include_router(notifications.router)
 api_router.include_router(notifications.me_router)
+api_router.include_router(integration_hub.storage_router)
 api_router.include_router(integration_hub.router)  # before /integrations/{id}
 api_router.include_router(integration_hub.automation_router)
 api_router.include_router(provider_webhooks.router)

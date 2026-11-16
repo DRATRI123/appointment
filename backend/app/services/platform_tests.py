@@ -30,14 +30,14 @@ def _s3_message(exc: Exception) -> str:
     return f"{name}: {str(exc)[:200]}"
 
 
-def test_bucket(bucket: str, prefix: str) -> tuple[bool, str]:
-    """Write, read back and delete a small object."""
+def test_bucket(bucket: str, prefix: str, client=None) -> tuple[bool, str]:
+    """Write, read back and delete a small object. ``client``: an S3 client (default: the platform's settings)."""
     from app.core.storage import S3Storage, read_raw, s3_client, write_raw
 
     if not bucket:
         return False, "Enter the bucket name."
     try:
-        backend = S3Storage(s3_client(), bucket, prefix or "")
+        backend = S3Storage(client or s3_client(), bucket, prefix or "")
         key = f"private/_connection-test/{pysecrets.token_hex(8)}.txt"
         body = f"connection test {pysecrets.token_hex(8)}".encode()
         write_raw(backend, key, body)
@@ -117,6 +117,10 @@ def run(section: str, payload: dict[str, Any]) -> tuple[bool, str]:
     if section == "google":
         from app.integrations.google_calendar import redirect_uri
 
+        if not s.google_client_secret:  # sign-in needs only the client ID; without the secret Google cannot be asked
+            if not (s.google_client_id or "").endswith(".apps.googleusercontent.com"):
+                return False, "A Google OAuth client ID ends with .apps.googleusercontent.com."
+            return True, "The client ID looks right. Add the secret to let Test ask Google, or try the Sign in with Google button."
         return test_google(s.google_client_id, s.google_client_secret, redirect_uri())
     if section == "monitoring":
         return test_sentry(s.sentry_dsn)

@@ -84,11 +84,10 @@ SECTIONS: dict[str, Section] = {s.key: s for s in (
                 F("backup_s3_bucket", "Backup bucket", required=True, help="Can be the same bucket as files, or a separate one"),
                 F("backup_s3_prefix", "Folder for backups", help="Default backups/"),
             ), docs="docs/backup-restore.md"),
-    Section("google", "Google Cloud (sign-in, Calendar, Meet, Gmail, Contacts, Drive)", "One OAuth client from Google Cloud "
-            "Console is used for every Google feature. Clinics and doctors then connect their own Google accounts.", (
+    Section("google", "Google sign-in", "Only for the \"Sign in with Google\" button on the sign-in page. Clinics connect Calendar, Meet, "
+            "Gmail, Contacts and Drive with their own Google Cloud app (Admin → Integrations → Google Cloud app).", (
                 F("google_client_id", "OAuth client ID", required=True, help="Ends with .apps.googleusercontent.com"),
-                F("google_client_secret", "OAuth client secret", "secret", required=True),
-                F("google_calendar_redirect_uri", "Redirect URL (optional)", help="Leave empty to use the address shown below"),
+                F("google_client_secret", "OAuth client secret", "secret", help="Optional for sign-in; when set, Test checks the ID with Google"),
             ), docs="docs/integrations/google-integration.md"),
     Section("email", "Default email provider", "Used for clinics that have not connected their own email account.", (
                 F("email_provider", "Provider", "choice", EMAIL_CHOICES, required=True),

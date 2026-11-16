@@ -22,6 +22,7 @@ import jwt
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
+from app.connectors.google_app import clinic_client
 from app.core.config import get_settings
 from app.core.enums import AppointmentStatus, IntegrationStatus
 from app.core.exceptions import NotFoundError, PermissionDenied, ValidationFailed
@@ -152,7 +153,7 @@ class IntegrationService:
             pros = [p for p in pros if self.actor is not None and p.user_id == self.actor.id]
         z = self.zoom_integration()
         return IntegrationsOverview(
-            google_configured=gcal.configured(), google_redirect_uri=gcal.redirect_uri(), zoom=self.to_read(z) if z and self.can_manage_all else None,
+            google_configured=clinic_client(self.db, self.org.id) is not None, google_redirect_uri=gcal.redirect_uri(), zoom=self.to_read(z) if z and self.can_manage_all else None,
             can_manage_all=self.can_manage_all,
             professionals=[ProfessionalConnections(
                 professional_id=p.public_id, professional_name=p.display_name, is_me=bool(self.actor and p.user_id == self.actor.id),
@@ -166,9 +167,10 @@ class IntegrationService:
 
     # -------------------------------------------------------------- Google OAuth
     def google_start(self, pro: Professional, return_to: str) -> str:
-        if not gcal.configured():
-            raise ValidationFailed("Google Calendar is not set up on this server (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).", code="google_not_configured")
         self.require_manage(pro)
+        client = clinic_client(self.db, self.org.id)
+        if client is None:
+            raise ValidationFailed("Add your clinic's Google Cloud app first (Integrations → Google Cloud app).", code="google_not_configured")
         integ = self.google_for(pro)
         if integ is None:
             integ = Integration(organization_id=self.org.id, provider=GOOGLE, professional_id=pro.id, name=f"Google Calendar · {pro.display_name}",
@@ -180,7 +182,7 @@ class IntegrationService:
         s = get_settings()
         state = jwt.encode({"purpose": "google_calendar", "org": self.org.public_id, "integ": integ.public_id, "user": self.actor.public_id if self.actor else None,
                             "nonce": nonce, "return_to": return_to, "exp": int(time.time()) + 600}, s.secret_key, algorithm=s.jwt_algorithm)
-        return gcal.authorization_url(state, login_hint=pro.email)
+        return gcal.authorization_url(state, client, login_hint=pro.email)
 
     @staticmethod
     def google_callback(db: Session, *, code: str | None, state: str, error: str | None) -> tuple[str, str]:
@@ -211,14 +213,18 @@ class IntegrationService:
         if error or not code:
             return return_to, "denied"
         started = time.monotonic()
+        client = clinic_client(db, org.id)
         try:
-            tokens = gcal.exchange_code(code)
+            if client is None:
+                raise IntegrationAPIError("The clinic's Google Cloud app is missing or switched off.")
+            tokens = gcal.exchange_code(code, client)
             email = gcal.account_email(tokens["access_token"])
         except IntegrationAPIError as exc:
             integ.status, integ.last_error = IntegrationStatus.ERROR, str(exc)
             _log(db, integ, "oauth.connect", "failed", error=str(exc), started=started)
             return return_to, "failed"
-        _save_creds(integ, {"refresh_token": tokens["refresh_token"], "access_token": tokens["access_token"], "expires_at": tokens["expires_at"]})
+        _save_creds(integ, {"refresh_token": tokens["refresh_token"], "access_token": tokens["access_token"], "expires_at": tokens["expires_at"],
+                            "client_id": client.client_id})
         actor = db.scalar(select(User).where(User.public_id == claims.get("user"))) if claims.get("user") else None
         integ.status, integ.is_enabled, integ.last_error = IntegrationStatus.CONNECTED, True, None
         integ.external_account_id, integ.connected_at, integ.connected_by_user_id = email, utcnow(), actor.id if actor else None
@@ -376,13 +382,20 @@ class IntegrationService:
 
 # ======================================================================== tokens
 def google_token(db: Session, integ: Integration) -> str:
+    """A valid access token for a Google connection of the clinic (refreshed with the clinic's own Google app)."""
     creds = _creds(integ)
+    client = clinic_client(db, integ.organization_id)
+    if client is None or (creds.get("client_id") and creds["client_id"] != client.client_id) or not creds.get("client_id"):
+        integ.status = IntegrationStatus.ERROR
+        integ.last_error = ("The clinic's Google Cloud app is missing or switched off (Integrations → Google Cloud app)." if client is None
+                            else "This connection was made with a different Google app. Connect it again.")
+        raise IntegrationAPIError(integ.last_error, reconnect=True)
     expires = datetime.fromisoformat(creds["expires_at"]) if creds.get("expires_at") else None
     if creds.get("access_token") and expires and expires > utcnow():
         return creds["access_token"]
     started = time.monotonic()
     try:
-        fresh = gcal.refresh(creds.get("refresh_token", ""))
+        fresh = gcal.refresh(creds.get("refresh_token", ""), client)
     except IntegrationAPIError as exc:
         _log(db, integ, "oauth.refresh", "failed", error=str(exc), started=started)
         if exc.reconnect:

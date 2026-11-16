@@ -36,9 +36,9 @@ export default function CalendarVideoPage() {
         <>
           {!o.google_configured && o.can_manage_all ? (
             <Alert variant="info"><Info /><AlertDescription>
-              <span className="font-medium">Google is not set up on this platform yet.</span> The platform administrator adds the Google OAuth client in
-              Super admin → Integrations → Google (or <span className="font-mono text-xs">GOOGLE_CLIENT_ID</span> / <span className="font-mono text-xs">GOOGLE_CLIENT_SECRET</span> in <span className="font-mono text-xs">.env</span>), with
-              <span className="break-all font-mono text-xs"> {o.google_redirect_uri}</span> as an authorized redirect URI.
+              <span className="font-medium">Add your clinic&apos;s Google Cloud app first.</span> Calendar, Meet, Gmail, Contacts and Drive use your
+              clinic&apos;s own Google app (not the platform&apos;s): <Link href="/admin/integrations/google_app" className="font-medium underline">Integrations → Google Cloud app</Link>.
+              Its redirect URI is <span className="break-all font-mono text-xs">{o.google_redirect_uri}</span>.
             </AlertDescription></Alert>
           ) : null}
           {o.can_manage_all ? <ZoomCard key={o.zoom?.id ?? "none"} zoom={o.zoom} /> : null}

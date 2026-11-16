@@ -53,7 +53,7 @@ export interface StorageMigration {
 export interface PlatformIntegrations {
   sections: PlatformSection[];
   storage: { active: "local" | "s3"; fallback: string | null; migration: StorageMigration };
-  google: { calendar_redirect_uri: string; javascript_origin: string; sign_in_enabled: boolean };
+  google: { clinic_redirect_uri: string; javascript_origin: string; sign_in_enabled: boolean };
   whatsapp_webhook_url: string;
   environment: string;
   summary: { total: number; connected: number; errors: number; not_configured: number };

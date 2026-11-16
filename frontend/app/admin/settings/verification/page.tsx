@@ -158,6 +158,8 @@ function ChannelCard({ state, fields, canWrite }: { state: ChannelState; fields:
           {state.channel === "whatsapp" ? "Codes on WhatsApp must come from the official WhatsApp Business Platform (or an authorised provider such as Twilio) using a template approved in the Authentication category. A personal WhatsApp number cannot send automated codes."
             : state.channel === "sms" ? "In India, SMS codes need a DLT-registered sender ID and template. Variables: code, then minutes."
               : "Codes by email through your own mail server or provider (SMTP)."}
+          {" "}When this account is on, it sends all of this clinic&apos;s {state.channel === "sms" ? "SMS" : state.channel === "email" ? "emails" : "WhatsApp messages"} (sign-in codes,
+          confirmations, reminders, cancellations, payment messages); the platform&apos;s account is used only if it fails.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -168,7 +170,7 @@ function ChannelCard({ state, fields, canWrite }: { state: ChannelState; fields:
               {providers.map((p) => <option key={p} value={p}>{PROVIDER_NAMES[p] ?? p}</option>)}
             </NativeSelect>
           </div>
-          <ToggleRow label="Use this account" checked={enabled} onChange={setEnabled} disabled={!canWrite} hint="Off: the platform account is used, if there is one." />
+          <ToggleRow label="Use this account" checked={enabled} onChange={setEnabled} disabled={!canWrite} hint="On: all this clinic's messages on this channel. Off: the platform account is used, if there is one." />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {fields[provider].map((f) => {

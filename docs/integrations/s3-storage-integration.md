@@ -40,3 +40,16 @@ continue (verified files are skipped). The same button moves files back to this 
 
 Off-site backup copy: Super admin → Integrations → **Off-site backup copy** (bucket and folder; uses the same keys).
 See [../backup-restore.md](../backup-restore.md). Retention of patient documents: Admin → Settings → Privacy.
+
+## A clinic's own bucket (optional, clinic admin)
+
+Admin → Integrations → **Your own S3 bucket**: the same fields (bucket, region, endpoint, folder, access key, secret) →
+Save → **Test connection** → **Move files to your bucket and switch**.
+
+* Only this clinic's **private** files move (documents, payment screenshots, refund proofs, form attachments, bank
+  statements); logos and website images stay on the platform storage.
+* Every copy is checked before the switch; nothing is deleted from the platform storage; reads fall back to the platform
+  copy. New files of this clinic then go straight to its bucket. Other clinics are not affected.
+* Files are still encrypted by this app before upload. The endpoint address may not point to internal or cloud-metadata
+  addresses. While files live in the bucket, its settings cannot be changed: move them back first.
+* **Back up the bucket yourself** (turn on versioning): platform backups do not include clinic buckets.

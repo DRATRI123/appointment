@@ -35,3 +35,9 @@ and SNS are not received yet: "sent" means the provider accepted the message.
 ## Testing
 
 Super admin → Integrations → SMS → "Send a test SMS to" → Test connection (a real SMS; DLT rules apply to the text).
+
+## The clinic's own account sends all its messages
+
+When a clinic sets up its own SMS account (Admin → Settings → OTP & verification) and switches it on,
+it sends **all** of that clinic's SMS messages: sign-in codes, confirmations, reminders, cancellations, reschedules and
+payment messages. If the clinic's account fails, the platform's default provider (super admin) sends the message instead.

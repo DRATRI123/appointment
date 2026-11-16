@@ -154,13 +154,29 @@ class EncryptingStorage:
 
     def write_raw(self, key: str, data: bytes) -> None:
         """Replace a stored file in place (key rotation / first-time encryption). Same key, same location."""
-        write_raw(self.inner.active if isinstance(self.inner, FallbackStorage) else self.inner, key, data)
+        write_raw(self._where(key), key, data)
+
+    def _where(self, key: str):
+        from app.services.clinic_storage import OrgRoutingStorage
+
+        if isinstance(self.inner, OrgRoutingStorage):
+            return self.inner.write_backend(key)
+        return self.inner.active if isinstance(self.inner, FallbackStorage) else self.inner
 
     def private_keys(self):
-        """Every stored private file key (for rotation)."""
-        inner = self.inner.active if isinstance(self.inner, FallbackStorage) else self.inner
-        for key, _size in list_keys(inner, "private/"):
-            yield key
+        """Every stored private file key (for rotation), including clinics' own buckets."""
+        from app.services.clinic_storage import OrgRoutingStorage
+
+        if isinstance(self.inner, OrgRoutingStorage):
+            backends = list(self.inner.all_backends())
+        else:
+            backends = [self.inner.active if isinstance(self.inner, FallbackStorage) else self.inner]
+        seen: set[str] = set()
+        for backend in backends:
+            for key, _size in list_keys(backend, "private/"):
+                if key not in seen:
+                    seen.add(key)
+                    yield key
 
     def delete(self, key: str) -> None:
         self.inner.delete(key)
@@ -245,7 +261,9 @@ def get_storage() -> Storage:
         previous = overrides().get("storage_previous_backend")
         if previous and previous != backend:
             inner = FallbackStorage(inner, build_backend(previous))
-        _storage, _storage_fp = EncryptingStorage(inner), fp
+        from app.services.clinic_storage import OrgRoutingStorage
+
+        _storage, _storage_fp = EncryptingStorage(OrgRoutingStorage(inner)), fp  # clinics with their own bucket get their files routed there
     return _storage
 
 
@@ -328,6 +346,7 @@ async def media_from_bucket(request):
         return Response(status_code=404)
     storage = get_storage()
     inner = getattr(storage, "inner", storage)
+    inner = getattr(inner, "default", inner)  # public images always live on the platform storage
     local = inner if isinstance(inner, LocalStorage) else None
     headers = {"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"}
     if local is not None:

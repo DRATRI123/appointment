@@ -103,6 +103,7 @@ export default function IntegrationDetailPage({ params }: { params: Promise<{ ke
             </Card>
           ) : null}
           {d.key === "tally" ? <TallyExport detail={d} /> : null}
+          {d.key === "own_storage" ? <ClinicStorageCard detail={d} onChange={set} canManage={canManage} /> : null}
           {d.syncs.length ? <SyncCard detail={d} onChange={set} canManage={canManage} /> : null}
           {d.key === "n8n" ? <N8nCard detail={d} /> : null}
           <LogsCard detail={d} />
@@ -161,8 +162,14 @@ function ConnectionCard({ detail: d, onChange, onShown, canManage }: { detail: H
       <CardContent className="space-y-3">
         {!canManage ? <p className="text-sm text-muted-foreground">You can view this integration. Changing it needs the right permission.</p> : (
           <>
+            {d.auth === "google" && d.google_ready === false ? (
+              <Alert variant="info"><AlertDescription>
+                First add your clinic&apos;s own Google Cloud app: <Link className="font-medium underline" href="/admin/integrations/google_app">Integrations → Google Cloud app</Link>.
+                The platform&apos;s Google key is only for Sign in with Google.
+              </AlertDescription></Alert>
+            ) : null}
             {oauth ? (
-              <Button className="w-full" onClick={() => connect.mutate()} disabled={connect.isPending} data-testid="hub-connect">
+              <Button className="w-full" onClick={() => connect.mutate()} disabled={connect.isPending || (d.auth === "google" && d.google_ready === false)} data-testid="hub-connect">
                 <LogIn /> {d.status === "connected" ? "Reconnect" : d.auth === "google" ? "Connect Google account" : "Connect Zoho account"}
               </Button>
             ) : null}
@@ -325,10 +332,68 @@ function SetupCard({ detail: d }: { detail: HubDetail }) {
     <Card>
       <CardHeader><CardTitle className="text-base">Setup guide</CardTitle></CardHeader>
       <CardContent className="space-y-3 text-sm">
-        {d.redirect_uri ? <CopyLine label={d.auth === "zoho" ? "Authorized redirect URI (Zoho API Console)" : "Redirect URI (already set by the platform)"} value={d.redirect_uri} /> : null}
+        {d.key === "google_app" ? (
+          <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
+            <li>Google Cloud Console → new project → enable Google Calendar API, Gmail API, People API, Google Drive API (the ones you use).</li>
+            <li>OAuth consent screen: External; add your clinic&apos;s details.</li>
+            <li>Credentials → OAuth client ID → Web application, with the redirect URI below.</li>
+            <li>Paste the client ID and secret here → Save → Test connection.</li>
+          </ol>
+        ) : null}
+        {d.redirect_uri ? <CopyLine label={d.auth === "zoho" ? "Authorized redirect URI (Zoho API Console)" : "Authorized redirect URI (add it to your Google OAuth client)"} value={d.redirect_uri} /> : null}
         {d.scopes.length ? <div><p className="text-xs font-medium">Permissions asked for</p><ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">{d.scopes.map((s) => <li key={s} className="break-all">{s}</li>)}</ul></div> : null}
         {d.docs ? <p className="text-xs text-muted-foreground">Step-by-step: <code>{d.docs}</code></p> : null}
       </CardContent>
+    </Card>
+  );
+}
+
+function bytesText(n: number) {
+  return n < 1024 ** 2 ? `${(n / 1024).toFixed(1)} KB` : n < 1024 ** 3 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${(n / 1024 ** 3).toFixed(2)} GB`;
+}
+
+function ClinicStorageCard({ detail: d, onChange, canManage }: { detail: HubDetail; onChange: (d: HubDetail) => void; canManage: boolean }) {
+  const [confirm, setConfirm] = useState<boolean | null>(null);
+  const [usage, setUsage] = useState<{ where: string; files: number; bytes: number } | null>(null);
+  const st = d.storage ?? { active: false, migration: { status: "idle" } };
+  const m = st.migration;
+  const running = m.status === "queued" || m.status === "running";
+  useQuery({ queryKey: ["hub", "detail", d.key, "poll"], queryFn: async () => { const x = await hubService.detail(d.key); onChange(x); return x; }, enabled: running, refetchInterval: 3000 });
+  const fail = (e: unknown) => toast.error(errorMessage(e));
+  const go = useMutation({ mutationFn: (on: boolean) => hubService.storageSwitch(on), onSuccess: (r) => { onChange(r); setConfirm(null); toast.success("Moving files. You can leave this page."); }, onError: fail });
+  const count = useMutation({ mutationFn: hubService.storageUsage, onSuccess: setUsage, onError: fail });
+  const pct = m.total ? Math.round((((m.copied ?? 0) + (m.skipped ?? 0)) / m.total) * 100) : 0;
+  return (
+    <Card data-testid="clinic-storage">
+      <CardHeader><CardTitle className="text-base">Where this clinic&apos;s files are kept</CardTitle>
+        <CardDescription>Patient documents, payment screenshots, refund proofs and form attachments. Logos and website images stay on the platform.</CardDescription></CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm">Now: <Badge variant={st.active ? "success" : "secondary"} data-testid="clinic-storage-where">{st.active ? "Your own bucket" : "Platform storage"}</Badge>{" "}
+          <Button size="sm" variant="ghost" onClick={() => count.mutate()} disabled={count.isPending}>{count.isPending ? "Counting…" : "Show usage"}</Button></p>
+        {usage ? <p className="text-sm text-muted-foreground">{usage.files} files ({bytesText(usage.bytes)}) in the {usage.where}.</p> : null}
+        {running ? (
+          <div className="space-y-1" role="status" aria-live="polite">
+            <p className="text-sm">Moving files {m.direction === "to_clinic" ? "to your bucket" : "back to the platform"}: {(m.copied ?? 0) + (m.skipped ?? 0)} of {m.total || "…"}</p>
+            <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} /></div>
+          </div>
+        ) : null}
+        {m.status === "failed" ? <Alert variant="destructive"><AlertDescription>The move stopped and nothing was switched: {m.error}. Press the button again to continue.</AlertDescription></Alert> : null}
+        {canManage ? (
+          <Button size="sm" disabled={running || d.status !== "connected"} onClick={() => setConfirm(!st.active)} data-testid="clinic-storage-switch">
+            {st.active ? "Move files back to the platform storage" : "Move files to your bucket and switch"}
+          </Button>
+        ) : null}
+        {d.status !== "connected" ? <p className="text-xs text-muted-foreground">Save the bucket settings and pass Test connection first.</p> : null}
+        <p className="text-xs text-muted-foreground">Files are encrypted by this app before upload. Turn on versioning in your bucket: platform backups do not include it.</p>
+      </CardContent>
+      <Dialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{confirm ? "Move this clinic's files to your bucket?" : "Move the files back to the platform?"}</DialogTitle>
+            <DialogDescription>Every file is copied and checked. The switch happens only after all copies match, and nothing is deleted. Bookings keep working.</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>Cancel</Button>
+            <Button onClick={() => confirm !== null && go.mutate(confirm)} disabled={go.isPending} data-testid="clinic-storage-confirm">Start moving</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

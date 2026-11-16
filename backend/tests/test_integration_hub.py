@@ -163,12 +163,25 @@ def test_zoho_crm_oauth_connects_once_and_records_the_data_centre(client, db, cl
     assert again.headers["location"].endswith("connected=invalid_state")  # a state works once
 
 
+_clinic_app_done: dict[str, bool] = {}
+
+
 def _connect_google(client, clinic, fake, key, scope):
     fake.routes.update({
         "POST oauth2.googleapis.com/token": httpx.Response(200, json={"access_token": "gat", "refresh_token": "grt", "expires_in": 3600, "scope": f"openid email {scope}"}),
         "GET openidconnect.googleapis.com/v1/userinfo": httpx.Response(200, json={"email": "clinic@gmail.example"}),
     })
+    if not _clinic_app_done.get(clinic.org["id"]):
+        _clinic_app_done[clinic.org["id"]] = True
+        r = clinic.client.post(f"/api/v1/integrations/hub/{key}/connect", json={"return_to": "/x"}, headers=clinic.h)
+        assert r.status_code == 422 and r.json()["code"] == "google_app_missing"  # the platform's sign-in key is never used for clinic connections
+        clinic.put("/integrations/hub/google_app", {"values": {"client_id": "clinic-own.apps.googleusercontent.com"}, "secrets": {"client_secret": "clinic-own-secret"}})
+        fake.routes["POST oauth2.googleapis.com/token"] = httpx.Response(400, json={"error": "invalid_grant"})
+        assert clinic.post("/integrations/hub/google_app/test", {}, expect=200)["status"] == "connected"
+        fake.routes["POST oauth2.googleapis.com/token"] = httpx.Response(200, json={"access_token": "gat", "refresh_token": "grt", "expires_in": 3600,
+                                                                                     "scope": f"openid email {scope}"})
     url = clinic.post(f"/integrations/hub/{key}/connect", {"return_to": f"/admin/integrations/{key}"}, expect=200)["url"]
+    assert parse_qs(urlparse(url).query)["client_id"] == ["clinic-own.apps.googleusercontent.com"]
     q = parse_qs(urlparse(url).query)
     assert scope in q["scope"][0] and q["access_type"] == ["offline"]
     cb = client.get("/api/v1/integrations/google/callback", params={"code": "g1", "state": q["state"][0]}, follow_redirects=False)
@@ -432,3 +445,97 @@ def test_google_sign_in_never_relinks_an_account_to_another_google_identity(clie
     finally:
         set_google_verifier(None)
     assert client.get("/api/v1/auth/google/config").json() == {"client_id": get_settings().google_client_id or None}
+
+
+# ------------------------------------------------------------------ levels: clinic bucket and clinic accounts
+def test_a_clinic_can_keep_its_private_files_in_its_own_bucket(client, db, clinic, tmp_path, monkeypatch):
+    from app.core import storage as storage_module
+    from app.services import clinic_storage, platform_tests
+
+    platform_dir, clinic_dir = tmp_path / "platform", tmp_path / "clinic-bucket"
+    monkeypatch.setattr(storage_module, "build_backend", lambda backend: storage_module.LocalStorage(platform_dir))
+    monkeypatch.setattr(clinic_storage, "backend_for", lambda cfg, secrets: storage_module.LocalStorage(clinic_dir))
+    monkeypatch.setattr(clinic_storage, "client_for", lambda cfg, secrets: None)
+    monkeypatch.setattr(platform_tests, "test_bucket", lambda bucket, prefix, client=None: (True, "Connected: a test file was written, read back and deleted."))
+    storage_module.reset_storage()
+    cust = clinic.post("/customers", {"full_name": "Bucket Patient", "mobile": "9845678901"})
+
+    def upload(name):
+        r = client.post(f"/api/v1/customers/{cust['id']}/documents", files={"file": (name, b"%PDF-1.4 " + name.encode(), "application/pdf")},
+                        data={"title": name, "document_type": "report"}, headers=clinic.h)
+        assert r.status_code == 201, r.text
+        return db.scalar(select(__import__("app.models", fromlist=["CustomerDocument"]).CustomerDocument.storage_path)
+                         .where(__import__("app.models", fromlist=["CustomerDocument"]).CustomerDocument.public_id == r.json()["id"]))
+
+    before = upload("before.pdf")
+    assert (platform_dir / before).exists()
+    clinic.put("/integrations/hub/own_storage", {"values": {"s3_bucket": "clinic-files", "s3_access_key_id": "AKIACLINIC"},
+                                                 "secrets": {"s3_secret_access_key": "clinic-secret-1"}})
+    assert clinic.post("/integrations/hub/own_storage/test", {}, expect=200)["status"] == "connected"
+    r = clinic.post("/integrations/hub/own_storage/switch", {"on": True}, expect=200)
+    assert r["storage"]["migration"]["status"] == "queued" and r["storage"]["active"] is False
+    assert clinic_storage.run_pending(db) == 1
+    detail = clinic.get("/integrations/hub/own_storage")
+    assert detail["storage"]["active"] is True and detail["storage"]["migration"]["copied"] == 1
+    assert (clinic_dir / before).read_bytes() == (platform_dir / before).read_bytes()  # the same encrypted bytes
+
+    after = upload("after.pdf")
+    assert (clinic_dir / after).exists() and not (platform_dir / after).exists()  # new files go to the clinic's bucket
+    assert storage_module.get_storage().open(after).read() == b"%PDF-1.4 after.pdf"
+    other = Clinic(client, email="other-bucket@example.com", name="Other Bucket Clinic")
+    other_cust = other.post("/customers", {"full_name": "Other Patient", "mobile": "9845678902"})
+    r = client.post(f"/api/v1/customers/{other_cust['id']}/documents", files={"file": ("o.pdf", b"%PDF-1.4 o", "application/pdf")},
+                    data={"title": "o", "document_type": "report"}, headers=other.h)
+    assert r.status_code == 201 and not any(clinic_dir.rglob(f"*{other.org['id']}*"))  # other clinics stay on the platform
+    usage = clinic.get("/integrations/hub/own_storage/usage")
+    assert usage == {"where": "clinic bucket", "files": 2, "bytes": usage["bytes"]}
+
+    # The bucket cannot be changed while files live in it; moving back copies them to the platform first.
+    r = client.put("/api/v1/integrations/hub/own_storage", json={"values": {"s3_bucket": "another"}}, headers=clinic.h)
+    assert r.status_code == 422 and r.json()["code"] == "storage_in_use"
+    clinic.post("/integrations/hub/own_storage/switch", {"on": False}, expect=200)
+    clinic_storage.run_pending(db)
+    assert clinic.get("/integrations/hub/own_storage")["storage"]["active"] is False and (platform_dir / after).exists()
+
+
+def test_the_clinic_bucket_address_cannot_point_inside_the_server_network(client, clinic, monkeypatch):
+    monkeypatch.setattr(get_settings(), "webhook_allow_private_targets", False)
+    for url in ("http://169.254.169.254/latest", "https://127.0.0.1:9000", "ftp://minio"):
+        r = client.put("/api/v1/integrations/hub/own_storage", json={"values": {"s3_bucket": "b", "s3_access_key_id": "k", "s3_endpoint_url": url}},
+                       headers=clinic.h)
+        assert r.status_code == 422 and r.json()["code"] == "invalid_endpoint", url
+
+
+def test_the_clinics_own_accounts_send_all_its_messages_with_the_platform_as_fallback(client, db, clinic, monkeypatch):
+    from app.notifications.providers import DeliveryResult, console_provider
+    from app.services.notification_service import dispatch_due
+    from app.services.otp import channels
+
+    sent = []
+
+    class ClinicSMS:
+        name, channel, ok = "clinic-sms", "sms", True
+
+        def configured(self):
+            return True
+
+        def send(self, message):
+            sent.append(message.to)
+            return DeliveryResult(self.name, self.ok, error=None if self.ok else "down", retryable=False)
+
+    stub = ClinicSMS()
+    monkeypatch.setattr(channels, "_build", lambda channel, provider, values: stub)
+    clinic.put(f"/organizations/{clinic.org['id']}/settings/notification", {"values": {"sms_enabled": True}})
+    r = client.put("/api/v1/verification/providers/sms", json={"provider": "twilio", "enabled": True,
+                                                               "settings": {"account_sid": "AC" + "a" * 32, "from_number": "+15005550006"},
+                                                               "secrets": {"auth_token": "tw-token"}}, headers=clinic.h)
+    assert r.status_code == 200, r.text
+    clinic.staff_book(ist(clinic.monday, 9), customer={"full_name": "Own Account Guest", "mobile": "9876501234"})
+    dispatch_due(db, commit=False)
+    assert "+919876501234" in sent  # the confirmation went through the clinic's own SMS account
+
+    stub.ok = False  # the clinic's account fails: the platform's provider sends it instead
+    before = len(console_provider("sms").outbox)
+    clinic.staff_book(ist(clinic.monday, 10), customer={"full_name": "Fallback Guest", "mobile": "9876501235"})
+    dispatch_due(db, commit=False)
+    assert any(m.to == "+919876501235" for m in console_provider("sms").outbox[before:])

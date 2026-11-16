@@ -1,21 +1,31 @@
 # Google: Calendar, Meet, Sign-in, Contacts, Drive (and Gmail)
 
-One Google Cloud OAuth client (set by the platform administrator) is used for everything. Each doctor or clinic then
-connects its **own** Google account; nobody shares one account.
+Two separate Google apps, on purpose:
 
-## 1. Platform setup (once, super admin)
+* **Platform (super admin)**: one OAuth client used **only** for the "Sign in with Google" button.
+* **Clinic (admin)**: each clinic creates its **own** Google Cloud app. All of that clinic's Google connections (each
+  doctor's Calendar and Meet, Gmail, Contacts, Drive) use it. The platform's key is never used for them.
 
-1. Google Cloud Console → create a project → **APIs & Services → Enable APIs**: Google Calendar API, Gmail API, People
-   API, Google Drive API (only the ones you will offer).
-2. **OAuth consent screen**: External, app name, support email, your domain. Add the scopes you will use (below).
-3. **Credentials → Create credentials → OAuth client ID → Web application**:
-   * Authorized JavaScript origin: your site, e.g. `https://book.yourclinic.com` (for Sign in with Google).
-   * Authorized redirect URI: `https://book.yourclinic.com/api/v1/integrations/google/callback` (shown in the panel).
-4. Super admin → Integrations → **Google**: paste the client ID and secret → Save → **Test connection** (Google is asked
-   to check the ID and secret; nothing is created). Or put `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `.env`.
+## 1. Sign in with Google (once, super admin)
 
-Google review: Gmail send, Contacts and Calendar are "sensitive" scopes. Until Google verifies your app, only test users
-you add on the consent screen can connect (max 100), and they see an "unverified app" warning. Plan the verification.
+Google Cloud Console → Credentials → OAuth client ID → Web application, with Authorized JavaScript origin = your site
+(e.g. `https://book.yourclinic.com`). Super admin → Integrations → **Google sign-in**: client ID (the secret is optional;
+with it, Test asks Google to check the ID) → Save → Test. Or `GOOGLE_CLIENT_ID` in `.env`.
+
+## 1b. The clinic's Google Cloud app (each clinic, once)
+
+1. Google Cloud Console → new project → **Enable APIs**: Google Calendar API, Gmail API, People API, Google Drive API
+   (only the ones the clinic uses).
+2. **OAuth consent screen**: External, the clinic's name, support email and domain; add the scopes below.
+3. **Credentials → OAuth client ID → Web application**, Authorized redirect URI
+   `https://<your site>/api/v1/integrations/google/callback` (shown on the page).
+4. Admin → Integrations → **Google Cloud app**: client ID and secret → Save → **Test connection**.
+
+Then connect Calendar (per doctor), Gmail, Contacts or Drive. Tokens remember which app issued them: if the clinic
+replaces its Google app, its Google connections must be connected again (the cards say so).
+
+Google review: Gmail send, Contacts and Calendar are "sensitive" scopes. Until Google verifies the clinic's app, only test
+users added on its consent screen can connect (max 100), and they see an "unverified app" warning.
 
 ## 2. Google Calendar + Meet (each doctor)
 
@@ -35,7 +45,7 @@ Scopes: `openid`, `email`, `calendar.events`, `calendar.calendarlist.readonly`.
 
 ## 3. Sign in with Google
 
-Appears on the sign-in page as soon as the platform has a Google client ID. The ID token is checked on the server
+Appears on the sign-in page as soon as the platform has a Google sign-in client ID (super admin). The ID token is checked on the server
 (Google's keys, audience = your client ID, issuer, verified email). Accounts are linked by verified email; an account
 already linked to a **different** Google account is refused (no silent takeover). Two-step sign-in still applies.
 
@@ -63,7 +73,8 @@ See [gmail-integration.md](gmail-integration.md).
 
 | Message | Fix |
 |---|---|
-| "Google is not set up on this platform yet" | Super admin → Integrations → Google |
+| "Add your clinic's Google Cloud app first" | Admin → Integrations → Google Cloud app (client ID, secret, Test) |
+| "This connection was made with a different Google app" | The clinic changed its Google app: connect again |
 | `redirect_uri_mismatch` on Google's page | Add the exact redirect URI shown in the panel to the OAuth client |
 | "Access to … was not granted" | Connect again and tick the permission box Google shows |
 | "Google did not return a refresh token" | Remove the app at myaccount.google.com/permissions, connect again |

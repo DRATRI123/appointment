@@ -528,14 +528,14 @@ def deliver(db: Session, n: Notification) -> bool:
                               reference=n.public_id)
     try:
         provider = get_provider(n.channel)
-        if n.channel == "email" and org is not None:
-            from app.services.connector_service import gmail_sender
+        if org is not None:
+            from app.services.otp.channels import clinic_provider
 
-            gmail = gmail_sender(db, org.id)  # the clinic connected Gmail for all its emails
-            if gmail is not None:
+            own = clinic_provider(db, org.id, n.channel)  # the clinic's own Gmail / SMTP / SMS / WhatsApp account
+            if own is not None:
                 from app.notifications.providers import FallbackProvider
 
-                provider = FallbackProvider(gmail, provider)  # Gmail limits or an expired token: the platform sends it
+                provider = FallbackProvider(own, provider)  # its account fails or hits a limit: the platform's provider sends it
         result = provider.send(message)
     except Exception as exc:  # noqa: BLE001 - a broken adapter must not stop the worker
         from app.notifications.providers import DeliveryResult

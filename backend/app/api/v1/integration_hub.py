@@ -21,6 +21,7 @@ from app.services.platform_config import runtime_settings
 
 router = APIRouter(prefix="/integrations/hub", tags=["integration-hub"])
 automation_router = APIRouter(prefix="/automation", tags=["integration-hub"])
+storage_router = APIRouter(prefix="/integrations/hub", tags=["integration-hub"])  # registered before /{key}
 ReadHub = Annotated[TenantContext, Depends(require_permission("integrations:read"))]
 Tenant = Annotated[TenantContext, Depends(get_tenant_context)]
 
@@ -177,3 +178,26 @@ def n8n_action(request: Request, integration_id: str, db: DB, body: Annotated[by
         return JSONResponse({"code": "too_large", "detail": "Body larger than 64 KB."}, status_code=413)
     status, payload = handle(db, integration_id, request.headers, body)
     return JSONResponse(payload, status_code=status, headers={"Cache-Control": "no-store"})
+
+
+class StorageSwitchBody(BaseModel):
+    on: bool = Field(description="true: move this clinic's private files to its own bucket; false: move them back to the platform storage")
+
+
+@storage_router.post("/own_storage/switch", summary="Move this clinic's private files to its own bucket (or back), checking every copy",
+             dependencies=[recent_auth("integrations")])
+def own_storage_switch(body: StorageSwitchBody, db: DB, ctx: Annotated[TenantContext, Depends(require_permission("organization:write"))], meta: Meta) -> dict[str, Any]:
+    from app.services.audit_service import record_audit
+    from app.services.clinic_storage import request_switch
+
+    st = request_switch(db, ctx.organization, on=body.on)
+    record_audit(db, action="integration.storage_switch_requested", actor=ctx.user, organization_id=ctx.organization.id, entity_type="integration",
+                 entity_id="own_storage", after={"direction": st["direction"]}, meta=meta)
+    return _svc(db, ctx, meta).detail("own_storage")
+
+
+@storage_router.get("/own_storage/usage", summary="Number and size of this clinic's private files where they are kept now")
+def own_storage_usage(db: DB, ctx: Annotated[TenantContext, Depends(require_permission("organization:write"))]) -> dict[str, Any]:
+    from app.services.clinic_storage import usage
+
+    return usage(db, ctx.organization)

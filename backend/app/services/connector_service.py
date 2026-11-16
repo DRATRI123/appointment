@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 
 from app.connectors import registry
 from app.connectors.base import Ctx, zoho_accounts, zoho_token_request
+from app.connectors.google_app import clinic_client
 from app.connectors.sync import adapter_for, enqueue_all
 from app.core.enums import IntegrationStatus
 from app.core.exceptions import NotFoundError, PermissionDenied, ValidationFailed
@@ -153,11 +154,10 @@ class ConnectorService:
             "recent_errors": [{"integration": p, "action": a, "error": (e or "")[:300], "at": at} for a, e, at, p in recent_errors],
             "recent_sync": [{"integration": p, "at": at} for p, at in recent_sync],
             "redirects": {"google": gcal_redirect_uri(), "zoho": zoho_redirect_uri()},
-            "google_ready": bool(runtime_settings().google_client_id and runtime_settings().google_client_secret),
+            "google_ready": clinic_client(self.db, self.org.id) is not None,  # the clinic's own Google Cloud app
         }
 
     def _builtin_cards(self) -> list[dict[str, Any]]:
-        from app.core.storage import active_backend
         from app.models import APIKey, MessagingProviderConfig, WebhookEndpoint
         from app.services.organization_service import OrganizationService
 
@@ -190,8 +190,6 @@ class ConnectorService:
               f"{cal_ok} doctor{'s' if cal_ok != 1 else ''} connected" if cal_ok else None),
             b("google_meet", "Google Meet", "google", "A Meet link is created with the calendar event for online consultations and sent by email and WhatsApp.",
               "connected" if cal_ok else "not_configured", "/admin/integrations/calendar"),
-            b("google_signin", "Sign in with Google", "google", "Patients and staff can sign in with their Google account (set up by the platform).",
-              "active" if runtime_settings().google_client_id else "not_configured", None),
             b("zoom", "Zoom", "video", "Zoom meetings for online consultations (one Zoom account for the clinic).",
               "connected" if zoom and zoom.status == IntegrationStatus.CONNECTED and zoom.is_enabled else "error" if zoom and zoom.status == IntegrationStatus.ERROR else "not_configured",
               "/admin/integrations/calendar", zoom.external_account_id if zoom else None),
@@ -213,8 +211,6 @@ class ConnectorService:
             b("webhooks", "Webhooks", "webhooks", "Signed event deliveries to your own systems, with retries, logs and safe redelivery.",
               "error" if any(h.disabled_at for h in hooks) else "active" if active_hooks else "not_configured", "/admin/developers",
               f"{len(active_hooks)} endpoint{'s' if len(active_hooks) != 1 else ''}" if active_hooks else None),
-            {**b("platform_storage", "File storage", "storage", "Where uploaded files are kept. Set by the platform administrator.", "info", None,
-                 "S3-compatible bucket" if active_backend() == "s3" else "This server's disk")},
         ]
         return cards
 
@@ -226,6 +222,9 @@ class ConnectorService:
         out["logs"] = [{"action": r.action, "status": r.status, "error": r.error, "duration_ms": r.duration_ms, "at": r.created_at} for r in self.db.scalars(
             select(IntegrationLog).where(IntegrationLog.integration_id == row.id).order_by(IntegrationLog.id.desc()).limit(50)).all()] if row else []
         out["problems"] = self.problems(row) if row else []
+        if key == "own_storage" and row is not None:
+            cfg = row.config or {}
+            out["storage"] = {"active": bool(cfg.get("_active")), "migration": cfg.get("_migration") or {"status": "idle"}}
         if key == "n8n":
             out["incoming_url"] = f"{runtime_settings().frontend_url.rstrip('/')}/api/v1/automation/n8n/{row.public_id}" if row else None
             from app.connectors.n8n import ACTIONS
@@ -235,10 +234,12 @@ class ConnectorService:
             out["events"] = {k: v for k, v in EVENTS.items() if k != "ping"}
         if conn.auth == "zoho":
             out["redirect_uri"] = zoho_redirect_uri()
-        if conn.auth == "google":
+        if conn.auth == "google" or key == "google_app":
             from app.integrations.google_calendar import redirect_uri
 
             out["redirect_uri"] = redirect_uri()
+            out["javascript_origin"] = runtime_settings().frontend_url.rstrip("/")
+            out["google_ready"] = clinic_client(self.db, self.org.id) is not None
         return out
 
     def problems(self, row: Integration) -> list[dict[str, Any]]:
@@ -290,6 +291,9 @@ class ConnectorService:
         self._validate(conn, cfg)
         cfg["_hints"] = hints
         settings_changed = {k: v for k, v in cfg.items() if not k.startswith("_")} != before or changed_secret
+        if conn.key == "own_storage" and settings_changed and cfg.get("_active"):
+            raise ValidationFailed("Files are being kept in this bucket. Move them back to the platform storage first, then change the bucket.",
+                                   code="storage_in_use")
         if settings_changed and conn.auth == "fields":
             cfg.pop("_last_test", None)  # test again with the new settings
             row.status = IntegrationStatus.DISCONNECTED
@@ -310,6 +314,12 @@ class ConnectorService:
         return {**self.detail(key), "shown_once": shown}
 
     def _validate(self, conn: registry.Connector, cfg: dict[str, Any]) -> None:
+        if conn.key == "own_storage" and cfg.get("s3_endpoint_url"):
+            from app.webhooks.security import check_url
+
+            # The server connects to this address: refuse internal and cloud-metadata addresses (same rule as webhooks).
+            if reason := check_url(cfg["s3_endpoint_url"]):
+                raise ValidationFailed(f"Endpoint URL: {reason.replace('Webhook URLs', 'It')}", code="invalid_endpoint")
         if conn.key == "n8n" and cfg.get("url"):
             from app.webhooks.security import check_url
 
@@ -460,11 +470,10 @@ class ConnectorService:
         state = jwt.encode({"purpose": f"{conn.auth}_connector", "org": self.org.public_id, "integ": row.public_id, "user": self.actor.public_id if self.actor else None,
                             "nonce": nonce, "return_to": return_to, "exp": int(time.time()) + 600}, s.secret_key, algorithm=s.jwt_algorithm)
         if conn.auth == "google":
+            from app.connectors.google_app import require_client
             from app.integrations import google_calendar as gcal
 
-            if not gcal.configured():
-                raise ValidationFailed("Google is not set up on this platform yet (Super admin → Integrations → Google).", code="google_not_configured")
-            return gcal.authorization_url(state, scopes=["openid", "email", *conn.scopes])
+            return gcal.authorization_url(state, require_client(self.db, self.org.id), scopes=["openid", "email", *conn.scopes])
         if conn.auth == "zoho":
             values = self._values(conn, row)
             if not values.get("client_id") or not Ctx(self.db, self.org, row).secrets().get("client_secret"):
@@ -519,14 +528,20 @@ def google_connector_callback(db, *, code: str | None, state: str, error: str | 
     if error or not code:
         return return_to, "denied"
     conn = registry.get(row.provider)
+    from app.connectors.google_app import clinic_client
+
+    client = clinic_client(db, org.id)
     try:
-        tokens = gcal.exchange_code(code, required_scope=conn.scopes[0] if conn and conn.scopes else None)
+        if client is None:
+            raise IntegrationAPIError("The clinic's Google Cloud app is missing or switched off.")
+        tokens = gcal.exchange_code(code, client, required_scope=conn.scopes[0] if conn and conn.scopes else None)
         email = gcal.account_email(tokens["access_token"])
     except IntegrationAPIError as exc:
         row.status, row.last_error = IntegrationStatus.ERROR, str(exc)[:500]
         db.add(IntegrationLog(integration_id=row.id, direction="outbound", action="oauth.connect", status="failed", error=str(exc)[:1000], created_at=utcnow()))
         return return_to, "failed"
-    Ctx(db, org, row).save_secrets({"refresh_token": tokens["refresh_token"], "access_token": tokens["access_token"], "expires_at": tokens["expires_at"]})
+    Ctx(db, org, row).save_secrets({"refresh_token": tokens["refresh_token"], "access_token": tokens["access_token"], "expires_at": tokens["expires_at"],
+                                    "client_id": client.client_id})
     _finish(db, claims, org, row, email)
     return return_to, "connected"
 

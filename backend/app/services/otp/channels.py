@@ -142,3 +142,26 @@ def sender_for(db: Session, organization_id: int, channel: str) -> Sender | None
     if channel == "whatsapp" and platform.name != "console" and not s.otp_whatsapp_template:
         return None  # WhatsApp only delivers business-initiated codes through an approved template
     return Sender(platform, "platform", options)
+
+
+def clinic_provider(db: Session, organization_id: int, channel: str) -> Provider | None:
+    """The clinic's own account for a channel, for all of its messages (not only sign-in codes): Gmail first for
+    email when the clinic connected it, then the account in Settings → OTP & verification. None = use the platform's."""
+    if channel == "email":
+        from app.services.connector_service import gmail_sender
+
+        gmail = gmail_sender(db, organization_id)
+        if gmail is not None:
+            return gmail
+    if channel not in CHANNELS:
+        return None
+    row = clinic_config(db, organization_id, channel)
+    if row is None or not row.enabled:
+        return None
+    secrets = secrets_of(row)
+    # The sign-in template fields are not needed for other messages: each message brings its own template id.
+    needed = [f.label for f in PROVIDERS[channel][row.provider] if f.required and f.key not in ("template_id", "template_name", "content_sid")
+              and not (secrets if f.secret else row.settings).get(f.key)]
+    if needed:
+        return None
+    return _build(channel, row.provider, {**row.settings, **secrets})

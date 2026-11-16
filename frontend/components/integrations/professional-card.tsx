@@ -80,7 +80,7 @@ export function ProfessionalCard({ row, googleConfigured, zoomConnected, returnT
             <>
               <p className="text-sm text-muted-foreground">Confirmed appointments appear in this calendar, online ones get a Google Meet link, and busy time in it blocks booking slots.</p>
               <Button onClick={() => connect.mutate()} disabled={!googleConfigured || connect.isPending} data-testid="connect-google">Connect Google Calendar</Button>
-              {!googleConfigured ? <p className="text-xs text-muted-foreground">Available once the server administrator sets up Google Calendar access.</p> : null}
+              {!googleConfigured ? <p className="text-xs text-muted-foreground">Available once the clinic adds its Google Cloud app (Integrations → Google Cloud app).</p> : null}
             </>
           ) : (
             <>

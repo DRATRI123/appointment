@@ -22,8 +22,8 @@ import { formatDateTime } from "@/lib/format";
 import { platformIntegrations, type PlatformIntegrations, type PlatformSection, type StorageUsage } from "@/services/platform-integrations";
 
 const GROUPS: { title: string; keys: string[] }[] = [
-  { title: "Cloud storage", keys: ["storage", "backup"] },
-  { title: "Google services", keys: ["google"] },
+  { title: "Platform storage (clinics without their own bucket use it)", keys: ["storage", "backup"] },
+  { title: "Sign in with Google", keys: ["google"] },
   { title: "Messages (platform defaults)", keys: ["email", "sms", "whatsapp"] },
   { title: "Monitoring", keys: ["monitoring"] },
 ];
@@ -172,9 +172,12 @@ function SectionCard({ section, data }: { section: PlatformSection; data: Platfo
         <CardContent id={`body-${section.key}`} className="space-y-5 border-t pt-5">
           {section.key === "storage" ? <StorageControls data={data} section={section} /> : null}
           {section.key === "google" ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <CopyField label="Authorized redirect URI (add to Google Cloud Console)" value={data.google.calendar_redirect_uri} />
-              <CopyField label="Authorized JavaScript origin (for Sign in with Google)" value={data.google.javascript_origin} />
+            <div className="space-y-2">
+              <CopyField label="Authorized JavaScript origin (add to the OAuth client in Google Cloud Console)" value={data.google.javascript_origin} />
+              <p className="text-xs text-muted-foreground">
+                This key is used only for the Sign in with Google button. Each clinic connects its own Calendar, Meet, Gmail, Contacts and Drive with
+                its own Google Cloud app (Admin → Integrations → Google Cloud app).
+              </p>
             </div>
           ) : null}
           {section.key === "whatsapp" ? <><CopyField label="Webhook callback URL (Meta App → WhatsApp → Configuration)" value={data.whatsapp_webhook_url} /><WhatsAppTemplates /></> : null}

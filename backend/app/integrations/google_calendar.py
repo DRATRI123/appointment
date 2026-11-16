@@ -1,4 +1,5 @@
-"""Google Calendar API (OAuth 2.0 web flow, events, Meet links).
+"""Google Calendar API (OAuth 2.0 web flow, events, Meet links). Uses the clinic's own Google Cloud app
+(app/connectors/google_app.py); the platform's Google key is only for Sign in with Google.
 
 Scopes: ``openid email`` (to show which account is connected) and ``calendar.events`` (create/update/delete
 our events and read busy time). Tokens are stored encrypted on the Integration row.
@@ -25,34 +26,28 @@ SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.events",
 PRIVATE_KEY = "appointment_platform_id"  # extendedProperties.private marker on events we create
 
 
-def configured() -> bool:
-    s = get_settings()
-    return bool(s.google_client_id and s.google_client_secret)
-
-
 def redirect_uri() -> str:
     s = get_settings()
     return s.google_calendar_redirect_uri or f"{s.frontend_url.rstrip('/')}/api/v1/integrations/google/callback"
 
 
-def authorization_url(state: str, login_hint: str | None = None, scopes: list[str] | None = None) -> str:
-    s = get_settings()
-    params = {"client_id": s.google_client_id, "redirect_uri": redirect_uri(), "response_type": "code", "scope": " ".join(scopes or SCOPES),
+def authorization_url(state: str, client, login_hint: str | None = None, scopes: list[str] | None = None) -> str:
+    """``client``: the clinic's own Google app (app.connectors.google_app.GoogleClient)."""
+    params = {"client_id": client.client_id, "redirect_uri": redirect_uri(), "response_type": "code", "scope": " ".join(scopes or SCOPES),
               "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true", "state": state}
     if login_hint:
         params["login_hint"] = login_hint
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
-def _token_request(data: dict[str, str]) -> dict[str, Any]:
-    s = get_settings()
-    body = check(request("POST", TOKEN_URL, data={**data, "client_id": s.google_client_id or "", "client_secret": s.google_client_secret or ""}), "Google token")
+def _token_request(data: dict[str, str], client) -> dict[str, Any]:
+    body = check(request("POST", TOKEN_URL, data={**data, "client_id": client.client_id, "client_secret": client.client_secret}), "Google token")
     expires = utcnow() + timedelta(seconds=int(body.get("expires_in", 3600)) - 60)
     return {**body, "expires_at": expires.isoformat()}
 
 
-def exchange_code(code: str, required_scope: str | None = SCOPES[2]) -> dict[str, Any]:
-    tokens = _token_request({"code": code, "grant_type": "authorization_code", "redirect_uri": redirect_uri()})
+def exchange_code(code: str, client, required_scope: str | None = SCOPES[2]) -> dict[str, Any]:
+    tokens = _token_request({"code": code, "grant_type": "authorization_code", "redirect_uri": redirect_uri()}, client)
     if not tokens.get("refresh_token"):
         raise IntegrationAPIError("Google did not return a refresh token. Remove the app's access in your Google account settings and connect again.")
     granted = set((tokens.get("scope") or "").split())
@@ -62,9 +57,9 @@ def exchange_code(code: str, required_scope: str | None = SCOPES[2]) -> dict[str
     return tokens
 
 
-def refresh(refresh_token: str) -> dict[str, Any]:
+def refresh(refresh_token: str, client) -> dict[str, Any]:
     try:
-        return _token_request({"refresh_token": refresh_token, "grant_type": "refresh_token"})
+        return _token_request({"refresh_token": refresh_token, "grant_type": "refresh_token"}, client)
     except IntegrationAPIError as exc:
         if exc.status == 400 and isinstance(exc.body, dict) and exc.body.get("error") == "invalid_grant":
             exc.reconnect = True
