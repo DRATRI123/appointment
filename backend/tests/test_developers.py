@@ -153,7 +153,8 @@ def test_webhooks_outbox_signature_retries_and_disable(client, db):
         bad = c.post("/developers/webhooks", {"name": "Flaky", "url": "https://hooks.example.com/fail", "events": ["*"]})
         appt2 = c.staff_book(ist(c.monday, 10), customer={"full_name": "Second", "mobile": "9870000102"})
         counts = deliver_due(db, commit=False)
-        assert counts["retrying"] == 2 and counts["delivered"] == 1  # created + confirmed to Flaky fail; created to CRM ok
+        # customer.created + appointment.created + appointment.confirmed to Flaky fail; appointment.created to CRM ok
+        assert counts["retrying"] == 3 and counts["delivered"] == 1
         ev = db.scalar(select(WebhookEvent).join(WebhookEndpoint).where(WebhookEndpoint.public_id == bad["id"], WebhookEvent.event_name == "appointment.created"))
         assert ev.status == "retrying" and ev.attempts == 1 and ev.response_status == 500 and ev.next_attempt_at > utcnow()
         ev.attempts = get_settings().webhook_max_attempts - 1
@@ -163,7 +164,7 @@ def test_webhooks_outbox_signature_retries_and_disable(client, db):
         db.refresh(ev)
         assert ev.status == "dead"
         page = c.get(f"/developers/webhooks/{bad['id']}/deliveries")
-        assert page["meta"]["total"] == 2 and {d["status"] for d in page["data"]} == {"dead", "retrying"}
+        assert page["meta"]["total"] == 3 and {d["status"] for d in page["data"]} == {"dead", "retrying"}
         assert c.post(f"/developers/deliveries/{ev.public_id}/redeliver", {}, expect=200)["status"] == "pending"
         flaky = db.scalar(select(WebhookEndpoint).where(WebhookEndpoint.public_id == bad["id"]))
         flaky.failure_count = DISABLE_AFTER - 1

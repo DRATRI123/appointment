@@ -129,3 +129,20 @@ def env_write(db: DB, admin: PlatformAdmin, meta: Meta) -> dict[str, Any]:
     record_audit(db, action="platform.integration_env_written", actor=admin, entity_type="platform_integration", entity_id="env",
                  after={"variables": result["written"]}, meta=meta)
     return result
+
+
+@router.get("/whatsapp/templates", summary="Approved WhatsApp message templates of the platform's WhatsApp Business Account")
+def whatsapp_templates(db: DB, _: PlatformAdmin) -> list[dict[str, Any]]:
+    from app.integrations.http import IntegrationAPIError, check, request
+    from app.services.platform_config import runtime_settings
+
+    s = runtime_settings()
+    if not (s.whatsapp_business_account_id and s.whatsapp_cloud_token):
+        raise ValidationFailed("Enter the WhatsApp Business Account ID and the access token first.", code="section_incomplete")
+    try:
+        data = check(request("GET", f"https://graph.facebook.com/{s.whatsapp_cloud_api_version}/{s.whatsapp_business_account_id}/message_templates",
+                             params={"fields": "name,language,status,category", "limit": 200}, headers={"Authorization": f"Bearer {s.whatsapp_cloud_token}"}),
+                     "WhatsApp templates")
+    except IntegrationAPIError as exc:
+        raise ValidationFailed(str(exc), code="whatsapp_error") from exc
+    return [{"name": t.get("name"), "language": t.get("language"), "status": t.get("status"), "category": t.get("category")} for t in data.get("data", [])]

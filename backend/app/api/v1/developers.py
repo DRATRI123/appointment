@@ -56,6 +56,19 @@ def key_usage(key_id: str, db: DB, ctx: Manage, meta: Meta, days: Annotated[int,
     return svc.usage(svc.key(key_id), days)
 
 
+@router.post("/api-keys/{key_id}/rotate", response_model=ApiKeyCreated, dependencies=[recent_auth("api_keys")],
+             summary="Rotate: a new key with the same settings (shown once); the old one keeps working for the overlap")
+def rotate_key(key_id: str, db: DB, ctx: Manage, meta: Meta, grace_hours: Annotated[int, Query(ge=0, le=168)] = 24):
+    svc = _svc(db, ctx, meta)
+    return svc.rotate_key(svc.key(key_id), grace_hours)
+
+
+@router.get("/api-keys/{key_id}/access-logs", summary="The last requests made with this key (route, status, time, address)")
+def key_access_logs(key_id: str, db: DB, ctx: Manage, meta: Meta, limit: Annotated[int, Query(ge=1, le=500)] = 100) -> list[dict]:
+    svc = _svc(db, ctx, meta)
+    return svc.access_logs(svc.key(key_id), limit)
+
+
 @router.delete("/api-keys/{key_id}", response_model=ApiKeyRead, summary="Revoke a key immediately")
 def revoke_key(key_id: str, db: DB, ctx: Manage, meta: Meta):
     svc = _svc(db, ctx, meta)

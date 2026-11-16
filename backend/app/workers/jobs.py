@@ -103,6 +103,28 @@ def deliver_webhooks() -> dict:
     return counts
 
 
+@job("sync_integrations")
+def sync_integrations() -> dict:
+    """Integration Hub: send changed patients, documents, verified payments, refunds and appointments to CRM,
+    accounting and Google (with retries). Also removes old integration logs."""
+    from datetime import timedelta
+
+    from sqlalchemy import delete
+
+    from app.connectors.sync import process_due
+    from app.core.time import utcnow
+    from app.models import ApiAccessLog, IntegrationLog
+
+    with session_scope() as db:
+        counts = process_due(db)
+        cutoff = utcnow() - timedelta(days=30)
+        db.execute(delete(IntegrationLog).where(IntegrationLog.created_at < cutoff))
+        db.execute(delete(ApiAccessLog).where(ApiAccessLog.created_at < cutoff))
+    if any(counts.values()):
+        log.info("jobs.sync_integrations", **counts)
+    return counts
+
+
 @job("storage_switch")
 def storage_switch() -> dict | None:
     """Carry out a file-storage switch requested in Super admin -> Integrations (copy, verify, then switch)."""
@@ -113,4 +135,4 @@ def storage_switch() -> dict | None:
 
 
 PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "pull_calendar_busy", "sync_external",
-                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks", "purge_idempotency_keys", "storage_switch")
+                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks", "purge_idempotency_keys", "sync_integrations", "storage_switch")

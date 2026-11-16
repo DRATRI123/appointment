@@ -528,6 +528,14 @@ def deliver(db: Session, n: Notification) -> bool:
                               reference=n.public_id)
     try:
         provider = get_provider(n.channel)
+        if n.channel == "email" and org is not None:
+            from app.services.connector_service import gmail_sender
+
+            gmail = gmail_sender(db, org.id)  # the clinic connected Gmail for all its emails
+            if gmail is not None:
+                from app.notifications.providers import FallbackProvider
+
+                provider = FallbackProvider(gmail, provider)  # Gmail limits or an expired token: the platform sends it
         result = provider.send(message)
     except Exception as exc:  # noqa: BLE001 - a broken adapter must not stop the worker
         from app.notifications.providers import DeliveryResult
@@ -545,6 +553,10 @@ def deliver(db: Session, n: Notification) -> bool:
         n.scheduled_for = now + timedelta(minutes=2 ** max(0, n.attempts - 1))  # 1, 2, 4, 8 minutes
     else:
         n.status = S.FAILED
+        if org is not None:
+            from app.webhooks.hooks import on_notification_failed
+
+            on_notification_failed(db, org, n)
     return False
 
 
@@ -596,8 +608,13 @@ def schedule_reminders(db: Session, *, now: datetime | None = None, commit: bool
                 if booked_at and booked_at > send_at:
                     continue  # booked after this reminder would have gone out; a confirmation was sent instead
                 label = f"{int(h)}" if h == int(h) else f"{h}"
-                created += len(svc.emit("appointment.reminder", appointment=appt, scheduled_for=max(send_at, now), extra={"hours_before": label},
-                                        dedupe=f"reminder:{appt.id}:{label}:{appt.start_at.isoformat()}"))
+                made = svc.emit("appointment.reminder", appointment=appt, scheduled_for=max(send_at, now), extra={"hours_before": label},
+                                dedupe=f"reminder:{appt.id}:{label}:{appt.start_at.isoformat()}")
+                if made:  # new reminder (not a repeat): automations may add their own follow-up
+                    from app.webhooks.hooks import on_reminder
+
+                    on_reminder(db, org, appt, max(send_at, now))
+                created += len(made)
         if commit:
             db.commit()
     return created

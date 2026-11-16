@@ -8,6 +8,7 @@ from app.api.v1 import (
     customers,
     developers,
     health,
+    integration_hub,
     integrations,
     meta,
     notifications,
@@ -16,6 +17,7 @@ from app.api.v1 import (
     platform,
     platform_database,
     platform_integrations,
+    provider_webhooks,
     public,
     reconciliation,
     refunds,
@@ -50,6 +52,9 @@ api_router.include_router(refunds.router)
 api_router.include_router(reconciliation.router)
 api_router.include_router(notifications.router)
 api_router.include_router(notifications.me_router)
+api_router.include_router(integration_hub.router)  # before /integrations/{id}
+api_router.include_router(integration_hub.automation_router)
+api_router.include_router(provider_webhooks.router)
 api_router.include_router(integrations.router)
 api_router.include_router(integrations.appointments_router)
 api_router.include_router(integrations.feeds_router)

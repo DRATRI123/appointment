@@ -104,6 +104,31 @@ class DeveloperService:
             self._audit("api_key.revoked", "api_key", k.public_id, before={"name": k.name, "prefix": k.key_prefix})
         return k
 
+    def rotate_key(self, k: APIKey, grace_hours: int = 24) -> ApiKeyCreated:
+        """A new key with the same name, scopes, IP list, rate limit and expiry. The old key keeps working for
+        ``grace_hours`` (0 = stops now) so integrations can be switched without downtime."""
+        if k.revoked_at is not None or not k.is_active:
+            raise ConflictError("This key is revoked. Create a new key instead.", code="key_revoked")
+        if not 0 <= grace_hours <= 168:
+            raise ValidationFailed("The overlap must be between 0 and 168 hours.", code="invalid_grace")
+        configured = (k.rate_limit or "").split("/")[0]
+        new = self.create_key(ApiKeyCreate(name=k.name, scopes=list(k.scopes or []), allowed_ips=list(k.allowed_ips or []),
+                                           expires_at=k.expires_at if k.expires_at and k.expires_at > utcnow() else None,
+                                           rate_limit_per_minute=int(configured) if configured.isdigit() else None))
+        stop = utcnow() + timedelta(hours=grace_hours)
+        if grace_hours == 0:
+            k.revoked_at, k.is_active = utcnow(), False
+        elif k.expires_at is None or k.expires_at > stop:
+            k.expires_at = stop
+        self._audit("api_key.rotated", "api_key", k.public_id, after={"new_key": new.id, "old_key_valid_until": stop.isoformat()})
+        return new
+
+    def access_logs(self, k: APIKey, limit: int = 100) -> list[dict]:
+        from app.models import ApiAccessLog
+
+        rows = self.db.scalars(select(ApiAccessLog).where(ApiAccessLog.api_key_id == k.id).order_by(ApiAccessLog.id.desc()).limit(limit)).all()
+        return [{"method": r.method, "path": r.path, "status": r.status_code, "duration_ms": r.duration_ms, "ip": r.ip_address, "at": r.created_at} for r in rows]
+
     def usage(self, k: APIKey, days: int = 30) -> list[UsageDay]:
         since = (utcnow() - timedelta(days=days - 1)).date()
         rows = {r.day: r for r in self.db.scalars(select(ApiKeyUsage).where(ApiKeyUsage.api_key_id == k.id, ApiKeyUsage.day >= since)).all()}
@@ -318,8 +343,17 @@ def purge_old_deliveries(db: Session, days: int = 30) -> int:
 
 
 # ==================================================================== usage
-def record_usage(db: Session, key_id: int, org_id: int, status_code: int, rate_limited: bool) -> None:
+def record_usage(db: Session, key_id: int, org_id: int, status_code: int, rate_limited: bool, request=None, duration_ms: int | None = None) -> None:
     today = datetime.now(UTC).date()
+    if request is not None:  # access log: method, route template (never query strings), status, time, address
+        from app.models import ApiAccessLog
+
+        route = request.scope.get("route")
+        template = getattr(route, "path", None)
+        prefix = get_settings().api_v1_prefix
+        path = (template if template.startswith(prefix) else f"{prefix}{template}") if template else request.url.path
+        db.add(ApiAccessLog(organization_id=org_id, api_key_id=key_id, method=request.method[:8], path=str(path)[:255], status_code=status_code,
+                            duration_ms=duration_ms, ip_address=(request.client.host if request.client else None), created_at=utcnow()))
     row = db.scalar(select(ApiKeyUsage).where(ApiKeyUsage.api_key_id == key_id, ApiKeyUsage.day == today))
     if row is None:
         row = ApiKeyUsage(organization_id=org_id, api_key_id=key_id, day=today, requests=0, client_errors=0, server_errors=0, rate_limited=0)

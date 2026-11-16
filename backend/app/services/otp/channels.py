@@ -125,6 +125,12 @@ def sender_for(db: Session, organization_id: int, channel: str) -> Sender | None
         if missing_fields(channel, row.provider, row.settings, secrets):
             return None  # a half-configured clinic account must not silently fall back to the platform
         return Sender(_build(channel, row.provider, {**row.settings, **secrets}), "clinic", dict(row.settings))
+    if channel == "email":
+        from app.services.connector_service import gmail_sender
+
+        gmail = gmail_sender(db, organization_id)
+        if gmail is not None:
+            return Sender(gmail, "clinic", {})
     platform = get_provider(channel)
     if not platform.configured():
         return None

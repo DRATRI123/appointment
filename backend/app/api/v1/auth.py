@@ -121,6 +121,14 @@ def login(request: Request, payload: PasswordLoginRequest, response: Response, d
     return _token_response(result)
 
 
+@router.get("/google/config", summary="Public: the Google client ID for the Sign in with Google button (null = not offered)")
+def google_config() -> dict:
+    from app.services.platform_config import runtime_settings
+
+    s = runtime_settings()
+    return {"client_id": s.google_client_id or None}
+
+
 @router.post("/google", response_model=TokenResponse, summary="Sign in with a Google ID token")
 @limiter.limit("10/minute")
 def google_login(request: Request, payload: GoogleLoginRequest, response: Response, db: DB, settings: AppSettings, meta: Meta) -> TokenResponse:

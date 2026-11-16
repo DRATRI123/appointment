@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.enums import OTPChannel, OTPPurpose, UserStatus
 from app.core.exceptions import AuthenticationError, ConflictError, PermissionDenied, RateLimited, ValidationFailed
 from app.core.logging import get_logger
+from app.core.observability import security_event
 from app.core.time import utcnow
 from app.models import OTPVerification, User, UserSession
 from app.repositories.otp import OTPRepository
@@ -295,6 +296,11 @@ class AuthService:
                 )
                 self.users.add(user)
                 is_new = True
+            elif user.google_sub and user.google_sub != identity.sub:
+                # Already linked to a different Google account: never relink silently (account takeover).
+                security_event("google_link_conflict")
+                raise AuthenticationError("This email is already linked to a different Google account. Sign in with your password or "
+                                          "mobile code instead.", code="google_account_conflict")
             user.google_sub = identity.sub
         self._ensure_user_active(user)
         if user.email_verified_at is None:

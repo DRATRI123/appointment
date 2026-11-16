@@ -48,6 +48,7 @@ from app.services.audit_service import RequestMeta, record_audit
 from app.services.catalog_service import ids_to_public
 from app.services.organization_service import OrganizationService
 from app.services.privacy_service import is_masked_echo, mask_email, mask_mobile, view_email, view_mobile
+from app.webhooks.hooks import on_customer, on_document
 
 log = get_logger(__name__)
 
@@ -140,6 +141,7 @@ class CustomerManagementService:
                 if attempt == 2:
                     raise ConflictError("Could not allocate a customer code. Try again.") from exc
         self._audit("customer.created", "customer", customer.public_id, after={"name": customer.full_name})
+        on_customer(self.db, self.org, customer, "customer.created")
         return customer
 
     def ensure_code(self, customer: Customer) -> None:
@@ -171,6 +173,7 @@ class CustomerManagementService:
                 if d.get(k):
                     d[k] = fn(d[k])
         self._audit("customer.updated", "customer", customer.public_id, before=before, after=after)
+        on_customer(self.db, self.org, customer, "customer.updated")
         return customer
 
     def update_self(self, customer: Customer, payload: SelfProfileUpdate) -> Customer:
@@ -190,6 +193,7 @@ class CustomerManagementService:
         customer.deleted_at = utcnow()
         self.db.flush()
         self._audit("customer.deleted", "customer", customer.public_id)
+        on_customer(self.db, self.org, customer, "customer.deleted")
 
     def anonymize(self, customer: Customer, reason: str) -> None:
         """Erase a customer's personal and clinical data at their request.
@@ -220,6 +224,7 @@ class CustomerManagementService:
             except Exception as exc:  # pragma: no cover - the row is retired even if the file is already gone
                 log.warning("customer.erase_file_failed", document_id=doc.public_id, error=type(exc).__name__)
             doc.title, doc.deleted_at = "Erased", doc.deleted_at or now
+            on_document(self.db, self.org, doc, deleted=True)
         for note in self.db.scalars(select(CustomerNote).where(CustomerNote.customer_id == customer.id)).all():
             self.db.delete(note)
         for dep in self.db.scalars(select(CustomerDependent).where(CustomerDependent.customer_id == customer.id)).all():
@@ -240,6 +245,7 @@ class CustomerManagementService:
         customer.deleted_at = now
         self.db.flush()
         self._audit("customer.anonymized", "customer", customer.public_id, purpose=reason)
+        on_customer(self.db, self.org, customer, "customer.deleted")  # CRM / Google Contacts copies are removed too
 
     # -------------------------------------------------------------- stats
     def stats(self, customer: Customer) -> CustomerStats:
@@ -385,6 +391,7 @@ class CustomerManagementService:
         self.db.add(row)
         self.db.flush()
         self._audit("customer.document_uploaded", "customer", customer.public_id, after={"document_id": row.public_id, "type": document_type})
+        on_document(self.db, self.org, row)  # Google Drive copy (when the clinic connected Drive)
         return row
 
     def get_document(self, customer: Customer, document_id: str) -> CustomerDocument:
@@ -403,6 +410,7 @@ class CustomerManagementService:
         row.deleted_at = utcnow()
         self.db.flush()
         self._audit("customer.document_deleted", "customer", customer.public_id, before={"document_id": row.public_id})
+        on_document(self.db, self.org, row, deleted=True)
 
     def document_read(self, row: CustomerDocument) -> DocumentRead:
         uploader = self.db.get(User, row.uploaded_by_user_id) if row.uploaded_by_user_id else None
@@ -437,5 +445,8 @@ def purge_expired_documents(db: Session) -> int:
             log.warning("customer.document_purge_file_failed", document_id=row.public_id, error=type(exc).__name__)
         row.deleted_at = utcnow()
         record_audit(db, action="customer.document_purged", actor=None, organization_id=row.organization_id, entity_type="customer_document", entity_id=row.public_id, purpose="retention policy")
+        from app.connectors.sync import enqueue
+
+        enqueue(db, row.organization_id, "document", row.id, "delete")
     db.flush()
     return len(rows)

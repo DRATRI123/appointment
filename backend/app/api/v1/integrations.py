@@ -137,6 +137,29 @@ def sync_now(integration_id: str, db: DB, ctx: Tenant, meta: Meta):
     return svc.to_read(integ)
 
 
+@router.get("/{integration_id}/calendars", summary="Google calendars this doctor can add bookings to")
+def list_calendars(integration_id: str, db: DB, ctx: Tenant, meta: Meta) -> list[dict]:
+    from app.integrations import google_calendar as gcal
+    from app.integrations.http import IntegrationAPIError
+    from app.services.integration_service import google_token
+
+    _require_view(db, ctx)
+    svc = _svc(db, ctx, meta)
+    integ = svc.get(integration_id)
+    if integ.provider != "google_calendar":
+        from app.core.exceptions import ValidationFailed
+
+        raise ValidationFailed("This is not a Google Calendar connection.", code="not_google_calendar")
+    svc.require_manage(db.get(Professional, integ.professional_id) if integ.professional_id else None)
+    try:
+        return gcal.list_calendars(google_token(db, integ))
+    except IntegrationAPIError as exc:
+        if exc.status == 403:
+            raise PermissionDenied("Connect Google again to choose a calendar (this connection was made before calendar choice existed).",
+                                   code="reconnect_for_calendars") from exc
+        raise
+
+
 @router.get("/{integration_id}/logs", response_model=list[IntegrationLogRead])
 def integration_logs(integration_id: str, db: DB, ctx: Tenant, meta: Meta):
     svc = _svc(db, ctx, meta)

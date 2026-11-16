@@ -19,7 +19,9 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"  # nosec B105
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 API = "https://www.googleapis.com/calendar/v3"
-SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.events"]
+SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.events",
+          # to let the doctor choose which calendar receives bookings (connections made before this keep "primary")
+          "https://www.googleapis.com/auth/calendar.calendarlist.readonly"]
 PRIVATE_KEY = "appointment_platform_id"  # extendedProperties.private marker on events we create
 
 
@@ -33,9 +35,9 @@ def redirect_uri() -> str:
     return s.google_calendar_redirect_uri or f"{s.frontend_url.rstrip('/')}/api/v1/integrations/google/callback"
 
 
-def authorization_url(state: str, login_hint: str | None = None) -> str:
+def authorization_url(state: str, login_hint: str | None = None, scopes: list[str] | None = None) -> str:
     s = get_settings()
-    params = {"client_id": s.google_client_id, "redirect_uri": redirect_uri(), "response_type": "code", "scope": " ".join(SCOPES),
+    params = {"client_id": s.google_client_id, "redirect_uri": redirect_uri(), "response_type": "code", "scope": " ".join(scopes or SCOPES),
               "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true", "state": state}
     if login_hint:
         params["login_hint"] = login_hint
@@ -49,13 +51,14 @@ def _token_request(data: dict[str, str]) -> dict[str, Any]:
     return {**body, "expires_at": expires.isoformat()}
 
 
-def exchange_code(code: str) -> dict[str, Any]:
+def exchange_code(code: str, required_scope: str | None = SCOPES[2]) -> dict[str, Any]:
     tokens = _token_request({"code": code, "grant_type": "authorization_code", "redirect_uri": redirect_uri()})
     if not tokens.get("refresh_token"):
         raise IntegrationAPIError("Google did not return a refresh token. Remove the app's access in your Google account settings and connect again.")
     granted = set((tokens.get("scope") or "").split())
-    if SCOPES[2] not in granted:
-        raise IntegrationAPIError("Calendar access was not granted. Connect again and allow access to your calendar.")
+    if required_scope and required_scope not in granted:
+        what = "your calendar" if required_scope == SCOPES[2] else "the requested Google service"
+        raise IntegrationAPIError(f"Access to {what} was not granted. Connect again and tick the box Google shows.")
     return tokens
 
 
@@ -78,6 +81,14 @@ def revoke(token: str) -> None:
 
 def account_email(access_token: str) -> str | None:
     return check(request("GET", USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"}), "Google user info").get("email")
+
+
+def list_calendars(access_token: str) -> list[dict[str, Any]]:
+    """Calendars the doctor may write to (owner or writer), primary first."""
+    data = check(request("GET", f"{API}/users/me/calendarList", params={"minAccessRole": "writer", "fields": "items(id,summary,primary,accessRole,timeZone)"},
+                         headers={"Authorization": f"Bearer {access_token}"}), "List calendars")
+    items = [{"id": c["id"], "name": c.get("summary") or c["id"], "primary": bool(c.get("primary")), "time_zone": c.get("timeZone")} for c in data.get("items", [])]
+    return sorted(items, key=lambda c: (not c["primary"], c["name"].lower()))
 
 
 class CalendarClient:

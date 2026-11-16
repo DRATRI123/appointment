@@ -25,12 +25,16 @@ from app.models.coupon import Coupon
 from app.models.customer import Customer, CustomerDependent, CustomerDocument, CustomerNote
 from app.models.idempotency import IdempotencyKey
 from app.models.integration import (
+    ApiAccessLog,
     APIKey,
     ApiKeyUsage,
     AppointmentExternalEvent,
+    AutomationRequest,
     ExternalBusyBlock,
+    FollowUpTask,
     Integration,
     IntegrationLog,
+    IntegrationSyncItem,
     WebhookEndpoint,
     WebhookEvent,
 )
@@ -78,7 +82,7 @@ __all__ = [
     "UPIAccount", "Payment", "PaymentSubmission", "PaymentVerificationLog", "PaymentRefund",
     "BankStatementImport", "BankTransaction",
     "NotificationTemplate", "Notification", "NotificationLog",
-    "Integration", "APIKey", "WebhookEndpoint", "WebhookEvent", "IntegrationLog", "AppointmentExternalEvent", "ExternalBusyBlock", "ApiKeyUsage",
+    "Integration", "APIKey", "WebhookEndpoint", "WebhookEvent", "IntegrationLog", "AppointmentExternalEvent", "ExternalBusyBlock", "ApiKeyUsage", "IntegrationSyncItem", "AutomationRequest", "FollowUpTask", "ApiAccessLog",
     "AuditLog", "SystemSetting",
     "Coupon",
     "Website", "WebsiteVersion",

@@ -191,9 +191,13 @@ class IntegrationService:
             claims = jwt.decode(state, s.secret_key, algorithms=[s.jwt_algorithm])
         except jwt.PyJWTError:
             return "/admin/integrations", "invalid_state"
+        if claims.get("purpose") == "google_connector":  # Gmail, Contacts, Drive (Integration Hub) share this redirect URL
+            from app.services.connector_service import google_connector_callback
+
+            return google_connector_callback(db, code=code, state=state, error=error)
         if claims.get("purpose") != "google_calendar":
             return "/admin/integrations", "invalid_state"
-        return_to = claims.get("return_to") or "/admin/integrations"
+        return_to = claims.get("return_to") or "/admin/integrations/calendar"
         org = db.scalar(select(Organization).where(Organization.public_id == claims.get("org")))
         integ = db.scalar(select(Integration).where(Integration.public_id == claims.get("integ"), Integration.organization_id == (org.id if org else -1)))
         if org is None or integ is None:

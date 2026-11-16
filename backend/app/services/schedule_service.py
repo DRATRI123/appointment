@@ -11,6 +11,7 @@ from app.models import Holiday, Organization, ProfessionalLeave, Schedule, Sched
 from app.schemas.scheduling import ExceptionCreate, HolidayCreate, LeaveCreate, LeaveUpdate, ScheduleSet
 from app.services.audit_service import RequestMeta, record_audit
 from app.services.catalog_service import CatalogService
+from app.webhooks.hooks import on_schedule
 
 
 class ScheduleService:
@@ -47,6 +48,7 @@ class ScheduleService:
         self.db.flush()
         record_audit(self.db, action="schedule.set", actor=self.actor, organization_id=self.org.id, entity_type="professional",
                      entity_id=pro.public_id, after={"branch": branch.public_id, "windows": len(rows)}, meta=self.meta)
+        on_schedule(self.db, self.org, pro)
         return rows
 
     # --------------------------------------------------------- exceptions
@@ -71,6 +73,7 @@ class ScheduleService:
         self.db.flush()
         record_audit(self.db, action="schedule.exception_added", actor=self.actor, organization_id=self.org.id,
                      entity_type="professional", entity_id=pro.public_id, after={"date": str(payload.date), "available": payload.is_available}, meta=self.meta)
+        on_schedule(self.db, self.org, pro)
         return row
 
     def delete_exception(self, exception_id: int) -> None:
@@ -130,6 +133,7 @@ class ScheduleService:
         self.db.flush()
         record_audit(self.db, action="leave.added", actor=self.actor, organization_id=self.org.id, entity_type="professional", entity_id=pro.public_id,
                      after={"from": payload.start_at.isoformat(), "to": payload.end_at.isoformat(), "status": status}, meta=self.meta)
+        on_schedule(self.db, self.org, pro)
         return row
 
     def update_leave(self, public_id: str, payload: LeaveUpdate) -> ProfessionalLeave:

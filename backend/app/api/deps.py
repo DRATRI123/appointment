@@ -102,8 +102,11 @@ def track_api_key_usage(request: Request, db: DB):
     """Counts API-key requests in the request's own session (SQLite allows one writer, so a second session would wait
     on this one). Failed calls are counted too: the request's work, which runs inside a SAVEPOINT opened when the key
     was recognised, is rolled back, and only the usage row is committed."""
+    import time as _time
+
     from app.services.developer_service import record_usage
 
+    started = _time.monotonic()
     try:
         yield
     except Exception as exc:
@@ -113,7 +116,8 @@ def track_api_key_usage(request: Request, db: DB):
             if savepoint is not None and savepoint.is_active:
                 savepoint.rollback()  # undo only this request's work
             try:
-                record_usage(db, key.id, key.organization_id, int(getattr(exc, "status_code", 500)), bool(getattr(request.state, "api_key_rate_limited", False)))
+                record_usage(db, key.id, key.organization_id, int(getattr(exc, "status_code", 500)), bool(getattr(request.state, "api_key_rate_limited", False)),
+                             request, int((_time.monotonic() - started) * 1000))
                 db.commit()
             except Exception:  # noqa: BLE001 - never mask the original error
                 db.rollback()
@@ -121,7 +125,7 @@ def track_api_key_usage(request: Request, db: DB):
     else:
         key = getattr(request.state, "api_key", None)
         if key is not None:
-            record_usage(db, key.id, key.organization_id, 200, False)
+            record_usage(db, key.id, key.organization_id, 200, False, request, int((_time.monotonic() - started) * 1000))
 
 
 def get_optional_user(request: Request, db: DB, _usage: Annotated[None, Depends(track_api_key_usage, scope="function")] = None) -> User | None:

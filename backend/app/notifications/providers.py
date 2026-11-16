@@ -531,11 +531,13 @@ class GmailProvider(_HTTPProvider):
             token = self._token_fn()
         except Exception as exc:  # noqa: BLE001 - IntegrationAPIError (reconnect needed) or network
             return DeliveryResult(self.name, False, retryable=bool(getattr(exc, "retryable", False)), error=str(exc)[:300])
-        resp = self._post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", json={"raw": raw},
-                          headers={"Authorization": f"Bearer {token}"})
-        if isinstance(resp, DeliveryResult):
-            resp.provider = self.name
-            return resp
+        from app.integrations.http import IntegrationAPIError, request
+
+        try:  # the shared integrations client (timeouts; tests replace it with a mock)
+            resp = request("POST", "https://gmail.googleapis.com/gmail/v1/users/me/messages/send", json={"raw": raw},
+                           headers={"Authorization": f"Bearer {token}"})
+        except IntegrationAPIError as exc:
+            return DeliveryResult(self.name, False, retryable=True, error=str(exc)[:300])
         mid = None
         try:
             mid = resp.json().get("id")

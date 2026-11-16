@@ -9,6 +9,7 @@ from app.core.time import utcnow
 from app.models import Customer, Organization, User
 from app.schemas.appointment import CustomerInput
 from app.security.identifiers import normalize_email, normalize_mobile
+from app.webhooks.hooks import on_customer
 
 
 class CustomerService:
@@ -31,13 +32,17 @@ class CustomerService:
             )
             self.db.add(c)
             self.db.flush()
+            on_customer(self.db, self.org, c, "customer.created")
         else:
+            changed = False
             if full_name and c.full_name != full_name.strip():
-                c.full_name = full_name.strip()
+                c.full_name, changed = full_name.strip(), True
             if not c.mobile and user.mobile:
-                c.mobile = user.mobile
+                c.mobile, changed = user.mobile, True
             if not c.email and user.email:
-                c.email = user.email
+                c.email, changed = user.email, True
+            if changed:
+                on_customer(self.db, self.org, c, "customer.updated")
         return c
 
     def resolve(self, payload: CustomerInput, *, user: User | None, allow_guest: bool, staff_booking: bool) -> Customer:
@@ -72,6 +77,7 @@ class CustomerService:
         if existing:
             if not existing.email and email:
                 existing.email = email
+                on_customer(self.db, self.org, existing, "customer.updated")
             return existing
         c = Customer(
             organization_id=self.org.id, full_name=payload.full_name.strip(), mobile=mobile, email=email,
@@ -79,4 +85,5 @@ class CustomerService:
         )
         self.db.add(c)
         self.db.flush()
+        on_customer(self.db, self.org, c, "customer.created")
         return c

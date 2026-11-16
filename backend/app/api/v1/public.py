@@ -36,6 +36,9 @@ def _public_settings(db: Session, org: Organization) -> dict:
     out = {ns: all_settings.get(ns, {}) for ns in ("branding", "booking", "cancellation", "legal", "general")}
     # Only the flag the booking page needs; the rest of the notification config stays private.
     out["messaging"] = {"whatsapp_enabled": bool(all_settings.get("notification", {}).get("whatsapp_enabled"))}
+    from app.connectors.analytics import public_settings as analytics_settings
+
+    out["analytics"] = analytics_settings(db, org)  # GA4 / GTM ids (public by nature); loaded only after the visitor agrees
     return out
 
 

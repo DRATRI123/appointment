@@ -23,6 +23,12 @@ EVENTS: dict[str, str] = {
     "payment.verified": "Staff verified a payment against the bank.",
     "payment.rejected": "Staff could not verify a payment.",
     "refund.processed": "Staff recorded a refund they sent.",
+    "customer.created": "A new patient/customer record was created (online booking, sign-up or staff).",
+    "customer.updated": "A patient's name, contact details, tags or preferences changed.",
+    "customer.deleted": "A patient record was deleted or erased on request (only the id is sent).",
+    "schedule.updated": "A doctor's weekly hours, leave or exceptions changed.",
+    "reminder.due": "An appointment reminder was scheduled (lets automations add their own follow-up).",
+    "notification.failed": "A message (email, SMS, WhatsApp) could not be delivered after all retries.",
     "ping": "A test event sent from the developer portal.",
 }
 
@@ -43,6 +49,14 @@ def appointment_data(db: Session, appt) -> dict[str, Any]:
         "customer": {"id": cust.public_id, "name": cust.full_name, "mobile": cust.mobile, "email": cust.email} if cust else None,
         "amounts": {"currency": appt.currency, "total_paise": appt.total_amount_paise, "advance_due_paise": appt.advance_due_paise, "paid_paise": appt.paid_amount_paise or 0},
     }
+
+
+def customer_data(customer) -> dict[str, Any]:
+    if customer.deleted_at is not None:
+        return {"id": customer.public_id}  # erased or deleted: nothing personal
+    return {"id": customer.public_id, "code": customer.customer_code, "name": customer.full_name, "mobile": customer.mobile, "email": customer.email,
+            "tags": customer.tags or [], "source": customer.source, "is_guest": customer.is_guest,
+            "whatsapp_opt_in": bool((customer.communication_preferences or {}).get("whatsapp"))}
 
 
 def payment_data(db: Session, payment) -> dict[str, Any]:
