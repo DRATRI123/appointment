@@ -290,3 +290,28 @@ def test_fallback_provider_is_tried_once_when_the_main_one_fails():
     assert result.ok and result.provider == "brevo" and "smtp: down" in result.response["fallback_after"]
     both = FallbackProvider(Stub("smtp", False), Stub("ses", False)).send(_msg())
     assert not both.ok and both.retryable and "smtp: down" in both.error and "ses: down" in both.error
+
+
+def test_panel_values_are_re_read_through_the_read_only_engine(monkeypatch):
+    """On SQLite the write engine starts transactions with BEGIN IMMEDIATE: re-reading the panel values with it inside a
+    request that is already writing would wait for that same request (measured: a 30-second stall when sending a code)."""
+    from app.core import database
+
+    opened = []
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def scalar(self, *_a, **_k):
+            return {"values": {"google_client_id": "from-panel.apps.googleusercontent.com"}}
+
+    monkeypatch.setattr(pc, "_auto_refresh", lambda: True)
+    monkeypatch.setattr(database, "ReadSessionLocal", lambda: opened.append("read") or FakeSession())
+    monkeypatch.setattr(database, "SessionLocal", lambda: opened.append("write") or FakeSession())
+    pc.reset_cache()
+    assert pc.value("google_client_id") == "from-panel.apps.googleusercontent.com"
+    assert opened == ["read"]

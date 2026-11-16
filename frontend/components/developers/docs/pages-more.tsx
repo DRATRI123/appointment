@@ -104,7 +104,7 @@ ${site}/embed/${slug}                 the same flow without header and footer, f
       <P>The page sends <C>{"{ type: \"appointment-booking:resize\", height }"}</C> when its height changes, so the frame grows with the content. Sites not on the allowed list cannot frame the page at all (protection against click-jacking and look-alike sites).</P>
 
       <H2 id="shopify">Shopify</H2>
-      <P>No Shopify app or API key is needed. Use a Book button snippet, a theme section (button or embedded) or a plain link in your navigation. The snippet and section files and step-by-step instructions are on the <Link className="underline" href="/admin/booking-page">Booking page &amp; Shopify</Link> screen and in <C>docs/shopify-integration.md</C>.</P>
+      <P>No Shopify app or API key is needed. Use a Book button snippet, a theme section (button or embedded) or a plain link in your navigation. The snippet and section files and step-by-step instructions are on the <Link className="underline" href="/admin/booking-page">Booking page &amp; Shopify</Link> screen and in <C>docs/integrations/shopify-integration.md</C>.</P>
       <CodeBlock label="Shopify snippet" code={`{% render 'appointment-booking-button',
   booking_url: '${site}',
   clinic: '${slug}',

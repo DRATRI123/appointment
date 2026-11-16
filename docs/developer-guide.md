@@ -13,7 +13,7 @@ content, with live code samples in curl, Python, Node.js and PHP that use your o
 | Pull numbers into accounting or BI | Reports API | [Reports](#reports) |
 
 Related references: [`api.md`](api.md) (every endpoint by module), [`public-booking-api.md`](public-booking-api.md)
-(public endpoints with recorded examples), [`shopify-integration.md`](shopify-integration.md), and the generated
+(public endpoints with recorded examples), [`integrations/shopify-integration.md`](integrations/shopify-integration.md), and the generated
 OpenAPI reference at `/docs` and `/api/v1/openapi.json`.
 
 ## Rules the server always enforces
@@ -174,7 +174,7 @@ https://<booking-site>/embed/<clinic>     iframe version; add your site under Al
 ```
 
 Parameters are hints only; unknown values are ignored and they never change prices or permissions. The iframe posts
-`{type: "appointment-booking:resize", height}` to the parent. Shopify: [`shopify-integration.md`](shopify-integration.md).
+`{type: "appointment-booking:resize", height}` to the parent. Shopify: [`integrations/shopify-integration.md`](integrations/shopify-integration.md).
 
 ## Go-live checklist
 

@@ -19,6 +19,7 @@ export const integrationsService = {
   issues: () => api.get<SyncIssue[]>("/integrations/sync-issues"),
   retryIssue: (id: number) => api.post<ApiErrorBody>(`/integrations/sync-issues/${id}/retry`),
   setAppointmentLink: (appointmentId: string, meeting_link: string | null) => api.put<ApiErrorBody>(`/appointments/${appointmentId}/meeting`, { meeting_link }),
+  calendars: (id: string) => api.get<{ id: string; name: string; primary: boolean; time_zone: string | null }[]>(`/integrations/${id}/calendars`),
   staffIcsUrl: (appointmentId: string) => `${apiBase}/appointments/${appointmentId}/calendar.ics`,
   publicIcsUrl: (slug: string, reference: string, token: string | null) =>
     `${apiBase}/public/organizations/${slug}/appointments/${reference}/calendar.ics${token ? `?access_token=${encodeURIComponent(token)}` : ""}`,

@@ -177,7 +177,7 @@ function SectionCard({ section, data }: { section: PlatformSection; data: Platfo
               <CopyField label="Authorized JavaScript origin (for Sign in with Google)" value={data.google.javascript_origin} />
             </div>
           ) : null}
-          {section.key === "whatsapp" ? <CopyField label="Webhook callback URL (Meta App → WhatsApp → Configuration)" value={data.whatsapp_webhook_url} /> : null}
+          {section.key === "whatsapp" ? <><CopyField label="Webhook callback URL (Meta App → WhatsApp → Configuration)" value={data.whatsapp_webhook_url} /><WhatsAppTemplates /></> : null}
           <SettingsForm key={fieldKey} idPrefix={section.key} fields={section.fields} busy={save.isPending} onSave={(p) => save.mutate(p)} />
           <div className="flex flex-wrap items-end gap-3 rounded-lg bg-muted/50 p-3">
             {needsTo ? (
@@ -275,6 +275,28 @@ function StorageControls({ data, section }: { data: PlatformIntegrations; sectio
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function WhatsAppTemplates() {
+  const [list, setList] = useState<{ name: string; language: string; status: string; category: string }[] | null>(null);
+  const load = useMutation({ mutationFn: platformIntegrations.whatsappTemplates, onSuccess: setList, onError: (e) => toast.error(errorMessage(e)) });
+  return (
+    <div className="space-y-2">
+      <Button type="button" size="sm" variant="outline" onClick={() => load.mutate()} disabled={load.isPending}>{load.isPending ? "Loading…" : "Show approved templates"}</Button>
+      {list ? (
+        list.length ? (
+          <ul className="divide-y rounded-lg border text-sm">
+            {list.map((t) => (
+              <li key={`${t.name}:${t.language}`} className="flex items-center justify-between gap-2 px-3 py-1.5">
+                <span className="font-mono text-xs">{t.name}:{t.language}</span>
+                <span className="text-xs text-muted-foreground">{t.category} · <Badge variant={t.status === "APPROVED" ? "success" : "warning"}>{t.status}</Badge></span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-xs text-muted-foreground">No templates yet. Create them in WhatsApp Manager → Message templates.</p>
+      ) : null}
     </div>
   );
 }

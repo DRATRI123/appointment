@@ -196,9 +196,11 @@ def reset_cache() -> None:
 def overrides() -> dict[str, Any]:
     if _auto_refresh() and time.monotonic() - _state["loaded_at"] > REFRESH_SECONDS:
         try:
-            from app.core.database import SessionLocal
+            # The read-only engine: on SQLite the write engine starts every transaction with BEGIN IMMEDIATE, which
+            # would wait for a request that is already writing (and stall it). Reads never take the write lock.
+            from app.core.database import ReadSessionLocal
 
-            with SessionLocal() as s:
+            with ReadSessionLocal() as s:
                 refresh_from(s)
         except Exception:  # noqa: BLE001 - database not ready yet (first start): .env values apply
             _state["loaded_at"] = time.monotonic()

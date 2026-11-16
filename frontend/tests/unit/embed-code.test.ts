@@ -46,3 +46,13 @@ describe("embed code", () => {
     }
   });
 });
+
+describe("React component", () => {
+  it("contains only the public booking address and checks the message origin", async () => {
+    const { reactComponentCode } = await import("@/lib/embed-code");
+    const code = reactComponentCode("https://book.example.com", "akshar", { doctor: "dr-mehta" });
+    expect(code).toContain('"https://book.example.com/akshar/book?doctor=dr-mehta"');
+    expect(code).toContain('event.origin !== "https://book.example.com"');
+    expect(code).not.toMatch(/key|secret|token/i);
+  });
+});

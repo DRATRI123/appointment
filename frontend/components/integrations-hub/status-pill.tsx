@@ -1,9 +1,13 @@
 import { AlertTriangle, CheckCircle2, CircleDashed, CircleOff, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ConnectionStatus } from "@/services/platform-integrations";
+import type { HubStatus } from "@/services/integration-hub";
 
-const STYLE: Record<ConnectionStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
+const STYLE: Record<ConnectionStatus | HubStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
   connected: { label: "Connected", className: "bg-success/15 text-success-ink", Icon: CheckCircle2 },
+  active: { label: "Active", className: "bg-success/15 text-success-ink", Icon: CheckCircle2 },
+  not_connected: { label: "Not connected", className: "bg-warning/20 text-foreground", Icon: CircleDashed },
+  info: { label: "Platform setting", className: "bg-muted text-muted-foreground", Icon: HelpCircle },
   error: { label: "Needs attention", className: "bg-destructive/15 text-destructive-ink", Icon: AlertTriangle },
   untested: { label: "Not tested yet", className: "bg-warning/20 text-foreground", Icon: HelpCircle },
   not_configured: { label: "Not set up", className: "bg-muted text-muted-foreground", Icon: CircleDashed },
@@ -11,7 +15,7 @@ const STYLE: Record<ConnectionStatus, { label: string; className: string; Icon: 
 };
 
 /** "Connected" is only ever shown after a real, successful connection test with the saved settings. */
-export function StatusPill({ status, className }: { status: ConnectionStatus; className?: string }) {
+export function StatusPill({ status, className }: { status: ConnectionStatus | HubStatus; className?: string }) {
   const s = STYLE[status] ?? STYLE.not_configured;
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium", s.className, className)} data-testid="status-pill" data-status={status}>

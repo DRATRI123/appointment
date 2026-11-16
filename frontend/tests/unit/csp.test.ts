@@ -68,3 +68,17 @@ describe("embedOrigins", () => {
     expect(await embedOrigins("c3", down, 0)).toEqual([]);
   });
 });
+
+describe("Google sign-in and analytics", () => {
+  it("are allowed only where they are used", () => {
+    const plain = buildCsp("n");
+    expect(plain).not.toContain("accounts.google.com");
+    expect(plain).not.toContain("google-analytics");
+    const signIn = buildCsp("n", { googleSignIn: true });
+    expect(directive(signIn, "frame-src")).toBe("frame-src 'self' https://accounts.google.com/gsi/");
+    expect(directive(signIn, "connect-src")).toContain("https://accounts.google.com/gsi/");
+    expect(directive(buildCsp("n", { analytics: true }), "connect-src")).toContain("https://*.google-analytics.com");
+    // Scripts stay nonce-only in every case.
+    expect(directive(signIn, "script-src")).not.toContain("accounts.google.com");
+  });
+});

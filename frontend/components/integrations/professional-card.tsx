@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CalendarCheck2, Copy, Link2, RefreshCw, Video } from "lucide-react";
 import { integrationsService } from "@/services/integrations";
@@ -18,6 +18,30 @@ import { formatDateTime } from "@/lib/format";
 import { MEETING_PROVIDER_LABEL, type MeetingProvider, type ProfessionalConnections } from "@/types/integration";
 
 const KEY = ["integrations"];
+
+/** Which of the doctor's Google calendars receives the bookings (and is read for busy time). */
+function CalendarChoice({ integrationId, current, onSave }: { integrationId: string; current: string; onSave: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const list = useQuery({ queryKey: ["google-calendars", integrationId], queryFn: () => integrationsService.calendars(integrationId), enabled: open, retry: false });
+  if (!open) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Calendar: <span className="font-medium text-foreground">{current === "primary" ? "Main calendar" : current}</span>{" "}
+        <button type="button" className="text-primary hover:underline" onClick={() => setOpen(true)}>Change</button>
+      </p>
+    );
+  }
+  if (list.isLoading) return <p className="text-xs text-muted-foreground">Loading calendars…</p>;
+  if (list.error) return <p className="text-xs text-destructive">{errorMessage(list.error)}</p>;
+  return (
+    <Field label="Add bookings to" htmlFor={`cal_${integrationId}`}>
+      <NativeSelect id={`cal_${integrationId}`} value={current} onChange={(e) => { onSave(e.target.value); setOpen(false); }}>
+        {current === "primary" ? <option value="primary">Main calendar</option> : null}
+        {(list.data ?? []).map((c) => <option key={c.id} value={c.primary ? "primary" : c.id}>{c.name}{c.primary ? " (main)" : ""}</option>)}
+      </NativeSelect>
+    </Field>
+  );
+}
 
 export function ProfessionalCard({ row, googleConfigured, zoomConnected, returnTo }: { row: ProfessionalConnections; googleConfigured: boolean; zoomConnected: boolean; returnTo: string }) {
   const queryClient = useQueryClient();
@@ -68,6 +92,7 @@ export function ProfessionalCard({ row, googleConfigured, zoomConnected, returnT
                 <label className="flex items-center justify-between gap-3">Busy time blocks booking slots<Switch checked={g!.config.block_busy !== false} onCheckedChange={(v) => update.mutate({ block_busy: v })} /></label>
                 <label className="flex items-center justify-between gap-3">Show patient names in events<Switch checked={g!.config.show_patient_names !== false} onCheckedChange={(v) => update.mutate({ show_patient_names: v })} /></label>
               </div>
+              <CalendarChoice integrationId={g!.id} current={String(g!.config.calendar_id ?? "primary")} onSave={(calendar_id) => update.mutate({ calendar_id })} />
               <p className="text-xs text-muted-foreground">Last synced {g!.last_synced_at ? formatDateTime(g!.last_synced_at) : "never"}</p>
               <div className="flex flex-wrap gap-2">
                 {g!.status === "error" ? <Button size="sm" onClick={() => connect.mutate()} disabled={connect.isPending}>Reconnect</Button> : null}

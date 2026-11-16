@@ -6,15 +6,25 @@ import { NextResponse, type NextRequest } from "next/server";
  * slipped past React's escaping. Styles keep 'unsafe-inline' (component libraries set inline styles; styles cannot
  * run code).
  */
-export function buildCsp(nonce: string, { dev = false, apiOrigin = "", frameAncestors = [], selfFrame = false }: { dev?: boolean; apiOrigin?: string; frameAncestors?: string[]; selfFrame?: boolean } = {}) {
+const GOOGLE_SIGN_IN = "https://accounts.google.com/gsi/";
+const ANALYTICS = "https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com";
+
+export function buildCsp(
+  nonce: string,
+  { dev = false, apiOrigin = "", frameAncestors = [], selfFrame = false, googleSignIn = false, analytics = false }:
+    { dev?: boolean; apiOrigin?: string; frameAncestors?: string[]; selfFrame?: boolean; googleSignIn?: boolean; analytics?: boolean } = {},
+) {
+  // Scripts: only this request's nonce (strict-dynamic lets those scripts load Google's sign-in or analytics library).
+  // Google's sign-in button and analytics also need their own origins for frames, styles and requests, on the pages
+  // that use them only: sign-in pages, and public clinic pages (never staff screens).
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
-    "style-src 'self' 'unsafe-inline'",
+    `style-src 'self' 'unsafe-inline'${googleSignIn ? ` ${GOOGLE_SIGN_IN}style` : ""}`,
     `img-src 'self' data: blob: https:${apiOrigin ? ` ${apiOrigin}` : ""}`,
     "font-src 'self' data:",
-    `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}${dev ? " ws:" : ""}`,
-    "frame-src 'self'",
+    `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}${googleSignIn ? ` ${GOOGLE_SIGN_IN}` : ""}${analytics ? ` ${ANALYTICS}` : ""}${dev ? " ws:" : ""}`,
+    `frame-src 'self'${googleSignIn ? ` ${GOOGLE_SIGN_IN}` : ""}`,
     // Only /embed/<clinic> pages may be framed, and only by the websites that clinic listed (plus this site itself).
     frameAncestors.length ? `frame-ancestors 'self' ${frameAncestors.join(" ")}` : selfFrame ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
     "base-uri 'self'",
@@ -22,6 +32,9 @@ export function buildCsp(nonce: string, { dev = false, apiOrigin = "", frameAnce
     "object-src 'none'",
   ].join("; ");
 }
+
+const SIGN_IN_PATH = /^\/(login|register)(\/|$)/;
+const STAFF_PATH = /^\/(admin|super-admin|professional|customer|onboarding|website-preview)(\/|$)/;
 
 function apiOrigin() {
   try {
@@ -70,7 +83,11 @@ export async function proxy(request: NextRequest) {
   const frameAncestors = embed ? await embedOrigins(embed[1]) : [];
   // The admin's live website preview frames /website-preview from this same site, and nothing else may.
   const preview = request.nextUrl.pathname === "/website-preview";
-  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", apiOrigin: apiOrigin(), frameAncestors, selfFrame: preview });
+  const path = request.nextUrl.pathname;
+  const csp = buildCsp(nonce, {
+    dev: process.env.NODE_ENV !== "production", apiOrigin: apiOrigin(), frameAncestors, selfFrame: preview,
+    googleSignIn: SIGN_IN_PATH.test(path), analytics: !STAFF_PATH.test(path) && !SIGN_IN_PATH.test(path),
+  });
   // Next.js reads the nonce from the request's CSP header and stamps it on every script it renders.
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);

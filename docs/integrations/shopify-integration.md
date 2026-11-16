@@ -62,7 +62,7 @@ Find slugs under **Admin → Services / Branches / Professionals**, or use the d
 
 1. Shopify admin → **Online Store → Themes → ⋯ → Edit code**.
 2. Under **Snippets** → **Add a new snippet** → name it `appointment-booking-button`.
-3. Paste the contents of [`integrations/shopify/snippets/appointment-booking-button.liquid`](../integrations/shopify/snippets/appointment-booking-button.liquid)
+3. Paste the contents of [`integrations/shopify/snippets/appointment-booking-button.liquid`](../../integrations/shopify/snippets/appointment-booking-button.liquid)
    (also downloadable from the admin screen) and **Save**.
 4. Paste this where the button should appear, e.g. in a product template, `main-page.liquid`, the header, or a
    *Custom Liquid* section in the theme editor:
@@ -114,7 +114,7 @@ address or clinic is missing it renders nothing for visitors (and a warning in t
 
 1. Add the snippet from option 1.
 2. Under **Sections** → **Add a new section** → name it `appointment-booking`, paste
-   [`integrations/shopify/sections/appointment-booking.liquid`](../integrations/shopify/sections/appointment-booking.liquid), **Save**.
+   [`integrations/shopify/sections/appointment-booking.liquid`](../../integrations/shopify/sections/appointment-booking.liquid), **Save**.
 3. **Customize** the theme → **Add section → Appointment booking**.
 4. Fill in **Booking site address** (`https://booking.mydomain.com`) and **Clinic web address name** (`akshar-clinic`),
    optionally a service/location/doctor, heading, text and colours.

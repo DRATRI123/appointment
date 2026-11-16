@@ -1,5 +1,8 @@
 "use client";
 
+import { AnalyticsConsent } from "@/components/public-booking/analytics-consent";
+import type { AnalyticsIds } from "@/lib/analytics";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -84,6 +87,7 @@ export function SiteShell({ slug, children, previewDocument }: { slug: string; c
           <SiteFooter />
           {!inBooking ? <FloatingBar /> : null}
         </div>
+        {!previewDocument ? <AnalyticsConsent slug={slug} ids={value.org.settings.analytics as unknown as AnalyticsIds | null} /> : null}
       </BookingContext.Provider>
     </SiteContext.Provider>
   );

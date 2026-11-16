@@ -21,6 +21,7 @@ import { Field } from "@/components/forms/field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { errorMessage } from "@/lib/errors";
 import { ApiError } from "@/lib/api-client";
+import { GoogleSignIn } from "@/components/auth/google-sign-in";
 
 const otpRequestSchema = z.object({ identifier: z.string().min(3, "Enter your mobile number or email") });
 const otpVerifySchema = z.object({ code: z.string().regex(/^\d{4,8}$/, "Enter the code you received"), full_name: z.string().optional() });
@@ -82,6 +83,7 @@ export function LoginForm() {
             <PasswordLogin onSuccess={finishLogin} onSecondStep={needsSecondStep} />
           </TabsContent>
         </Tabs>
+        <div className="mt-4"><GoogleSignIn onSuccess={finishLogin} onSecondStep={needsSecondStep} /></div>
         <p className="mt-6 text-center text-sm text-muted-foreground">
           New organization?{" "}
           <Link href="/register" className="font-medium text-primary hover:underline">

@@ -82,5 +82,6 @@ export const platformIntegrations = {
   finishStorage: () => api.post<PlatformIntegrations>(`${base}/storage/finish`),
   usage: () => api.get<StorageUsage>(`${base}/storage/usage`),
   envUrl: (includeSecrets: boolean) => `${apiBase}${base}/env?include_secrets=${includeSecrets}`,
+  whatsappTemplates: () => api.get<{ name: string; language: string; status: string; category: string }[]>(`${base}/whatsapp/templates`),
   writeEnv: () => api.post<{ path: string; written: string[]; backup: string }>(`${base}/env/write`),
 };

@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field } from "@/components/forms/field";
 import { bookingUrl, type BookingParams } from "@/lib/booking-params";
-import { htmlButtonCode, iframeEmbedCode, liquidButtonCode, normalizeOrigin, whatsappShareLink } from "@/lib/embed-code";
+import { htmlButtonCode, iframeEmbedCode, liquidButtonCode, normalizeOrigin, whatsappShareLink, reactComponentCode } from "@/lib/embed-code";
 import { whatsappLink } from "@/lib/site-links";
 import { errorMessage } from "@/lib/errors";
 
@@ -161,7 +161,7 @@ function AddToWebsite({ origin, slug, hints, campaign, link, clinicName, whatsap
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Add booking to Shopify or your website</CardTitle>
+        <CardTitle id="websites">Add booking to Shopify or your website</CardTitle>
         <CardDescription>Pick one. The code contains only your public booking address, never a key or password, so it is safe to paste into a theme.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -171,6 +171,9 @@ function AddToWebsite({ origin, slug, hints, campaign, link, clinicName, whatsap
             <TabsTrigger value="shopify-section">Shopify section</TabsTrigger>
             <TabsTrigger value="iframe">Embed (iframe)</TabsTrigger>
             <TabsTrigger value="html">Any website link</TabsTrigger>
+            <TabsTrigger value="wordpress">WordPress</TabsTrigger>
+            <TabsTrigger value="wix">Wix</TabsTrigger>
+            <TabsTrigger value="react">React / Next.js</TabsTrigger>
             <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           </TabsList>
           <TabsContent value="shopify-button" className="space-y-4">
@@ -202,6 +205,25 @@ function AddToWebsite({ origin, slug, hints, campaign, link, clinicName, whatsap
           <TabsContent value="html" className="space-y-4">
             <p className="text-sm text-muted-foreground">For WordPress, Wix, a Linktree or an email signature: a plain link styled as a button.</p>
             <CodeBlock code={htmlButtonCode(origin, slug, hints, "Book appointment", campaign)} testId="html-code" />
+          </TabsContent>
+          <TabsContent value="wordpress" className="space-y-4">
+            <Steps items={[
+              <>Button: in the block editor add a <b>Custom HTML</b> block where the button should appear and paste the code below.</>,
+              <>Whole booking page inside a page: add your site (e.g. <code>https://yourclinic.com</code>) under <b>Allowed websites</b>, then paste the <b>Embed (iframe)</b> code into a Custom HTML block.</>,
+              <>Menus: Appearance → Menus → Custom Links, with the booking address <code>{bookingUrl(origin, slug, hints, false, campaign)}</code>.</>,
+            ]} />
+            <CodeBlock code={htmlButtonCode(origin, slug, hints, "Book appointment", campaign)} testId="wordpress-code" />
+          </TabsContent>
+          <TabsContent value="wix" className="space-y-4">
+            <Steps items={[
+              <>Button: add a Wix <b>Button</b>, choose <b>Link → Web address</b> and paste the booking address below.</>,
+              <>Whole booking page: add your Wix site under <b>Allowed websites</b>, then <b>Add → Embed code → Embed HTML</b>, choose <b>Code</b> and paste the <b>Embed (iframe)</b> code. Set the element height to at least 900 px.</>,
+            ]} />
+            <CodeBlock code={bookingUrl(origin, slug, hints, false, campaign)} testId="wix-link" />
+          </TabsContent>
+          <TabsContent value="react" className="space-y-4">
+            <p className="text-sm text-muted-foreground">Copy this into a file such as <code>BookAppointment.jsx</code>. It needs no package and holds no key.</p>
+            <CodeBlock code={reactComponentCode(origin, slug, hints, campaign)} testId="react-code" />
           </TabsContent>
           <TabsContent value="whatsapp" className="space-y-6">
             <div className="space-y-3">

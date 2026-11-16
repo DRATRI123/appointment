@@ -38,6 +38,12 @@ export function ApiKeysPanel() {
     onError: (e) => toast.error(errorMessage(e)),
   });
   const revoke = useMutation({ mutationFn: (id: string) => developersService.revokeKey(id), onSuccess: () => { toast.success("Key revoked"); refresh(); }, onError: (e) => toast.error(errorMessage(e)) });
+  const rotate = useMutation({
+    mutationFn: (id: string) => developersService.rotateKey(id),
+    onSuccess: (k) => { setSecret(k.key); toast.success("New key created. The old key keeps working for 24 hours, then stops."); refresh(); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const [logsFor, setLogsFor] = useState<string | null>(null);
   return (
     <div className="space-y-4">
       {secret ? <SecretReveal label="Your new API key" value={secret} onDone={() => setSecret(null)} /> : null}
@@ -81,12 +87,44 @@ export function ApiKeysPanel() {
                 <TableCell className="max-w-72"><div className="flex flex-wrap gap-1">{k.scopes.map((s) => <Badge key={s} variant="secondary" className="font-mono text-[10px]">{s}</Badge>)}</div></TableCell>
                 <TableCell className="text-xs text-muted-foreground">{k.last_used_at ? formatDateTime(k.last_used_at) : "Never"}</TableCell>
                 <TableCell className="text-right tabular-nums">{k.requests_30d}</TableCell>
+                <TableCell className="text-right whitespace-nowrap">
+                  <Button size="sm" variant="ghost" onClick={() => setLogsFor(logsFor === k.id ? null : k.id)} data-testid="key-logs">Access log</Button>
+                  {k.is_active ? <Button size="sm" variant="ghost" onClick={() => { if (confirm(`Rotate "${k.name}"? You get a new key now; the old one keeps working for 24 hours.`)) rotate.mutate(k.id); }} data-testid="rotate-key">Rotate</Button> : null}
+                </TableCell>
                 <TableCell className="text-right">{k.is_active ? <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(`Revoke "${k.name}"? Integrations using it stop working immediately.`)) revoke.mutate(k.id); }}>Revoke</Button> : null}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       )}
+      {logsFor ? <AccessLog keyId={logsFor} /> : null}
     </div>
+  );
+}
+
+function AccessLog({ keyId }: { keyId: string }) {
+  const logs = useQuery({ queryKey: ["api-key-logs", keyId], queryFn: () => developersService.accessLogs(keyId) });
+  return (
+    <Card data-testid="access-log">
+      <CardHeader><CardTitle className="text-base">Access log</CardTitle><CardDescription>The last 100 requests with this key (kept 30 days). Addresses are shown without query strings.</CardDescription></CardHeader>
+      <CardContent>
+        {logs.isLoading ? <Skeleton className="h-24" /> : !logs.data?.length ? <p className="text-sm text-muted-foreground">No requests yet.</p> : (
+          <Table className="text-xs">
+            <TableHeader><TableRow><TableHead>When</TableHead><TableHead>Request</TableHead><TableHead>Status</TableHead><TableHead>Time</TableHead><TableHead>From</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {logs.data.map((l, i) => (
+                <TableRow key={i}>
+                  <TableCell className="whitespace-nowrap">{formatDateTime(l.at)}</TableCell>
+                  <TableCell className="font-mono">{l.method} {l.path}</TableCell>
+                  <TableCell><Badge variant={l.status < 400 ? "success" : l.status < 500 ? "warning" : "destructive"}>{l.status}</Badge></TableCell>
+                  <TableCell className="tabular-nums">{l.duration_ms ?? "—"} ms</TableCell>
+                  <TableCell className="font-mono">{l.ip ?? "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   );
 }

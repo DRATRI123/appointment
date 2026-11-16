@@ -1,5 +1,8 @@
 "use client";
 
+import { AnalyticsConsent } from "@/components/public-booking/analytics-consent";
+import type { AnalyticsIds } from "@/lib/analytics";
+
 import { createContext, useContext, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -109,6 +112,7 @@ export function BookingShell({ slug, embedded = false, children }: { slug: strin
         <main className={cn("mx-auto w-full max-w-6xl flex-1 px-4", embedded ? "py-4" : "py-8 sm:py-10")}>{children}</main>
         <ClinicFooter />
       </div>
+      <AnalyticsConsent slug={slug} ids={data.settings.analytics as unknown as AnalyticsIds | null} />
     </BookingContext.Provider>
   );
 }

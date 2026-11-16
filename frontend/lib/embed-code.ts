@@ -75,3 +75,38 @@ export function normalizeOrigin(input: string): string | null {
 export function whatsappShareLink(message: string, link: string): string {
   return `https://wa.me/?text=${encodeURIComponent(`${message.trim()} ${link}`.trim())}`;
 }
+
+/** A small React component (no package to install) for React / Next.js websites: a link button, or the iframe. */
+export function reactComponentCode(origin: string, slug: string, hints: BookingParams = {}, campaign: Record<string, string> = {}): string {
+  const link = bookingUrl(origin, slug, hints, false, campaign);
+  const embed = bookingUrl(origin, slug, hints, true, campaign);
+  const bookingOrigin = new URL(origin).origin;
+  return [
+    `import { useEffect, useRef } from "react";`,
+    ``,
+    `// A plain link: works everywhere, opens the booking page.`,
+    `export function BookAppointmentButton({ label = "Book appointment" }) {`,
+    `  return (`,
+    `    <a href=${JSON.stringify(link)} style={{ display: "inline-block", padding: "12px 24px", borderRadius: 999, background: "#0f5132", color: "#fff", fontWeight: 600, textDecoration: "none" }}>`,
+    `      {label}`,
+    `    </a>`,
+    `  );`,
+    `}`,
+    ``,
+    `// The booking page inside your site (add your website under Allowed websites first).`,
+    `export function BookingWidget() {`,
+    `  const frame = useRef(null);`,
+    `  useEffect(() => {`,
+    `    const onMessage = (event) => {`,
+    `      if (event.origin !== ${JSON.stringify(bookingOrigin)} || event.data?.type !== "appointment-booking:resize") return;`,
+    `      const h = parseInt(event.data.height, 10);`,
+    `      if (frame.current && h > 300 && h < 8000) frame.current.style.height = h + "px";`,
+    `    };`,
+    `    window.addEventListener("message", onMessage);`,
+    `    return () => window.removeEventListener("message", onMessage);`,
+    `  }, []);`,
+    `  return <iframe ref={frame} src=${JSON.stringify(embed)} title="Book an appointment" loading="lazy"`,
+    `    style={{ display: "block", width: "100%", height: 900, border: 0, borderRadius: 16 }} />;`,
+    `}`,
+  ].join("\n");
+}

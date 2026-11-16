@@ -7,6 +7,8 @@ export const developersService = {
   keys: () => api.get<ApiKey[]>("/developers/api-keys"),
   createKey: (body: { name: string; scopes: string[]; expires_at?: string | null; allowed_ips?: string[]; rate_limit_per_minute?: number | null }) => api.post<ApiKeyCreated>("/developers/api-keys", body),
   revokeKey: (id: string) => api.delete<ApiKey>(`/developers/api-keys/${id}`),
+  rotateKey: (id: string, graceHours = 24) => api.post<ApiKeyCreated>(`/developers/api-keys/${id}/rotate?grace_hours=${graceHours}`),
+  accessLogs: (id: string) => api.get<{ method: string; path: string; status: number; duration_ms: number | null; ip: string | null; at: string }[]>(`/developers/api-keys/${id}/access-logs`),
   usage: (id: string, days = 30) => api.get<UsageDay[]>(`/developers/api-keys/${id}/usage`, { searchParams: { days } }),
   events: () => api.get<EventInfo[]>("/developers/events"),
   webhooks: () => api.get<WebhookEndpoint[]>("/developers/webhooks"),

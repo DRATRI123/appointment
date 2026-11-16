@@ -1,5 +1,7 @@
 "use client";
 
+import { trackEvent } from "@/lib/analytics";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -131,6 +133,16 @@ export function BookingFlow() {
     if (index > 0) top.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [index]);
 
+  // Analytics (only when the clinic switched it on and the visitor agreed): a started booking that is left unfinished.
+  const completed = useRef(false);
+  const started = !!hold;
+  useEffect(() => {
+    if (!started) return;
+    const leave = () => { if (!completed.current) trackEvent("booking_abandoned", { clinic: slug }); };
+    window.addEventListener("pagehide", leave);
+    return () => window.removeEventListener("pagehide", leave);
+  }, [started, slug]);
+
   const release = useCallback(async () => {
     if (hold) {
       try { await publicBooking.releaseHold(slug, hold.id, sessionKey); } catch { /* it expires on its own */ }
@@ -143,7 +155,7 @@ export function BookingFlow() {
 
   const reserve = useMutation({
     mutationFn: (s: Slot) => publicBooking.hold(slug, { professional_id: s.professional_id, branch_id: branchId, service_id: serviceId, start_at: s.start_at, session_key: sessionKey }),
-    onSuccess: (h, s) => { setHold(h); setSlot(s); setVerified(null); setDetailsDone(false); },
+    onSuccess: (h, s) => { setHold(h); setSlot(s); setVerified(null); setDetailsDone(false); trackEvent("booking_start", { clinic: slug, source: rememberCampaign(params).utm_source }); },
     onError: (e) => { setPicked(null); toast.error(e instanceof ApiError && e.status === 409 ? "Someone just booked that time. Please choose another." : errorMessage(e)); },
   });
 
@@ -157,6 +169,8 @@ export function BookingFlow() {
     }, `book:${hold!.id}`),
     onSuccess: (appt) => {
       try { window.localStorage.setItem(`ap.appt.${appt.reference}`, appt.access_token ?? ""); } catch { /* private mode */ }
+      completed.current = true;
+      trackEvent("booking_complete", { clinic: slug, source: rememberCampaign(params).utm_source });
       router.push(`${base}/appointments/${appt.reference}${appt.access_token ? `?t=${encodeURIComponent(appt.access_token)}` : ""}`);
     },
     onError: (e) => {

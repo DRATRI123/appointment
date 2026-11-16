@@ -23,7 +23,7 @@ const ATTENTION: Record<string, [string, string]> = {
   refunds_to_approve: ["refunds to approve or send", "/admin/refunds"],
   unmatched_bank_credits: ["bank credits to reconcile", "/admin/reconciliation"],
   failed_notifications: ["messages that failed to send", "/admin/notifications"],
-  calendar_sync_problems: ["calendar or meeting sync problems", "/admin/integrations"],
+  calendar_sync_problems: ["calendar or meeting sync problems", "/admin/integrations/calendar"],
 };
 
 const SETUP = [

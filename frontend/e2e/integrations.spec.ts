@@ -26,8 +26,8 @@ async function seedClinic(page: Page) {
 test("manual video link reaches the customer, feeds and calendar files work, staff can change the link", async ({ page, context }) => {
   const { slug } = await seedClinic(page);
 
-  await page.goto("/admin/integrations");
-  await expect(page.getByText("Google Calendar is not set up on this server yet.")).toBeVisible();
+  await page.goto("/admin/integrations/calendar");
+  await expect(page.getByText("Google is not set up on this platform yet.")).toBeVisible();
   await expect(page.getByTestId("connect-google")).toBeDisabled();
   await expect(page.getByTestId("zoom-card")).toBeVisible();
   const card = page.getByTestId("professional-connections").filter({ hasText: "Dr. Video" });

@@ -65,7 +65,7 @@ Status: implemented and tested (phases 1–8). Sections 1–3 are the original i
 | `/{clinic}/book` | Booking steps: service → doctor (or first available) → location → date and time → details → verification → review → payment → confirmation. Steps with one option are skipped |
 | `/{clinic}/{page}` | A custom page; else a policy page (`privacy`, `terms`, `refund-policy` from Organization settings → Legal); else a location page (`/{clinic}/{branch}`) |
 | `/{clinic}/appointments/{reference}?t=…` | The patient's own booking: status, UPI payment, reschedule, cancel |
-| `/embed/{clinic}` | The booking steps for iframes (see `shopify-integration.md`) |
+| `/embed/{clinic}` | The booking steps for iframes (see `integrations/shopify-integration.md`) |
 | `/{clinic}?service=…` | Old booking links forward to `/{clinic}/book?service=…` |
 
 A doctor practising alone uses their own organization name: `booking.mydomain.com/dr-meera-joshi`.
