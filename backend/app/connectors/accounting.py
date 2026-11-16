@@ -11,8 +11,8 @@ the payment's id as REMOTEID, and payments already exported are left out of the 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from html import escape as _html_escape
 from typing import Any
-from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -22,6 +22,11 @@ from app.core.enums import PaymentStatus, RefundStatus
 from app.integrations.http import IntegrationAPIError, check, request
 
 MODES = {"upi_qr": "UPI", "cash": "Cash", "bank_transfer": "Bank Transfer", "pay_at_clinic": "Cash", "upi": "UPI"}
+
+
+def escape(text: str) -> str:
+    """XML text/attribute escaping (& < > " '). Only escapes; nothing here parses XML."""
+    return _html_escape(text, quote=True)
 
 
 def rupees(paise: int | None) -> float:

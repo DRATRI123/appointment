@@ -189,8 +189,10 @@ class FallbackStorage:
         self.active.delete(key)
         try:
             self.previous.delete(key)
-        except Exception:  # noqa: BLE001 - best effort on the old copy
-            pass
+        except Exception as exc:  # noqa: BLE001 - best effort on the old copy
+            from app.core.logging import get_logger
+
+            get_logger(__name__).warning("storage.previous_delete_failed", error=type(exc).__name__)
 
     def __getattr__(self, name):
         return getattr(self.active, name)

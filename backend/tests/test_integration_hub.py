@@ -253,10 +253,9 @@ def test_zoho_books_sends_verified_payments_once_even_after_a_failure(client, db
     client.get("/api/v1/integrations/hub/zoho/callback", params={"code": "c", "state": q["state"][0]}, follow_redirects=False)
     assert clinic.get("/integrations/hub/zoho_books")["status"] == "connected"
     org = _org(db, clinic)
-    cust = db.get(Customer, db.scalar(select(Customer.id).where(Customer.organization_id == org.id).limit(1))) or Customer(organization_id=org.id, full_name="Meera Shah", mobile="+919833333333")
-    if cust.id is None:
-        db.add(cust)
-        db.flush()
+    cust = Customer(organization_id=org.id, full_name="Meera Shah", mobile="+919833333333")
+    db.add(cust)
+    db.flush()
     unverified = Payment(organization_id=org.id, reference="PAY-UNVERIFIED", customer_id=cust.id, method="cash", status="submitted", amount_paise=100)
     db.add(unverified)
     db.flush()
