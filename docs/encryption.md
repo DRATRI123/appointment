@@ -27,6 +27,10 @@ Encrypted fields:
 * webhook signing secrets;
 * two-step sign-in secrets;
 * stored idempotent responses (they can contain a booking's access token).
+* family member notes, sensitive booking-form answers, payer UPI ID and payer name;
+* every private uploaded file (patient documents, payment screenshots), with its own derived key.
+
+Full list, what is deliberately not encrypted, and why: [privacy-and-data-protection.md](privacy-and-data-protection.md).
 
 Hashed, never reversible:
 

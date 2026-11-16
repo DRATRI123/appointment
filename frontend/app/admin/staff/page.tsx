@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/errors";
 import { formatDateTime } from "@/lib/format";
 import type { Member } from "@/types/auth";
+import { MemberSessionsDialog } from "@/components/privacy/member-sessions-dialog";
 
 export default function StaffPage() {
   const { currentOrganizationId: orgId, hasPermission, user } = useAuth();
@@ -94,6 +95,7 @@ export default function StaffPage() {
                     <TableCell className="text-right">
                       {!isSelf ? (
                         <div className="flex justify-end gap-1">
+                          <MemberSessionsDialog orgId={orgId!} membershipId={m.id} name={m.user.full_name} canRevoke={canWrite} />
                           <Button size="sm" variant="ghost" onClick={() => toggleStatus.mutate(m)}>
                             {m.status === "suspended" ? "Reactivate" : "Suspend"}
                           </Button>

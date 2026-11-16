@@ -29,7 +29,7 @@ appointment is confirmed.
 * [Environment configuration: templates and the checks per environment](docs/environment-configuration.md)
 * [Production deployment (future VPS): setup, deploy, update, rollback](docs/production-deployment.md)
 * [Super admin setup and recovery](docs/superadmin-setup.md) · [Who may do what (permissions matrix)](docs/permissions-matrix.md)
-* [Backups and restore](docs/backup-restore.md) · [Database migrations](docs/database-migrations.md) · [Encryption and keys](docs/encryption.md)
+* [Backups and restore](docs/backup-restore.md) · [Database migrations](docs/database-migrations.md) · [Encryption and keys](docs/encryption.md) · [Privacy and data protection](docs/privacy-and-data-protection.md)
 * [Security and load testing report, remaining risks](docs/security-testing-report.md) · [Troubleshooting](docs/troubleshooting.md)
 * [Performance, security and encryption review: audit, load tests, before/after](docs/optimization-report.md)
 

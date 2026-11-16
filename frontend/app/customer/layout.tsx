@@ -19,7 +19,7 @@ const groups = [
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   return (
     <RequireAuth >
-      <DashboardShell title="My appointments" roleLabel="Customer" groups={groups} showOrgSwitcher={false}>{children}</DashboardShell>
+      <DashboardShell title="My appointments" roleLabel="Customer" groups={groups} showOrgSwitcher={false} protect={false}>{children}</DashboardShell>
     </RequireAuth>
   );
 }

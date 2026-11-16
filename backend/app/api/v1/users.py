@@ -3,9 +3,12 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field
 
-from app.api.deps import DB, CurrentUser, TenantContext, get_tenant_context
+from app.api.deps import DB, CurrentUser, Meta, TenantContext, get_tenant_context
 from app.schemas.user import MeResponse, UserRead, UserUpdate
+from app.security.rate_limit import limiter
+from app.services.audit_service import record_audit
 from app.services.user_service import build_me_response, update_me
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -43,3 +46,19 @@ def my_privacy(request: Request, db: DB, ctx: Annotated[TenantContext, Depends(g
         "has_password": bool(ctx.user.password_hash),
         "has_authenticator": ctx.user.mfa_enabled_at is not None,
     }
+
+
+class PrintAttempt(BaseModel):
+    screen: str = Field(default="", max_length=200)
+
+
+@router.post("/me/privacy/print-attempt", summary="Record that a staff screen was printed (or printing was tried)")
+@limiter.limit("30/minute")
+def print_attempt(request: Request, payload: PrintAttempt, db: DB, ctx: Annotated[TenantContext, Depends(get_tenant_context)], meta: Meta) -> dict:
+    """The page path only (never query strings, which could carry search terms)."""
+    from app.services.privacy_service import policy
+
+    screen = payload.screen.split("?", 1)[0].split("#", 1)[0]
+    record_audit(db, action="privacy.print_attempt", actor=ctx.user, organization_id=ctx.organization.id, entity_type="screen",
+                 entity_id=screen[:120] or None, after={"policy": policy(db, ctx.organization)["print_policy"]}, meta=meta)
+    return {"detail": "Recorded."}

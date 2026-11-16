@@ -4,7 +4,7 @@ import { use, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, FileText, Lock, Paperclip, Users } from "lucide-react";
+import { ArrowLeft, FileDown, FileText, Lock, Paperclip, Users } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { customersService } from "@/services/customers";
 import { appointmentsService } from "@/services/booking";
@@ -23,15 +23,20 @@ import { StatusBadge } from "@/components/booking/appointment-summary";
 import { AppointmentSheet } from "@/components/appointments/appointment-sheet";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EraseCustomerDialog } from "@/components/customers/erase-dialog";
+import { MaskedContact, isMasked } from "@/components/privacy/masked-contact";
+import { downloadPrivateFile } from "@/lib/download";
+import { env } from "@/lib/env";
 import { errorMessage } from "@/lib/errors";
+import { privacyService, type RevealedContact } from "@/services/privacy";
 import { formatDate, formatDateTime, formatTime } from "@/lib/format";
 import { formatPaise } from "@/lib/utils";
 import type { Customer } from "@/types/customer";
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { hasPermission } = useAuth();
+  const { hasPermission, currentOrganizationId } = useAuth();
   const queryClient = useQueryClient();
+  const [revealed, setRevealed] = useState<RevealedContact | null>(null);
   const customer = useQuery({ queryKey: ["customer", id], queryFn: () => customersService.get(id) });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["customer", id] });
   if (customer.isLoading) return <Skeleton className="h-64" />;
@@ -40,7 +45,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   return (
     <div className="mx-auto max-w-6xl">
       <Link href="/admin/customers" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Customers</Link>
-      <PageHeader title={c.full_name} description={[c.customer_code, c.mobile, c.email].filter(Boolean).join(" · ")} actions={<div className="flex flex-wrap items-center gap-2">{c.is_guest ? <Badge variant="outline">guest</Badge> : <Badge variant="success">registered</Badge>}{c.tags.map((t) => <Badge key={t} variant="secondary">{t}</Badge>)}{hasPermission("customers:erase") ? <EraseCustomerDialog customerId={c.id} name={c.full_name} /> : null}</div>} />
+      <PageHeader title={c.full_name} description={c.customer_code ?? undefined} actions={<div className="flex flex-wrap items-center gap-2">{hasPermission("customers:export") ? <Button size="sm" variant="outline" data-testid="summary-pdf" onClick={() => downloadPrivateFile(privacyService.summaryUrl(c.id), `${c.customer_code ?? "patient"}-summary.pdf`, currentOrganizationId).then(() => toast.success("Summary downloaded. It carries your watermark.")).catch((e) => toast.error(errorMessage(e)))}><FileDown /> Summary PDF</Button> : null}{c.is_guest ? <Badge variant="outline">guest</Badge> : <Badge variant="success">registered</Badge>}{c.tags.map((t) => <Badge key={t} variant="secondary">{t}</Badge>)}{hasPermission("customers:erase") ? <EraseCustomerDialog customerId={c.id} name={c.full_name} /> : null}</div>} />
+      <div className="-mt-3 mb-5 text-sm text-muted-foreground"><MaskedContact customerId={c.id} mobile={c.mobile} email={c.email} revealed={revealed} onRevealed={setRevealed} /></div>
       <div className="mb-6 grid gap-3 sm:grid-cols-4">
         <Stat label="Appointments" value={c.stats?.total_appointments ?? 0} />
         <Stat label="Upcoming" value={c.stats?.upcoming_appointments ?? 0} />
@@ -50,7 +56,7 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       <Tabs defaultValue="appointments">
         <TabsList className="mb-4 flex h-auto flex-wrap"><TabsTrigger value="appointments">Appointments</TabsTrigger><TabsTrigger value="profile">Profile</TabsTrigger><TabsTrigger value="family">Family</TabsTrigger>{hasPermission("customers:clinical_read") ? <><TabsTrigger value="notes">Notes</TabsTrigger><TabsTrigger value="documents">Documents</TabsTrigger></> : null}</TabsList>
         <TabsContent value="appointments"><Appointments customerId={c.id} /></TabsContent>
-        <TabsContent value="profile"><Profile customer={c} canWrite={hasPermission("customers:write")} onSaved={invalidate} /></TabsContent>
+        <TabsContent value="profile"><Profile key={revealed ? "revealed" : "masked"} customer={revealed ? { ...c, mobile: revealed.mobile, email: revealed.email } : c} canWrite={hasPermission("customers:write")} onSaved={invalidate} /></TabsContent>
         <TabsContent value="family"><Family customerId={c.id} canWrite={hasPermission("customers:write")} /></TabsContent>
         <TabsContent value="notes"><Notes customerId={c.id} canWrite={hasPermission("customers:clinical_write")} /></TabsContent>
         <TabsContent value="documents"><Documents customerId={c.id} canWrite={hasPermission("customers:clinical_write")} /></TabsContent>
@@ -101,8 +107,8 @@ function Profile({ customer, canWrite, onSaved }: { customer: Customer; canWrite
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); save.mutate(); }} data-testid="customer-profile-form">
           <Field label="Full name" htmlFor="cp_name"><Input id="cp_name" value={form.full_name} onChange={set("full_name")} disabled={!canWrite} /></Field>
           <Field label="Tags" htmlFor="cp_tags"><Input id="cp_tags" value={form.tags} onChange={set("tags")} disabled={!canWrite} /></Field>
-          <Field label="Mobile" htmlFor="cp_mobile"><Input id="cp_mobile" value={form.mobile} onChange={set("mobile")} disabled={!canWrite} /></Field>
-          <Field label="Email" htmlFor="cp_email"><Input id="cp_email" type="email" value={form.email} onChange={set("email")} disabled={!canWrite} /></Field>
+          <Field label="Mobile" htmlFor="cp_mobile" hint={isMasked(customer.mobile) ? "Partly hidden. Use Show at the top to see it, or type a new number to change it." : undefined}><Input id="cp_mobile" value={form.mobile} onChange={set("mobile")} disabled={!canWrite} /></Field>
+          <Field label="Email" htmlFor="cp_email" hint={isMasked(customer.email) ? "Partly hidden. Use Show at the top to see it, or type a new email to change it." : undefined}><Input id="cp_email" type={isMasked(customer.email) ? "text" : "email"} value={form.email} onChange={set("email")} disabled={!canWrite} /></Field>
           <Field label="Gender" htmlFor="cp_gender"><NativeSelect id="cp_gender" value={form.gender} onChange={set("gender")} disabled={!canWrite}><option value="">—</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option><option value="undisclosed">Prefer not to say</option></NativeSelect></Field>
           <Field label="Date of birth" htmlFor="cp_dob"><Input id="cp_dob" type="date" value={form.date_of_birth} onChange={set("date_of_birth")} disabled={!canWrite} /></Field>
           <Field label="Blood group" htmlFor="cp_blood"><Input id="cp_blood" value={form.blood_group} onChange={set("blood_group")} disabled={!canWrite} /></Field>
@@ -164,6 +170,20 @@ function Notes({ customerId, canWrite }: { customerId: string; canWrite: boolean
   );
 }
 
+/** Opens a private document through a link that works once for 60 seconds (the API checks access again). */
+async function openDocument(customerId: string, documentId: string) {
+  const tab = window.open("about:blank", "_blank");
+  try {
+    const { url } = await privacyService.documentLink(customerId, documentId);
+    const full = url.startsWith("/") ? `${env.apiUrl}${url}` : url;
+    if (tab) tab.location.href = full;
+    else window.location.href = full;
+  } catch (e) {
+    tab?.close();
+    toast.error(errorMessage(e));
+  }
+}
+
 function Documents({ customerId, canWrite }: { customerId: string; canWrite: boolean }) {
   const queryClient = useQueryClient();
   const docs = useQuery({ queryKey: ["documents", customerId], queryFn: () => customersService.documents(customerId) });
@@ -176,8 +196,8 @@ function Documents({ customerId, canWrite }: { customerId: string; canWrite: boo
       <CardHeader><CardTitle className="flex items-center gap-2"><Paperclip className="size-4" /> Documents</CardTitle><CardDescription>Reports, prescriptions and scans in private storage. Downloads are audit-logged and respect the retention policy.</CardDescription></CardHeader>
       <CardContent className="space-y-4">
         {canWrite ? <div className="grid items-end gap-3 sm:grid-cols-[1fr_160px_auto]"><Field label="Title" htmlFor="doc_title"><Input id="doc_title" placeholder="Defaults to file name" value={meta.title} onChange={(e) => setMeta({ ...meta, title: e.target.value })} /></Field><Field label="Type" htmlFor="doc_type"><NativeSelect id="doc_type" value={meta.document_type} onChange={(e) => setMeta({ ...meta, document_type: e.target.value })}>{["report", "prescription", "scan", "id_proof", "consent", "other"].map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}</NativeSelect></Field><Button type="button" variant="outline" disabled={upload.isPending} onClick={() => input.current?.click()}><FileText /> Upload PDF or image</Button><input ref={input} type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) upload.mutate(f); }} /></div> : null}
-        <Alert variant="info"><AlertDescription>Files never pass through the public media folder. Staff with clinical access download them through an authenticated link.</AlertDescription></Alert>
-        <ul className="divide-y rounded-lg border">{docs.data?.map((d) => <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"><span><a className="font-medium hover:underline" href={customersService.documentUrl(customerId, d.id)} target="_blank" rel="noreferrer">{d.title}</a><span className="block text-xs text-muted-foreground">{d.document_type.replace("_", " ")} · {(d.size_bytes / 1024).toFixed(0)} KB · {d.uploaded_by_name ?? "—"} · {formatDateTime(d.created_at)}{d.retention_until ? ` · kept until ${formatDate(d.retention_until)}` : ""}</span></span>{canWrite ? <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm("Delete this document?")) remove.mutate(d.id); }}>Delete</Button> : null}</li>)}{docs.data?.length === 0 ? <li className="px-3 py-6 text-center text-sm text-muted-foreground">No documents.</li> : null}</ul>
+        <Alert variant="info"><AlertDescription>Files never pass through the public media folder. Staff with clinical access open them through a link that works for 60 seconds; every opening is recorded.</AlertDescription></Alert>
+        <ul className="divide-y rounded-lg border">{docs.data?.map((d) => <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"><span><button type="button" className="font-medium hover:underline" onClick={() => openDocument(customerId, d.id)}>{d.title}</button><span className="block text-xs text-muted-foreground">{d.document_type.replace("_", " ")} · {(d.size_bytes / 1024).toFixed(0)} KB · {d.uploaded_by_name ?? "—"} · {formatDateTime(d.created_at)}{d.retention_until ? ` · kept until ${formatDate(d.retention_until)}` : ""}</span></span>{canWrite ? <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm("Delete this document?")) remove.mutate(d.id); }}>Delete</Button> : null}</li>)}{docs.data?.length === 0 ? <li className="px-3 py-6 text-center text-sm text-muted-foreground">No documents.</li> : null}</ul>
       </CardContent>
     </Card>
   );

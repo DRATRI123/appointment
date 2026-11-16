@@ -201,6 +201,9 @@ Known limits, not yet addressed:
 
 ## Healthcare privacy
 
+Masking, Show, screen lock, watermark, print rules, export limits, signed document links, audit signatures and
+what cannot be prevented: [privacy-and-data-protection.md](privacy-and-data-protection.md).
+
 * Customer notes and documents are restricted to clinical roles (`customers:clinical_read`).
 * Clinical note bodies are encrypted with AES-256-GCM (`app/security/crypto.py`, key from
   `DATA_ENCRYPTION_KEY`, derived from `SECRET_KEY` only in development/test). Documents live in private

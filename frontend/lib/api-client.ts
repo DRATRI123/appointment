@@ -6,6 +6,7 @@
  * - Normalises backend error envelopes into `ApiError`.
  */
 import { apiBase } from "@/lib/env";
+import { askReauth, notifyLocked } from "@/lib/privacy-bus";
 import type { ApiErrorBody } from "@/types/api";
 
 export class ApiError extends Error {
@@ -105,6 +106,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
     if (response.status === 401 && !isAuthRoute && !_retried && error.code === "token_expired") {
       if (await tryRefresh()) return apiRequest<T>(path, options, true);
     }
+    // Sensitive action (reveal, export, document, settings): confirm it is still the same person, then try again.
+    if (response.status === 403 && error.code === "reauth_required" && !_retried) {
+      if (await askReauth()) return apiRequest<T>(path, options, true);
+    }
+    if (response.status === 403 && error.code === "session_locked") notifyLocked();
     // The clinic requires two-step sign-in for administrators and this account has not set it up yet.
     if (response.status === 403 && error.code === "mfa_setup_required" && typeof window !== "undefined" && !window.location.pathname.startsWith("/customer/profile")) {
       // Outside React (no router here); a full page load is fine for this one-off redirect.

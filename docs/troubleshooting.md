@@ -15,6 +15,12 @@ request id that you can search for in the logs.
 | Sign-in code never arrives | On your PC codes are not sent: they are printed in the **API window** |
 | Start over with an empty database | Close the app, rename `backend\data\app.db` (keep it as a backup), double-click START-APP.bat |
 | PowerShell refuses `Activate.ps1` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once |
+| Mobile numbers show as `98111XXXXX` | Privacy masking (on by default). Press **Show** on the patient page, or turn it off in Admin → Settings → Privacy & data protection |
+| "Screen locked" appears | No use for 15 minutes (or as the clinic set). Enter your password, or sign out. Change the time in the privacy settings |
+| "Confirm it is you" keeps appearing | It lasts 10 minutes by default (the privacy settings allow up to 120). Accounts without a password use **Send me a code**: on your PC the code is printed in the API window |
+| "This link has expired" for a document | Document links work for 60 seconds. Open the document again from the patient's record |
+| "You have reached today's limit of 20 exports" | The daily export limit (20 per person by default). Raise it in the privacy settings if this is normal work |
+| Uploads refused with "Files cannot be checked for viruses right now" | `UPLOAD_SCANNER=clamav` is set but ClamAV is not running: start it (`docker compose --profile antivirus up -d clamav`) or set `UPLOAD_SCANNER=none` |
 
 ## Docker development
 

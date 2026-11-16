@@ -152,7 +152,7 @@ def get_optional_user(request: Request, db: DB, _usage: Annotated[None, Depends(
     return user
 
 
-UNLOCK_PATHS = frozenset([*(f"/api/v1/auth/{p}" for p in ("reauth", "reauth/send-code", "logout", "lock")), "/api/v1/users/me"])
+UNLOCK_PATHS = frozenset([*(f"/api/v1/auth/{p}" for p in ("reauth", "reauth/send-code", "logout", "lock")), "/api/v1/users/me", "/api/v1/users/me/privacy"])
 
 
 def get_current_user(user: Annotated[User | None, Depends(get_optional_user)]) -> User:

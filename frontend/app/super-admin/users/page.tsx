@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { platformService } from "@/services/platform";
+import { privacyService } from "@/services/privacy";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,11 @@ export default function PlatformUsersPage() {
   const setStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => platformService.setUserStatus(id, status),
     onSuccess: () => { toast.success("User updated"); queryClient.invalidateQueries({ queryKey: ["platform-users"] }); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const signOut = useMutation({
+    mutationFn: (id: string) => privacyService.revokeUser(id),
+    onSuccess: (r) => toast.success(r.detail),
     onError: (e) => toast.error(errorMessage(e)),
   });
   return (
@@ -47,11 +53,14 @@ export default function PlatformUsersPage() {
                 <TableCell className="text-muted-foreground">{formatDateTime(u.last_login_at)}</TableCell>
                 <TableCell className="text-right">
                   {u.id !== me?.id ? (
-                    u.status === "suspended" ? (
+                    <>
+                    <Button size="sm" variant="ghost" onClick={() => { if (confirm(`Sign ${u.full_name} out on every device?`)) signOut.mutate(u.id); }} data-testid="user-signout-everywhere">Sign out everywhere</Button>
+                    {u.status === "suspended" ? (
                       <Button size="sm" variant="ghost" onClick={() => setStatus.mutate({ id: u.id, status: "active" })}>Reactivate</Button>
                     ) : (
                       <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setStatus.mutate({ id: u.id, status: "suspended" })}>Suspend</Button>
-                    )
+                    )}
+                    </>
                   ) : null}
                 </TableCell>
               </TableRow>

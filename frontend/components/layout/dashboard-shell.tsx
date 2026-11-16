@@ -6,6 +6,7 @@ import { AnnouncementBanner } from "@/components/layout/announcement-banner";
 import { SidebarNav, type NavGroup } from "./sidebar-nav";
 import { EnvironmentBadge } from "./environment-badge";
 import { useAuth } from "@/components/auth/auth-provider";
+import { PrivacyGuard } from "@/components/privacy/privacy-guard";
 
 export type { NavGroup, NavItem } from "./sidebar-nav";
 
@@ -14,6 +15,7 @@ export function DashboardShell({
   roleLabel,
   groups,
   showOrgSwitcher = true,
+  protect = true,
   children,
 }: {
   title: string;
@@ -21,6 +23,8 @@ export function DashboardShell({
   roleLabel?: string;
   groups: NavGroup[];
   showOrgSwitcher?: boolean;
+  /** Staff screens: inactivity lock, watermark, print policy, "confirm it is you". Off for the patient area. */
+  protect?: boolean;
   children: React.ReactNode;
 }) {
   const { currentMembership } = useAuth();
@@ -48,7 +52,7 @@ export function DashboardShell({
           <HeaderUser showOrgSwitcher={showOrgSwitcher} />
         </header>
         <AnnouncementBanner />
-        <main className="flex-1 p-4 md:p-8">{children}</main>
+        <main className="flex-1 p-4 md:p-8"><PrivacyGuard enabled={protect}>{children}</PrivacyGuard></main>
       </div>
     </div>
   );

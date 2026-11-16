@@ -170,3 +170,15 @@
 @media (prefers-reduced-motion: reduce) {
   .pb-enter, .pb-pop { animation: none; }
 }
+
+/* Printing staff screens (PrivacyGuard sets data-print-policy from the clinic's privacy settings). The watermark
+   prints with the page; "block" prints only a notice. A browser cannot stop screenshots or "save as": this only
+   discourages casual printing, and every print attempt is recorded. */
+.print-only-notice { display: none; }
+@media print {
+  [data-print-policy] aside, [data-print-policy] header { display: none !important; }
+  [data-print-policy] .print-confidential { font-weight: 600; color: #000; }
+  [data-print-policy="block"] main > * { display: none !important; }
+  [data-print-policy="block"] .print-only-notice { display: block !important; }
+  [data-watermark] { opacity: 0.12 !important; }
+}

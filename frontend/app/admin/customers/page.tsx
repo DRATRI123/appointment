@@ -19,6 +19,7 @@ import { Field } from "@/components/forms/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/errors";
 import { formatDate } from "@/lib/format";
+import { downloadPrivateFile } from "@/lib/download";
 
 const SEGMENTS: [string, string][] = [["", "All customers"], ["upcoming", "With upcoming appointment"], ["new_30d", "New in last 30 days"], ["returning", "Returning (2+ visits)"], ["inactive_90d", "Inactive 90+ days"]];
 
@@ -41,7 +42,7 @@ export default function CustomersPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader title="Customers" description="Every patient or client of this organization, with their history, family members, notes and documents." actions={
         <div className="flex gap-2">
-          {hasPermission("customers:export") ? <Button asChild variant="outline"><a href={customersService.exportUrl()} download><Download /> Export CSV</a></Button> : null}
+          {hasPermission("customers:export") ? <Button variant="outline" data-testid="export-customers" onClick={() => downloadPrivateFile(customersService.exportUrl(), "customers.csv", orgId).then(() => toast.success("Export downloaded. It is recorded in the audit log.")).catch((e) => toast.error(errorMessage(e)))}><Download /> Export CSV</Button> : null}
           {canWrite ? <Button onClick={() => setCreating(true)}><Plus /> Add customer</Button> : null}
         </div>
       } />

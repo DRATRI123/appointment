@@ -369,3 +369,16 @@ def test_postgres_refuses_to_change_or_delete_audit_history(client, db, clinic):
         with pytest.raises(DBAPIError, match="append-only"):
             db.execute(stmt)
         nested.rollback()
+
+
+def test_watermark_policy_has_no_personal_data_and_print_attempts_are_recorded(client, db, clinic):
+    pol = clinic.client.get("/api/v1/users/me/privacy", headers=clinic.h)
+    assert pol.status_code == 200, pol.text
+    body = pol.json()
+    assert body["user_ref"].startswith("U-") and body["session_ref"].startswith("S-") and body["print_policy"] == "warn"
+    assert "priv-owner" not in str(body) and "@" not in str(body)  # references only: no name, email or number
+    r = clinic.client.post("/api/v1/users/me/privacy/print-attempt", json={"screen": "/admin/customers/abc?search=ramesh#x"}, headers=clinic.h)
+    assert r.status_code == 200, r.text
+    row = _audit(db, "privacy.print_attempt")[-1]
+    assert row.entity_id == "/admin/customers/abc" and row.after == {"policy": "warn"}  # the search term is never stored
+    assert client.post("/api/v1/users/me/privacy/print-attempt", json={"screen": "/x"}).status_code == 401
