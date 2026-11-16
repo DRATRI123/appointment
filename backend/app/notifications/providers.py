@@ -15,8 +15,8 @@ from typing import Any, Protocol
 
 import httpx
 
-from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.services.platform_config import runtime_settings as get_settings  # panel values win over .env
 
 log = get_logger(__name__)
 
@@ -336,6 +336,242 @@ class MetaWhatsAppProvider(_HTTPProvider):
         return result
 
 
+# -------------------------------------------------------------------- Brevo
+class BrevoEmailProvider(_HTTPProvider):
+    """Brevo transactional email: POST https://api.brevo.com/v3/smtp/email with the ``api-key`` header."""
+
+    name = "brevo"
+    channel = "email"
+
+    def configured(self) -> bool:
+        s = _cfg(self)
+        return bool(s.brevo_api_key and (s.email_from or s.smtp_from))
+
+    def send(self, message: OutboundMessage) -> DeliveryResult:
+        s = _cfg(self)
+        if not self.configured():
+            return DeliveryResult(self.name, False, error="The Brevo API key and the sender email are not set.")
+        payload: dict[str, Any] = {"sender": {"email": s.email_from or s.smtp_from, "name": message.from_name or s.smtp_from_name or "Appointments"},
+                                   "to": [{"email": message.to}], "subject": message.subject or "(no subject)", "textContent": message.body}
+        if message.html:
+            payload["htmlContent"] = message.html
+        if message.reply_to:
+            payload["replyTo"] = {"email": message.reply_to}
+        resp = self._post("https://api.brevo.com/v3/smtp/email", json=payload, headers={"api-key": s.brevo_api_key or "", "accept": "application/json"})
+        if isinstance(resp, DeliveryResult):
+            resp.provider = self.name
+            return resp
+        mid = None
+        try:
+            mid = resp.json().get("messageId")
+        except (ValueError, AttributeError):
+            pass
+        result = _http_result(self.name, resp, mid)
+        if not result.ok and resp.status_code in (400, 401, 403):
+            result.retryable = False
+        return result
+
+
+# ----------------------------------------------------------- Amazon SES / SNS
+def _aws_client(service: str, s: Any):
+    import boto3
+    from botocore.config import Config
+
+    return boto3.client(service, region_name=s.aws_region, aws_access_key_id=s.aws_access_key_id, aws_secret_access_key=s.aws_secret_access_key,
+                        config=Config(connect_timeout=10, read_timeout=20, retries={"max_attempts": 2, "mode": "standard"}))
+
+
+def _aws_failure(provider: str, exc: Exception) -> DeliveryResult:
+    code = getattr(exc, "response", {}).get("Error", {}).get("Code", "") if hasattr(exc, "response") else ""
+    retryable = code in ("Throttling", "ThrottlingException", "TooManyRequestsException", "ServiceUnavailable", "InternalFailure") or \
+        type(exc).__name__ in ("EndpointConnectionError", "ConnectTimeoutError", "ReadTimeoutError")
+    return DeliveryResult(provider, False, retryable=retryable, error=f"{code or type(exc).__name__}: {str(exc)[:250]}")
+
+
+class SESEmailProvider:
+    """Amazon SES (API v2, SendEmail). The sender must be a verified identity in that region."""
+
+    name = "ses"
+    channel = "email"
+
+    def __init__(self, config: ProviderConfig | None = None, client: Any = None):
+        self._config, self._client = config, client
+
+    def configured(self) -> bool:
+        s = _cfg(self)
+        return bool(s.aws_region and s.aws_access_key_id and s.aws_secret_access_key and (s.email_from or s.smtp_from))
+
+    def send(self, message: OutboundMessage) -> DeliveryResult:
+        from email.utils import formataddr as _fa
+
+        s = _cfg(self)
+        if not self.configured():
+            return DeliveryResult(self.name, False, error="The AWS region, access keys and a verified sender email are needed for Amazon SES.")
+        body: dict[str, Any] = {"Text": {"Data": message.body, "Charset": "UTF-8"}}
+        if message.html:
+            body["Html"] = {"Data": message.html, "Charset": "UTF-8"}
+        args: dict[str, Any] = {"FromEmailAddress": _fa((message.from_name or s.smtp_from_name or "Appointments", s.email_from or s.smtp_from)),
+                                "Destination": {"ToAddresses": [message.to]},
+                                "Content": {"Simple": {"Subject": {"Data": message.subject or "(no subject)", "Charset": "UTF-8"}, "Body": body}}}
+        if message.reply_to:
+            args["ReplyToEmailAddresses"] = [message.reply_to]
+        try:
+            resp = (self._client or _aws_client("sesv2", s)).send_email(**args)
+        except Exception as exc:  # noqa: BLE001 - botocore errors
+            return _aws_failure(self.name, exc)
+        return DeliveryResult(self.name, True, message_id=resp.get("MessageId"))
+
+
+class SNSSMSProvider:
+    """Amazon SNS SMS (Publish to a phone number). For India, the DLT entity and template IDs are sent as the
+    AWS.MM.SMS.EntityId / AWS.MM.SMS.TemplateId attributes."""
+
+    name = "sns"
+    channel = "sms"
+
+    def __init__(self, config: ProviderConfig | None = None, client: Any = None):
+        self._config, self._client = config, client
+
+    def configured(self) -> bool:
+        s = _cfg(self)
+        return bool(s.aws_region and s.aws_access_key_id and s.aws_secret_access_key)
+
+    def send(self, message: OutboundMessage) -> DeliveryResult:
+        s = _cfg(self)
+        if not self.configured():
+            return DeliveryResult(self.name, False, error="The AWS region and access keys are needed for Amazon SNS.")
+        attrs: dict[str, Any] = {"AWS.SNS.SMS.SMSType": {"DataType": "String", "StringValue": "Transactional"}}
+        if s.sns_sender_id:
+            attrs["AWS.SNS.SMS.SenderID"] = {"DataType": "String", "StringValue": s.sns_sender_id}
+        if s.dlt_entity_id:
+            attrs["AWS.MM.SMS.EntityId"] = {"DataType": "String", "StringValue": s.dlt_entity_id}
+        if message.provider_template_id:
+            attrs["AWS.MM.SMS.TemplateId"] = {"DataType": "String", "StringValue": message.provider_template_id}
+        try:
+            resp = (self._client or _aws_client("sns", s)).publish(PhoneNumber=message.to, Message=message.body, MessageAttributes=attrs)
+        except Exception as exc:  # noqa: BLE001
+            return _aws_failure(self.name, exc)
+        return DeliveryResult(self.name, True, message_id=resp.get("MessageId"))
+
+
+# ------------------------------------------------------------------ 2Factor
+class TwoFactorSMSProvider(_HTTPProvider):
+    """2Factor.in, for sign-in codes only: GET https://2factor.in/API/V1/{key}/SMS/{phone}/{code}/{template}.
+    Other SMS (reminders, confirmations) are refused with a clear message so the fallback provider sends them;
+    2Factor's transactional-SMS API is not used because its parameters could not be confirmed from official docs."""
+
+    name = "twofactor"
+    channel = "sms"
+
+    def configured(self) -> bool:
+        return bool(_cfg(self).twofactor_api_key)
+
+    def send(self, message: OutboundMessage) -> DeliveryResult:
+        from urllib.parse import quote
+
+        s = _cfg(self)
+        if not self.configured():
+            return DeliveryResult(self.name, False, error="The 2Factor API key is not set.")
+        if not (message.sensitive and message.template_params):
+            return DeliveryResult(self.name, False, error="2Factor is set up for sign-in codes only. Choose another SMS provider (or a fallback) for other messages.")
+        code = message.template_params[0]
+        phone = message.to.lstrip("+")
+        url = f"https://2factor.in/API/V1/{quote(s.twofactor_api_key or '', safe='')}/SMS/{quote(phone, safe='')}/{quote(code, safe='')}"
+        if message.provider_template_id:
+            url += f"/{quote(message.provider_template_id, safe='')}"
+        try:
+            if self._client is not None:
+                resp = self._client.get(url)
+            else:
+                with self.client() as c:
+                    resp = c.get(url)
+        except httpx.HTTPError as exc:
+            return DeliveryResult(self.name, False, retryable=True, error=type(exc).__name__)
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        if resp.status_code == 200 and data.get("Status") == "Success":
+            return DeliveryResult(self.name, True, message_id=str(data.get("Details") or "")[:120] or None)
+        # The URL contains the API key: never put it into the stored error.
+        return DeliveryResult(self.name, False, retryable=resp.status_code >= 500 or resp.status_code == 429,
+                              error=f"HTTP {resp.status_code}: {str(data.get('Details') or '')[:200]}")
+
+
+# -------------------------------------------------------------------- Gmail
+class GmailProvider(_HTTPProvider):
+    """Gmail API (users.messages.send) with a connected Google account (OAuth, scope gmail.send). The access token is
+    passed in by whoever owns the connection (a clinic's Gmail integration)."""
+
+    name = "gmail"
+    channel = "email"
+
+    def __init__(self, token_fn, sender: str, client: httpx.Client | None = None):
+        super().__init__(client, None)
+        self._token_fn, self._sender = token_fn, sender
+
+    def configured(self) -> bool:
+        return bool(self._sender)
+
+    def send(self, message: OutboundMessage) -> DeliveryResult:
+        import base64
+
+        mail = EmailMessage()
+        mail["From"] = formataddr((message.from_name or "", self._sender)) if message.from_name else self._sender
+        mail["To"] = message.to
+        mail["Subject"] = message.subject or "(no subject)"
+        mail["Message-ID"] = make_msgid(domain=self._sender.split("@")[-1])
+        if message.reply_to:
+            mail["Reply-To"] = message.reply_to
+        mail.set_content(message.body)
+        if message.html:
+            mail.add_alternative(message.html, subtype="html")
+        raw = base64.urlsafe_b64encode(mail.as_bytes()).decode()
+        try:
+            token = self._token_fn()
+        except Exception as exc:  # noqa: BLE001 - IntegrationAPIError (reconnect needed) or network
+            return DeliveryResult(self.name, False, retryable=bool(getattr(exc, "retryable", False)), error=str(exc)[:300])
+        resp = self._post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", json={"raw": raw},
+                          headers={"Authorization": f"Bearer {token}"})
+        if isinstance(resp, DeliveryResult):
+            resp.provider = self.name
+            return resp
+        mid = None
+        try:
+            mid = resp.json().get("id")
+        except (ValueError, AttributeError):
+            pass
+        result = _http_result(self.name, resp, mid)
+        if not result.ok and resp.status_code in (400, 401, 403):
+            result.retryable = False
+        return result
+
+
+# ----------------------------------------------------------------- fallback
+class FallbackProvider:
+    """Try the main provider; if it fails, try the fallback once. The result says which one sent it."""
+
+    def __init__(self, primary: Any, secondary: Any):
+        self.primary, self.secondary = primary, secondary
+        self.name = primary.name
+        self.channel = primary.channel
+
+    def configured(self) -> bool:
+        return self.primary.configured() or self.secondary.configured()
+
+    def send(self, message: OutboundMessage) -> DeliveryResult:
+        first = self.primary.send(message) if self.primary.configured() else DeliveryResult(self.primary.name, False, error="not set up")
+        if first.ok or not self.secondary.configured():
+            return first
+        second = self.secondary.send(message)
+        if second.ok:
+            second.response = {**(second.response or {}), "fallback_after": f"{first.provider}: {first.error}"[:300]}
+            return second
+        second.error = f"{first.provider}: {first.error} | {second.provider}: {second.error}"[:500]
+        second.retryable = first.retryable or second.retryable
+        return second
+
+
 # ---------------------------------------------------------------- registry
 _console: dict[str, ConsoleProvider] = {ch: ConsoleProvider(channel=ch) for ch in ("email", "sms", "whatsapp")}
 _overrides: dict[str, Provider] = {}
@@ -353,24 +589,41 @@ def set_provider(channel: str, provider: Provider | None) -> None:
         _overrides[channel] = provider
 
 
-def get_provider(channel: str) -> Provider:
-    if channel in _overrides:
-        return _overrides[channel]
-    s = get_settings()
-    choice = {"email": s.email_provider, "sms": s.sms_provider, "whatsapp": s.whatsapp_provider}.get(channel, "console")
+def build_named(channel: str, choice: str) -> Provider:
+    """The platform provider called ``choice`` for a channel, with the effective settings (panel over .env)."""
     if choice == "console":
         return _console[channel]
     if choice == "disabled":
         return DisabledProvider(channel)
     if channel == "email" and choice == "smtp":
         return SMTPEmailProvider()
+    if channel == "email" and choice == "brevo":
+        return BrevoEmailProvider()
+    if channel == "email" and choice == "ses":
+        return SESEmailProvider()
     if channel in ("sms", "whatsapp") and choice == "twilio":
         return TwilioProvider(channel)
     if channel == "sms" and choice == "msg91":
         return MSG91SMSProvider()
+    if channel == "sms" and choice == "sns":
+        return SNSSMSProvider()
+    if channel == "sms" and choice == "twofactor":
+        return TwoFactorSMSProvider()
     if channel == "whatsapp" and choice == "meta":
         return MetaWhatsAppProvider()
     raise RuntimeError(f"Unknown {channel} provider '{choice}'.")
+
+
+def get_provider(channel: str) -> Provider:
+    if channel in _overrides:
+        return _overrides[channel]
+    s = get_settings()
+    choice = {"email": s.email_provider, "sms": s.sms_provider, "whatsapp": s.whatsapp_provider}.get(channel, "console")
+    primary = build_named(channel, choice)
+    fallback = {"email": s.email_fallback_provider, "sms": s.sms_fallback_provider}.get(channel)
+    if fallback and fallback not in (choice, "console", "disabled") and choice not in ("console", "disabled"):
+        return FallbackProvider(primary, build_named(channel, fallback))  # type: ignore[return-value]
+    return primary
 
 
 def provider_status() -> list[dict[str, Any]]:

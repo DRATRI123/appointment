@@ -7,7 +7,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -157,12 +156,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
     # Public uploads (logos, photos, service images). Private files are never served from here.
-    if settings.storage_backend == "local":
-        public_dir = Path(settings.storage_local_path) / "public"
-        public_dir.mkdir(parents=True, exist_ok=True)
-        app.mount("/media", StaticFiles(directory=str(public_dir)), name="media")
-    else:
-        app.add_route("/media/{path:path}", media_from_bucket, methods=["GET", "HEAD"], include_in_schema=False)
+    # One route for both storages, so switching between this server's disk and S3 in the panel needs no restart.
+    (Path(settings.storage_local_path) / "public").mkdir(parents=True, exist_ok=True)
+    app.add_route("/media/{path:path}", media_from_bucket, methods=["GET", "HEAD"], include_in_schema=False)
     return app
 
 

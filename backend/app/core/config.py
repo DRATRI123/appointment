@@ -152,6 +152,21 @@ class Settings(BaseSettings):
     whatsapp_cloud_api_version: str = "v21.0"
     otp_whatsapp_template: str | None = None  # Meta authentication template "name:language" or Twilio content SID (HX...)
     otp_sms_template_id: str | None = None  # DLT / MSG91 flow id for the login-code SMS
+    # More providers (all can also be set in Super admin -> Integrations, which wins over these values).
+    email_from: str | None = None  # sender for Brevo / Amazon SES (SMTP uses SMTP_FROM)
+    email_fallback_provider: str | None = None  # tried once when the main email provider fails
+    sms_fallback_provider: str | None = None
+    brevo_api_key: str | None = None
+    aws_region: str | None = None  # Amazon SES (email) and SNS (SMS)
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    twofactor_api_key: str | None = None  # 2Factor.in
+    twofactor_sender_id: str | None = None
+    sns_sender_id: str | None = None
+    dlt_entity_id: str | None = None  # India DLT principal entity ID (SNS, 2Factor)
+    whatsapp_business_account_id: str | None = None  # for listing approved templates
+    whatsapp_app_secret: str | None = None  # verifies Meta delivery-report webhooks (X-Hub-Signature-256)
+    whatsapp_webhook_verify_token: str | None = None
     notification_max_attempts: int = 5
     # Developer API and webhooks
     api_key_default_rate_limit: int = 120  # requests per minute per key
@@ -204,7 +219,7 @@ class Settings(BaseSettings):
     @field_validator("email_provider", "sms_provider", "whatsapp_provider")
     @classmethod
     def _known_message_provider(cls, value: str, info) -> str:
-        allowed = {"email_provider": ("console", "smtp", "disabled"), "sms_provider": ("console", "msg91", "twilio", "disabled"),
+        allowed = {"email_provider": ("console", "smtp", "brevo", "ses", "disabled"), "sms_provider": ("console", "msg91", "twilio", "twofactor", "sns", "disabled"),
                    "whatsapp_provider": ("console", "meta", "twilio", "disabled")}[info.field_name]
         if value not in allowed:
             raise ValueError(f"{info.field_name.upper()} must be one of: {', '.join(allowed)}")
@@ -281,6 +296,10 @@ class Settings(BaseSettings):
             ("SMS_PROVIDER", "twilio"): ("twilio_account_sid", "twilio_auth_token", "twilio_sms_from"),
             ("WHATSAPP_PROVIDER", "meta"): ("whatsapp_cloud_token", "whatsapp_cloud_phone_number_id"),
             ("WHATSAPP_PROVIDER", "twilio"): ("twilio_account_sid", "twilio_auth_token", "twilio_whatsapp_from"),
+            ("EMAIL_PROVIDER", "brevo"): ("brevo_api_key", "email_from"),
+            ("EMAIL_PROVIDER", "ses"): ("aws_region", "aws_access_key_id", "aws_secret_access_key", "email_from"),
+            ("SMS_PROVIDER", "twofactor"): ("twofactor_api_key",),
+            ("SMS_PROVIDER", "sns"): ("aws_region", "aws_access_key_id", "aws_secret_access_key"),
         }
         chosen = {"EMAIL_PROVIDER": self.email_provider, "SMS_PROVIDER": self.sms_provider, "WHATSAPP_PROVIDER": self.whatsapp_provider}
         out = []

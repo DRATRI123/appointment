@@ -15,6 +15,7 @@ from app.api.v1 import (
     payments,
     platform,
     platform_database,
+    platform_integrations,
     public,
     reconciliation,
     refunds,
@@ -63,5 +64,6 @@ if get_settings().app_env in ("development", "test"):
 
     api_router.include_router(dev.router)
 api_router.include_router(public.router)
-api_router.include_router(platform_database.router)  # before /platform/{...} routes
+api_router.include_router(platform_database.router)
+api_router.include_router(platform_integrations.router)  # before /platform/{...} routes
 api_router.include_router(platform.router)

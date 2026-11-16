@@ -11,7 +11,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.models.verification import MessagingProviderConfig
 from app.notifications.providers import (
     MetaWhatsAppProvider,
@@ -23,6 +22,7 @@ from app.notifications.providers import (
     get_provider,
 )
 from app.security.crypto import decrypt_text
+from app.services.platform_config import runtime_settings as get_settings  # panel values win over .env
 
 CHANNELS = ("sms", "email", "whatsapp")
 

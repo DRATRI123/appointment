@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
-from app.core.config import get_settings
 from app.core.exceptions import ValidationFailed
 
 IMAGE_SIGNATURES: dict[str, tuple[bytes, ...]] = {
@@ -155,27 +154,13 @@ class EncryptingStorage:
 
     def write_raw(self, key: str, data: bytes) -> None:
         """Replace a stored file in place (key rotation / first-time encryption). Same key, same location."""
-        if isinstance(self.inner, LocalStorage):
-            path = self.inner._path(key)
-            tmp = path.with_suffix(path.suffix + ".tmp")
-            tmp.write_bytes(data)
-            tmp.replace(path)
-        else:
-            self.inner.client.put_object(Bucket=self.inner.bucket, Key=self.inner._key(key), Body=data, ServerSideEncryption="AES256")
+        write_raw(self.inner.active if isinstance(self.inner, FallbackStorage) else self.inner, key, data)
 
     def private_keys(self):
         """Every stored private file key (for rotation)."""
-        if isinstance(self.inner, LocalStorage):
-            root = self.inner.root
-            for path in sorted((root / "private").rglob("*")):
-                if path.is_file() and not path.name.endswith(".tmp"):
-                    yield str(path.relative_to(root)).replace("\\", "/")
-        else:
-            paginator = self.inner.client.get_paginator("list_objects_v2")
-            prefix = self.inner._key("private/")
-            for page in paginator.paginate(Bucket=self.inner.bucket, Prefix=prefix):
-                for obj in page.get("Contents", []):
-                    yield obj["Key"][len(self.inner._key("")):]
+        inner = self.inner.active if isinstance(self.inner, FallbackStorage) else self.inner
+        for key, _size in list_keys(inner, "private/"):
+            yield key
 
     def delete(self, key: str) -> None:
         self.inner.delete(key)
@@ -184,23 +169,134 @@ class EncryptingStorage:
         return getattr(self.inner, name)
 
 
+class FallbackStorage:
+    """Right after a switch (local -> S3 or back), files copied in the last moments may still exist only in the old place.
+    Reads try the active storage first and then the previous one; writes and deletes go to the active one."""
+
+    def __init__(self, active, previous):
+        self.active, self.previous = active, previous
+
+    def save(self, **kw) -> StoredFile:
+        return self.active.save(**kw)
+
+    def open(self, key: str) -> BinaryIO:
+        try:
+            return self.active.open(key)
+        except (FileNotFoundError, OSError):
+            return self.previous.open(key)
+
+    def delete(self, key: str) -> None:
+        self.active.delete(key)
+        try:
+            self.previous.delete(key)
+        except Exception:  # noqa: BLE001 - best effort on the old copy
+            pass
+
+    def __getattr__(self, name):
+        return getattr(self.active, name)
+
+
+STORAGE_FIELDS = ("storage_backend", "storage_local_path", "s3_bucket", "s3_region", "s3_endpoint_url", "s3_access_key_id",
+                  "s3_secret_access_key", "s3_prefix")
+
 _storage: Storage | None = None
+_storage_fp: str | None = None
+
+
+def s3_client(cfg=None):
+    """A boto3 S3 client from the effective settings (panel values win over .env), or from ``cfg``."""
+    import boto3
+    from botocore.config import Config
+
+    from app.services.platform_config import runtime_settings
+
+    c = cfg or runtime_settings()
+    return boto3.client("s3", region_name=c.s3_region or None, endpoint_url=c.s3_endpoint_url or None,
+                        aws_access_key_id=c.s3_access_key_id or None, aws_secret_access_key=c.s3_secret_access_key or None,
+                        config=Config(connect_timeout=10, read_timeout=30, retries={"max_attempts": 3, "mode": "standard"}))
+
+
+def build_backend(backend: str):
+    from app.services.platform_config import runtime_settings
+
+    c = runtime_settings()
+    if backend == "local":
+        return LocalStorage(Path(c.storage_local_path))
+    return S3Storage(s3_client(), c.s3_bucket or "", c.s3_prefix or "")
+
+
+def active_backend() -> str:
+    from app.services.platform_config import value
+
+    return value("storage_backend") or "local"
 
 
 def get_storage() -> Storage:
-    global _storage
-    if _storage is None:
-        settings = get_settings()
-        if settings.storage_backend == "local":
-            inner: Storage = LocalStorage(Path(settings.storage_local_path))
-        else:
-            import boto3
+    """The active storage. Rebuilt automatically when the storage settings change (panel or .env)."""
+    global _storage, _storage_fp
+    from app.services.platform_config import fingerprint, overrides
 
-            client = boto3.client("s3", region_name=settings.s3_region, endpoint_url=settings.s3_endpoint_url,
-                                  aws_access_key_id=settings.s3_access_key_id, aws_secret_access_key=settings.s3_secret_access_key)
-            inner = S3Storage(client, settings.s3_bucket or "", settings.s3_prefix)
-        _storage = EncryptingStorage(inner)
+    fp = fingerprint(STORAGE_FIELDS) + str(overrides().get("storage_previous_backend"))
+    if _storage is None or (_storage_fp is not None and fp != _storage_fp):  # a storage set directly (tests) is kept
+        backend = active_backend()
+        inner = build_backend(backend)
+        previous = overrides().get("storage_previous_backend")
+        if previous and previous != backend:
+            inner = FallbackStorage(inner, build_backend(previous))
+        _storage, _storage_fp = EncryptingStorage(inner), fp
     return _storage
+
+
+def reset_storage() -> None:
+    global _storage, _storage_fp
+    _storage, _storage_fp = None, None
+
+
+def list_keys(backend, prefix: str = ""):
+    """(key, stored size) for every object under ``prefix`` ("public/", "private/" or "" for all)."""
+    if isinstance(backend, LocalStorage):
+        root = backend.root
+        base = root / prefix if prefix else root
+        if not base.exists():
+            return
+        for path in sorted(base.rglob("*")):
+            if path.is_file() and not path.name.endswith(".tmp"):
+                yield str(path.relative_to(root)).replace("\\", "/"), path.stat().st_size
+    else:
+        paginator = backend.client.get_paginator("list_objects_v2")
+        start = backend._key(prefix)
+        for page in paginator.paginate(Bucket=backend.bucket, Prefix=start):
+            for obj in page.get("Contents", []):
+                key = obj["Key"][len(backend._key("")):]
+                if key.startswith(("public/", "private/")):
+                    yield key, obj.get("Size", 0)
+
+
+def read_raw(backend, key: str) -> bytes:
+    with backend.open(key) as fh:
+        return fh.read()
+
+
+def write_raw(backend, key: str, data: bytes) -> None:
+    """Store bytes under exactly this key (copies between storages, key rotation)."""
+    if isinstance(backend, LocalStorage):
+        path = backend._path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_bytes(data)
+        tmp.replace(path)
+    else:
+        backend.client.put_object(Bucket=backend.bucket, Key=backend._key(key), Body=data, ServerSideEncryption="AES256")
+
+
+def exists(backend, key: str) -> bool:
+    if isinstance(backend, LocalStorage):
+        return backend._path(key).is_file()
+    try:
+        backend.client.head_object(Bucket=backend.bucket, Key=backend._key(key))
+        return True
+    except Exception:  # noqa: BLE001 - botocore ClientError 404
+        return False
 
 
 def validate_upload(data: bytes, *, allowed: set[str], max_mb: int) -> str:
@@ -218,18 +314,33 @@ def validate_upload(data: bytes, *, allowed: set[str], max_mb: int) -> str:
 
 
 async def media_from_bucket(request):
-    """Serve ``public/<path>`` from the bucket at /media/<path> (S3 backend only). Nothing outside public/ is reachable."""
+    """Serve ``public/<path>`` at /media/<path> from the active storage (this server's disk or the bucket). Nothing
+    outside public/ is reachable."""
     import mimetypes
 
     from starlette.concurrency import run_in_threadpool
-    from starlette.responses import Response
+    from starlette.responses import FileResponse, Response
 
     path = request.path_params["path"]
-    if not path or ".." in path.split("/") or path.startswith("/"):
+    if not path or ".." in path.split("/") or path.startswith("/") or "\\" in path:
         return Response(status_code=404)
+    storage = get_storage()
+    inner = getattr(storage, "inner", storage)
+    local = inner if isinstance(inner, LocalStorage) else None
+    headers = {"Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff"}
+    if local is not None:
+        try:
+            file_path = local._path(f"public/{path}")
+        except ValidationFailed:
+            return Response(status_code=404)
+        if not file_path.is_file():
+            return Response(status_code=404)
+        return FileResponse(file_path, headers=headers)
     try:
-        fh = await run_in_threadpool(get_storage().open, f"public/{path}")
-    except (FileNotFoundError, ValidationFailed):
+        fh = await run_in_threadpool(storage.open, f"public/{path}")
+    except (FileNotFoundError, ValidationFailed, OSError):
+        return Response(status_code=404)
+    except Exception:  # noqa: BLE001 - botocore NoSuchKey / access errors: a missing image, never a 500 page
         return Response(status_code=404)
     mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
-    return Response(fh.read(), media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
+    return Response(fh.read(), media_type=mime, headers=headers)

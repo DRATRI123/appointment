@@ -75,12 +75,13 @@ class BackupConfig:
 
 def config_from_settings() -> BackupConfig:
     """From backend/.env or the environment (Docker passes the root .env as environment variables)."""
-    from app.core.config import get_settings
+    from app.core.storage import active_backend
+    from app.services.platform_config import runtime_settings
 
-    s = get_settings()
+    s = runtime_settings()  # .env, with values saved in Super admin -> Integrations on top
     return BackupConfig(
         database_url=s.database_url,
-        uploads_dir=Path(s.storage_local_path) if s.storage_backend == "local" else None,
+        uploads_dir=Path(s.storage_local_path) if active_backend() == "local" else None,
         backup_dir=Path(s.backup_dir or (Path(s.storage_local_path).parent / "backups")),
         encryption_key=decode_key(s.backup_encryption_key) if s.backup_encryption_key else None,
         keep_daily=s.backup_keep_daily,
@@ -93,13 +94,9 @@ def config_from_settings() -> BackupConfig:
 
 
 def _s3_client_from_settings():
-    import boto3
+    from app.core.storage import s3_client
 
-    from app.core.config import get_settings
-
-    s = get_settings()
-    return boto3.client("s3", region_name=s.s3_region, endpoint_url=s.s3_endpoint_url,
-                        aws_access_key_id=s.s3_access_key_id, aws_secret_access_key=s.s3_secret_access_key)
+    return s3_client()
 
 
 def decode_key(value: str) -> bytes:

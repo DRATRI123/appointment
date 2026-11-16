@@ -105,3 +105,15 @@ def client(db: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides[get_db] = _override
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _reset_platform_integrations():
+    """Panel values (Super admin -> Integrations) are cached per process; each test starts from .env values only."""
+    from app.core.storage import reset_storage
+    from app.services import platform_config
+
+    platform_config.reset_cache()
+    yield
+    platform_config.reset_cache()
+    reset_storage()

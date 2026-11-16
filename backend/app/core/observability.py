@@ -193,7 +193,9 @@ def migration_head() -> str | None:
 
 
 def storage_writable(settings: Settings) -> bool:
-    if settings.storage_backend != "local":
+    from app.core.storage import active_backend
+
+    if active_backend() != "local":
         return True  # S3 reachability is reported by uploads themselves; no write on every probe
     root = Path(settings.storage_local_path)
     try:

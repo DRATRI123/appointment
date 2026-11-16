@@ -7,8 +7,8 @@ from typing import Protocol
 import jwt
 from jwt import PyJWKClient
 
-from app.core.config import get_settings
 from app.core.exceptions import AuthenticationError
+from app.services.platform_config import runtime_settings as get_settings  # panel values win over .env
 
 GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUERS = {"https://accounts.google.com", "accounts.google.com"}

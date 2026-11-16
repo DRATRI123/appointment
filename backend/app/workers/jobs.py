@@ -103,5 +103,14 @@ def deliver_webhooks() -> dict:
     return counts
 
 
+@job("storage_switch")
+def storage_switch() -> dict | None:
+    """Carry out a file-storage switch requested in Super admin -> Integrations (copy, verify, then switch)."""
+    from app.services.storage_migration import run_pending
+
+    with session_scope() as db:
+        return run_pending(db, commit=db.commit)
+
+
 PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "pull_calendar_busy", "sync_external",
-                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks", "purge_idempotency_keys")
+                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks", "purge_idempotency_keys", "storage_switch")

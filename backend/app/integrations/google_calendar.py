@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
 
-from app.core.config import get_settings
 from app.core.time import utcnow
 from app.integrations.http import IntegrationAPIError, check, request
+from app.services.platform_config import runtime_settings as get_settings  # panel values win over .env
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 # bandit B105 false positive: public OAuth endpoint URL
