@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import DB, Meta, TenantContext, require_permission
+from app.api.deps import DB, Meta, TenantContext, recent_auth, require_permission
 from app.core.pagination import Page, PageMeta, PageParams, page_params
 from app.schemas.common import Message
 from app.schemas.developer import (
@@ -45,7 +45,7 @@ def list_keys(db: DB, ctx: Manage, meta: Meta):
     return [svc.key_read(k) for k in svc.keys()]
 
 
-@router.post("/api-keys", response_model=ApiKeyCreated, status_code=status.HTTP_201_CREATED, summary="Create a key (the secret is returned once)")
+@router.post("/api-keys", response_model=ApiKeyCreated, status_code=status.HTTP_201_CREATED, dependencies=[recent_auth("api_keys")], summary="Create a key (the secret is returned once)")
 def create_key(payload: ApiKeyCreate, db: DB, ctx: Manage, meta: Meta):
     return _svc(db, ctx, meta).create_key(payload)
 
@@ -94,12 +94,12 @@ def list_webhooks(db: DB, ctx: Manage, meta: Meta):
     return [svc.endpoint_read(e) for e in svc.endpoints()]
 
 
-@router.post("/webhooks", response_model=WebhookCreated, status_code=status.HTTP_201_CREATED, summary="Add an endpoint (the signing secret is returned once)")
+@router.post("/webhooks", response_model=WebhookCreated, status_code=status.HTTP_201_CREATED, dependencies=[recent_auth("webhooks")], summary="Add an endpoint (the signing secret is returned once)")
 def create_webhook(payload: WebhookCreate, db: DB, ctx: Manage, meta: Meta):
     return _svc(db, ctx, meta).create_endpoint(payload)
 
 
-@router.patch("/webhooks/{endpoint_id}", response_model=WebhookRead)
+@router.patch("/webhooks/{endpoint_id}", response_model=WebhookRead, dependencies=[recent_auth("webhooks")])
 def update_webhook(endpoint_id: str, payload: WebhookUpdate, db: DB, ctx: Manage, meta: Meta):
     svc = _svc(db, ctx, meta)
     return svc.endpoint_read(svc.update_endpoint(svc.endpoint(endpoint_id), payload))
@@ -112,7 +112,7 @@ def delete_webhook(endpoint_id: str, db: DB, ctx: Manage, meta: Meta):
     return Message(detail="Webhook endpoint deleted.")
 
 
-@router.post("/webhooks/{endpoint_id}/rotate-secret", response_model=Message, summary="Replace the signing secret (returned once)")
+@router.post("/webhooks/{endpoint_id}/rotate-secret", response_model=Message, dependencies=[recent_auth("webhooks")], summary="Replace the signing secret (returned once)")
 def rotate_secret(endpoint_id: str, db: DB, ctx: Manage, meta: Meta):
     svc = _svc(db, ctx, meta)
     return Message(detail=svc.rotate_secret(svc.endpoint(endpoint_id)))

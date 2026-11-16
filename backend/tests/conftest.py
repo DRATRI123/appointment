@@ -86,7 +86,8 @@ def client(db: Session) -> Generator[TestClient, None, None]:
     def _override() -> Generator[Session, None, None]:
         """Mirror production get_db: each request runs in a SAVEPOINT that is rolled back on error (unless the error
         asks for its changes to persist), so tests see exactly what a real request would have saved."""
-        db.info.pop("branch_scope", None)  # in production every request has its own session; here they share one
+        for key in ("branch_scope", "mask_contacts", "privacy_policy"):  # in production every request has its own session; here they share one
+            db.info.pop(key, None)
         savepoint = db.begin_nested()
         try:
             yield db

@@ -203,7 +203,7 @@ def test_public_catalogue_hides_inactive_and_private_fields(client):
 def test_image_upload_validation_and_serving(client, tmp_path):
     from app.core import storage as storage_module
 
-    storage_module._storage = storage_module.LocalStorage(tmp_path)
+    storage_module._storage = storage_module.EncryptingStorage(storage_module.LocalStorage(tmp_path))
     try:
         _, org, h = _owner_with_org(client, "up-owner@example.com", "Upload Clinic")
         r = client.post("/api/v1/uploads/images", files={"file": ("logo.png", io.BytesIO(PNG), "image/png")}, headers=h)

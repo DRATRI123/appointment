@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import Annotated, Any
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import select
 
@@ -120,12 +120,17 @@ def report(key: str, db: DB, ctx: Tenant, params: Annotated[FilterParams, Depend
 
 @router.get("/reports/{key}/export", summary="Download a report as CSV or Excel (audit-logged)")
 @writes_on_read  # access is audit-logged
-def export(key: str, db: DB, ctx: Tenant, meta: Meta, params: Annotated[FilterParams, Depends()],
+def export(key: str, request: Request, db: DB, ctx: Tenant, meta: Meta, params: Annotated[FilterParams, Depends()],
            format: Annotated[str, Query(pattern=r"^(csv|xlsx)$")] = "csv"):  # noqa: A002 - query parameter name
+    from app.services.privacy_service import check_export_allowed, require_recent_auth
+
     ctx.require("reports:export")
     r = get_report(key, ctx.has)
+    if r.contains_personal_data:  # reports with patient names or numbers: confirm it is them first
+        require_recent_auth(db, request, ctx.organization, action="export")
     f, label = _resolve(db, ctx, params)
     rows, truncated = run(r, ReportContext(db, ctx.organization, f))
+    check_export_allowed(db, ctx.organization, ctx.user.id, rows=len(rows))
     record_audit(db, action="report.exported", actor=ctx.user, organization_id=ctx.organization.id, entity_type="report", entity_id=r.key,
                  after={"format": format, "from": f.from_date.isoformat(), "to": f.to_date.isoformat(), "filters": label, "rows": len(rows),
                         "personal_data": r.contains_personal_data}, meta=meta)

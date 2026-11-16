@@ -47,6 +47,7 @@ from app.security.identifiers import normalize_email, normalize_mobile
 from app.services.audit_service import RequestMeta, record_audit
 from app.services.catalog_service import ids_to_public
 from app.services.organization_service import OrganizationService
+from app.services.privacy_service import is_masked_echo, mask_email, mask_mobile, view_email, view_mobile
 
 log = get_logger(__name__)
 
@@ -66,14 +67,25 @@ class CustomerManagementService:
                      before=before, after=after, purpose=purpose, meta=self.meta)
 
     # ------------------------------------------------------------ lookups
+    # Doctors and professionals who only see their own calendar also see only their own patients (clinic privacy
+    # setting "doctors_see_own_patients_only"): set by the customers API, None for everyone else.
+    care_professional_id: int | None = None
+
+    def _care_filter(self, stmt):
+        if self.care_professional_id is None:
+            return stmt
+        mine = select(Appointment.customer_id).where(Appointment.organization_id == self.org.id, Appointment.professional_id == self.care_professional_id)
+        return stmt.where(Customer.id.in_(mine))
+
     def get(self, public_id: str) -> Customer:
-        c = self.db.scalar(select(Customer).where(Customer.public_id == public_id, Customer.organization_id == self.org.id, Customer.deleted_at.is_(None)))
+        stmt = select(Customer).where(Customer.public_id == public_id, Customer.organization_id == self.org.id, Customer.deleted_at.is_(None))
+        c = self.db.scalar(self._care_filter(stmt))
         if c is None:
-            raise NotFoundError("Customer not found.")
+            raise NotFoundError("Customer not found.")  # also when it exists but is not one of this doctor's patients
         return c
 
     def list(self, *, search: str | None, tag: str | None, segment: str | None, is_guest: bool | None, page: int, page_size: int) -> tuple[list[Customer], int]:
-        stmt = select(Customer).where(Customer.organization_id == self.org.id, Customer.deleted_at.is_(None))
+        stmt = self._care_filter(select(Customer).where(Customer.organization_id == self.org.id, Customer.deleted_at.is_(None)))
         if search:
             like = f"%{search.lower()}%"
             stmt = stmt.where(or_(func.lower(Customer.full_name).like(like), Customer.mobile.like(like), func.lower(Customer.email).like(like), func.lower(Customer.customer_code).like(like)))
@@ -136,7 +148,11 @@ class CustomerManagementService:
             self.db.flush()
 
     def update(self, customer: Customer, payload: CustomerUpdate) -> Customer:
-        data = self._normalise(payload.model_dump(exclude_unset=True))
+        raw = payload.model_dump(exclude_unset=True)
+        for field in ("mobile", "email"):  # a masked value sent back unchanged keeps the real one
+            if field in raw and is_masked_echo(raw[field], getattr(customer, field)):
+                raw.pop(field)
+        data = self._normalise(raw)
         if "saved_professional_ids" in data and data["saved_professional_ids"] is not None:
             data["saved_professional_ids"] = self._validate_public_ids(Professional, data["saved_professional_ids"])
         if "saved_branch_ids" in data and data["saved_branch_ids"] is not None:
@@ -149,7 +165,12 @@ class CustomerManagementService:
         if customer.is_guest and (customer.user_id or self.actor):
             customer.is_guest = False
         self.db.flush()
-        self._audit("customer.updated", "customer", customer.public_id, before=before, after={k: v for k, v in data.items() if k in before})
+        after = {k: v for k, v in data.items() if k in before}
+        for d in (before, after):  # the audit log needs to show that contact details changed, not what they are
+            for k, fn in (("mobile", mask_mobile), ("email", mask_email)):
+                if d.get(k):
+                    d[k] = fn(d[k])
+        self._audit("customer.updated", "customer", customer.public_id, before=before, after=after)
         return customer
 
     def update_self(self, customer: Customer, payload: SelfProfileUpdate) -> Customer:
@@ -259,7 +280,7 @@ class CustomerManagementService:
             dependents = self.db.scalar(select(func.count()).select_from(CustomerDependent).where(CustomerDependent.customer_id == customer.id, CustomerDependent.deleted_at.is_(None))) or 0
             user_pub = ids_to_public(self.db, User, {customer.user_id}).get(customer.user_id) if customer.user_id else None
         return CustomerRead(
-            id=customer.public_id, customer_code=customer.customer_code, user_id=user_pub, full_name=customer.full_name, mobile=customer.mobile, email=customer.email,
+            id=customer.public_id, customer_code=customer.customer_code, user_id=user_pub, full_name=customer.full_name, mobile=view_mobile(self.db, customer.mobile), email=view_email(self.db, customer.email),
             date_of_birth=customer.date_of_birth, gender=customer.gender, address=customer.address, profile_photo_url=customer.profile_photo_url, blood_group=customer.blood_group,
             communication_preferences=customer.communication_preferences, consent=customer.consent, tags=customer.tags or [], is_guest=customer.is_guest, source=customer.source,
             registered_at=customer.registered_at, last_visit_at=customer.last_visit_at, saved_professional_ids=customer.saved_professional_ids or [], saved_branch_ids=customer.saved_branch_ids or [],
@@ -283,6 +304,8 @@ class CustomerManagementService:
     def update_dependent(self, customer: Customer, dependent_id: str, payload: DependentUpdate) -> CustomerDependent:
         row = self._dependent(customer, dependent_id)
         data = payload.model_dump(exclude_unset=True)
+        if "mobile" in data and is_masked_echo(data["mobile"], row.mobile):
+            data.pop("mobile")
         if data.get("mobile"):
             data["mobile"] = normalize_mobile(data["mobile"])
         for k, v in data.items():
@@ -301,10 +324,9 @@ class CustomerManagementService:
             raise NotFoundError("Family member not found.")
         return row
 
-    @staticmethod
-    def dependent_read(row: CustomerDependent, customer: Customer) -> DependentRead:
+    def dependent_read(self, row: CustomerDependent, customer: Customer) -> DependentRead:
         return DependentRead(id=row.public_id, customer_id=customer.public_id, full_name=row.full_name, relationship_label=row.relationship_label, date_of_birth=row.date_of_birth,
-                             gender=row.gender, mobile=row.mobile, notes=row.notes, created_at=row.created_at)
+                             gender=row.gender, mobile=view_mobile(self.db, row.mobile), notes=row.notes, created_at=row.created_at)
 
     # -------------------------------------------------------------- notes
     def list_notes(self, customer: Customer, *, purpose: str | None = None) -> list[NoteRead]:

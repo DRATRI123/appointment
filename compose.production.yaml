@@ -223,6 +223,28 @@ services:
       resources:
         limits: {memory: 256m, cpus: "0.5", pids: 64}
 
+  # Optional virus scanning of uploads: set UPLOAD_SCANNER=clamav in .env, then
+  #   docker compose --profile antivirus up -d clamav
+  # (about 1.5 GB of memory for its signature database; updates itself through freshclam).
+  clamav:
+    <<: *hardening
+    image: clamav/clamav:1.4.6
+    profiles: ["antivirus"]
+    cap_add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE"]   # the image starts as root to fix its folders, then drops to clamav
+    volumes:
+      - clamav_db:/var/lib/clamav
+    restart: unless-stopped
+    networks: [public]   # freshclam downloads signature updates; nothing connects in from outside
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits: {memory: 2g, cpus: "1.0", pids: 256}
+
   # Optional: docker compose --profile monitoring up -d prometheus   (reach it over an SSH tunnel; never public)
   prometheus:
     <<: *hardening
@@ -255,3 +277,4 @@ volumes:
   certbot_lib:
   certbot_www:
   prometheus_data:
+  clamav_db:

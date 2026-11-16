@@ -144,9 +144,15 @@ def get_optional_user(request: Request, db: DB, _usage: Annotated[None, Depends(
         raise AuthenticationError("User not found.", code="user_not_found")
     if user.status in {UserStatus.SUSPENDED, UserStatus.INACTIVE}:
         raise PermissionDenied("This account is suspended.", code="account_suspended")
+    if session.locked_at is not None and request.url.path not in UNLOCK_PATHS:
+        # The screen locked after inactivity: nothing else answers until the person confirms it is them.
+        raise PermissionDenied("The screen is locked. Confirm it is you to continue.", code="session_locked")
     request.state.session_public_id = session.public_id
     request.state.user = user
     return user
+
+
+UNLOCK_PATHS = frozenset([*(f"/api/v1/auth/{p}" for p in ("reauth", "reauth/send-code", "logout", "lock")), "/api/v1/users/me"])
 
 
 def get_current_user(user: Annotated[User | None, Depends(get_optional_user)]) -> User:
@@ -262,6 +268,11 @@ def resolve_tenant(
     from app.core.branch_scope import set_branch_scope
 
     set_branch_scope(db, membership.branch_id if membership is not None else None)  # staff of one branch see only it
+    # Staff screens show masked mobile numbers and email addresses (clinic privacy settings); patients see their own.
+    role = membership.role.code if membership is not None and membership.role is not None else None
+    from app.services.privacy_service import policy as privacy_policy
+
+    db.info["mask_contacts"] = role != "customer" and bool(privacy_policy(db, org)["mask_contact_details"])
     request.state.tenant = ctx
     return ctx
 
@@ -309,3 +320,20 @@ def require_permission(*permissions: str):
         return ctx
 
     return dependency
+
+
+def recent_auth(action: str):
+    """Route dependency: the person must have confirmed it is them recently (sign-in, or password / code again within
+    the clinic's re-authentication window). Use on sensitive changes: roles, staff, keys, payment accounts, privacy."""
+
+    def _check(request: Request, db: DB, user: Annotated[User, Depends(get_current_user)]) -> None:
+        from sqlalchemy import select
+
+        from app.models import Organization
+        from app.services.privacy_service import require_recent_auth
+
+        org_pub = request.path_params.get("organization_id") or request.headers.get("x-organization-id")
+        org = db.scalar(select(Organization).where(Organization.public_id == org_pub)) if org_pub else None
+        require_recent_auth(db, request, org, action=action)
+
+    return Depends(_check)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request, Response, status
+from pydantic import BaseModel, Field
 
 from app.api.deps import (
     ACCESS_COOKIE,
@@ -157,6 +158,41 @@ def logout(request: Request, response: Response, db: DB, settings: AppSettings, 
     AuthService(db, meta).logout(session_id, refresh_token)
     clear_auth_cookies(response, settings)
     return Message(detail="Signed out.")
+
+
+class ReauthRequest(BaseModel):
+    password: str | None = Field(default=None, max_length=256)
+    code: str | None = Field(default=None, max_length=16, description="Authenticator app code")
+    otp_code: str | None = Field(default=None, max_length=12, description="Code sent by POST /auth/reauth/send-code")
+
+
+def _current_session(request: Request, db):
+    from app.repositories.users import SessionRepository
+
+    session = SessionRepository(db).get_by_public_id(getattr(request.state, "session_public_id", "") or "")
+    if session is None:
+        raise AuthenticationError("Sign in again.", code="session_revoked")
+    return session
+
+
+@router.post("/reauth", response_model=Message, summary="Confirm it is you (unlocks the screen; allows sensitive actions for a few minutes)")
+@limiter.limit("10/minute")
+def reauthenticate(request: Request, response: Response, payload: ReauthRequest, db: DB, user: CurrentUser, meta: Meta) -> Message:
+    AuthService(db, meta).reauthenticate(user, _current_session(request, db), password=payload.password, code=payload.code, otp_code=payload.otp_code)
+    return Message(detail="Confirmed.")
+
+
+@router.post("/reauth/send-code", summary="Send a one-time code to confirm it is you (accounts without a password)")
+@limiter.limit("3/minute")
+def reauth_send_code(request: Request, response: Response, db: DB, user: CurrentUser, settings: AppSettings, meta: Meta) -> dict:
+    debug = AuthService(db, meta).send_reauth_code(user)
+    return {"detail": "Code sent.", **({"debug_code": debug} if debug and settings.app_env in {"development", "test"} else {})}
+
+
+@router.post("/lock", response_model=Message, summary="Lock the screen now (also done by the app after inactivity)")
+def lock_screen(request: Request, db: DB, user: CurrentUser, meta: Meta) -> Message:
+    AuthService(db, meta).lock(user, _current_session(request, db))
+    return Message(detail="Locked.")
 
 
 @router.get("/sessions", response_model=list[SessionRead], summary="List active devices")

@@ -16,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encrypted_type import EncryptedText
 from app.core.enums import (
     BankImportStatus,
     BankTransactionMatchStatus,
@@ -105,8 +106,9 @@ class PaymentSubmission(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Bas
     utr: Mapped[str | None] = mapped_column(String(64))
     utr_normalized: Mapped[str | None] = mapped_column(String(64))  # upper-cased, stripped
     transaction_reference: Mapped[str | None] = mapped_column(String(128))
-    payer_upi_id: Mapped[str | None] = mapped_column(String(120))
-    payer_name: Mapped[str | None] = mapped_column(String(120))
+    # Personal payment details: encrypted at rest (shown to staff verifying the payment, never searched).
+    payer_upi_id: Mapped[str | None] = mapped_column(EncryptedText)
+    payer_name: Mapped[str | None] = mapped_column(EncryptedText)
     paid_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     claimed_amount_paise: Mapped[int | None] = mapped_column(Integer)
     screenshot_path: Mapped[str | None] = mapped_column(String(512))

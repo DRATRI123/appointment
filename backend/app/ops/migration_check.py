@@ -21,7 +21,9 @@ from dataclasses import asdict, dataclass
 DESTRUCTIVE_PATTERNS = {
     "drops a table": re.compile(r"\bop\.drop_table\s*\("),
     "drops a column": re.compile(r"\b(op|batch_op)\.drop_column\s*\("),
-    "changes a column type": re.compile(r"\b(op|batch_op)\.alter_column\s*\([^)]*\btype_\s*=", re.S),
+    # type_= anywhere in the call (arguments may contain parentheses, e.g. existing_type=sa.VARCHAR(length=120)),
+    # except widening to TEXT, which cannot lose data.
+    "changes a column type": re.compile(r"\b(op|batch_op)\.alter_column\s*\((?:[^()]|\([^()]*\))*?\btype_\s*=\s*(?!sa\.Text\(\))", re.S),
     "runs DELETE/TRUNCATE/DROP SQL": re.compile(r"\b(op\.execute|text)\s*\(\s*[rbuf]*['\"]{1,3}\s*(DELETE|TRUNCATE|DROP)\b", re.I),
 }
 

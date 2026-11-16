@@ -42,6 +42,7 @@ from app.schemas.refund import (
 )
 from app.services.audit_service import RequestMeta, record_audit
 from app.services.organization_service import OrganizationService
+from app.services.privacy_service import view_mobile
 
 ACTIVE = (RefundStatus.REQUESTED, RefundStatus.APPROVED)
 COUNTED = (RefundStatus.REQUESTED, RefundStatus.APPROVED, RefundStatus.PROCESSED)
@@ -310,7 +311,7 @@ class RefundService:
             refund_method=r.refund_method, refund_reference=r.refund_reference, destination=r.destination, has_proof=bool(r.refund_proof_path), notes=r.notes,
             payment_id=p.public_id, payment_reference=p.reference, payment_method=p.method, payment_verified_amount_paise=p.verified_amount_paise,
             appointment_id=appt.public_id if appt else None, appointment_reference=appt.reference if appt else None, appointment_status=appt.status if appt else None,
-            customer_id=cust.public_id if cust else None, customer_name=cust.full_name if cust else None, customer_mobile=cust.mobile if cust else None,
+            customer_id=cust.public_id if cust else None, customer_name=cust.full_name if cust else None, customer_mobile=view_mobile(self.db, cust.mobile) if cust else None,
             requested_by_name=names.get(r.requested_by_user_id) or (None if r.requested_by_user_id else "System (cancellation)"),
             approved_by_name=names.get(r.approved_by_user_id), processed_by_name=names.get(r.processed_by_user_id),
             requested_at=r.requested_at, approved_at=r.approved_at, processed_at=r.processed_at, rejected_at=r.rejected_at, created_at=r.created_at,

@@ -112,3 +112,62 @@ def needs_reencryption(value: str | None) -> bool:
     if not value.startswith(PREFIX_V2):
         return True
     return value[len(PREFIX_V2):].partition(":")[0] != current_key_id()
+
+
+# --- Files and purpose-separated keys ------------------------------------------------------------------------------
+# Private files (patient documents, payment screenshots, refund proofs, form attachments) are encrypted with a key
+# DERIVED from each DATA_ENCRYPTION_KEY for that purpose only (HKDF-SHA256, info="purpose:files"): a key leaked from
+# one purpose cannot decrypt another, and rotating DATA_ENCRYPTION_KEY rotates every purpose key with it.
+# File format: b"APENC1" | key id (8 ascii) | nonce (12) | ciphertext+tag. Files written before encryption existed are
+# read as they are; ``python -m app.ops.rotate_keys`` encrypts them.
+FILE_MAGIC = b"APENC1"
+
+
+@lru_cache(maxsize=32)
+def purpose_key(key: bytes, purpose: str) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=b"appointment-platform", info=f"purpose:{purpose}".encode()).derive(key)
+
+
+def encrypt_bytes(data: bytes, purpose: str = "files") -> bytes:
+    primary, _ = _keys()
+    kid = key_id(primary)
+    nonce = os.urandom(12)
+    header = FILE_MAGIC + kid.encode("ascii")
+    return header + nonce + AESGCM(purpose_key(primary, purpose)).encrypt(nonce, data, header + purpose.encode())
+
+
+def is_encrypted_blob(data: bytes) -> bool:
+    return data[: len(FILE_MAGIC)] == FILE_MAGIC
+
+
+def blob_key_id(data: bytes) -> str | None:
+    return data[len(FILE_MAGIC): len(FILE_MAGIC) + 8].decode("ascii") if is_encrypted_blob(data) else None
+
+
+def decrypt_bytes(data: bytes, purpose: str = "files") -> bytes:
+    if not is_encrypted_blob(data):
+        return data  # written before file encryption existed
+    kid = blob_key_id(data) or ""
+    key = _keys()[1].get(kid)
+    if key is None:
+        raise DecryptionError(f"No configured key with id {kid}. Add the old key to DATA_ENCRYPTION_PREVIOUS_KEYS.")
+    header = data[: len(FILE_MAGIC) + 8]
+    body = data[len(header):]
+    try:
+        return AESGCM(purpose_key(key, purpose)).decrypt(body[:12], body[12:], header + purpose.encode())
+    except InvalidTag as exc:
+        raise DecryptionError("Encrypted file was modified or the key is wrong.") from exc
+
+
+def blob_needs_reencryption(data: bytes) -> bool:
+    return blob_key_id(data) != current_key_id()
+
+
+def keyed_hash(value: str, purpose: str) -> str:
+    """HMAC-SHA256 with a purpose key: for tamper-evident audit rows and signed download links (not reversible)."""
+    import hmac
+
+    return hmac.new(purpose_key(_keys()[0], purpose), value.encode("utf-8"), hashlib.sha256).hexdigest()

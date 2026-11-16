@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.encrypted_type import EncryptedText
 from app.core.types import UTCDateTime
 from app.models.base import Base, PKMixin, PublicIdMixin, SoftDeleteMixin, TenantMixin, TimestampMixin
 
@@ -62,7 +63,7 @@ class CustomerDependent(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, Sof
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     gender: Mapped[str | None] = mapped_column(String(16))
     mobile: Mapped[str | None] = mapped_column(String(20))
-    notes: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[str | None] = mapped_column(EncryptedText)  # may describe a family member's health: encrypted at rest
 
     customer: Mapped[Customer] = relationship(back_populates="dependents")
 

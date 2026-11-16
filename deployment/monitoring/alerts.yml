@@ -120,3 +120,33 @@ groups:
         annotations:
           summary: "More than 10 rejected payments or reused UPI references in an hour"
           action: "Patients may be submitting fake UTRs. Review Payments → Verification and the duplicate-UTR flags."
+
+  - name: privacy
+    rules:
+      - alert: BulkPatientRecordAccess
+        expr: sum(increase(app_security_events_total{event=~"bulk_access_alert|bulk_access_blocked"}[15m])) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "Someone opened an unusually large number of patient records in an hour"
+          action: "Audit log: action security.bulk_access_detected names the account. Confirm with the person; sign them out (Staff → member → Sign out everywhere) if unexplained."
+
+      - alert: ExportSpike
+        expr: sum(increase(app_security_events_total{event=~"export|export_refused"}[1h])) > 30
+        labels: {severity: warning}
+        annotations:
+          summary: "Many data exports in the last hour"
+          action: "Audit log: report.exported / customer.exported. Exports beyond each clinic's daily limit are already refused."
+
+      - alert: ReauthFailures
+        expr: sum(increase(app_security_events_total{event="reauth_failed"}[15m])) > 10
+        labels: {severity: warning}
+        annotations:
+          summary: "Repeated failed 'confirm it is you' attempts (someone at an unattended, signed-in computer?)"
+          action: "Audit log: auth.reauth_failed shows the account; revoke its sessions if it was not them."
+
+      - alert: InfectedUpload
+        expr: sum(increase(app_security_events_total{event="upload_infected"}[1h])) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "An uploaded file contained malware and was refused"
+          action: "The file was not stored. Check which page and account in the API logs (upload.*) and warn the clinic."

@@ -74,4 +74,4 @@ def assign(payload: AssignRequest, db: DB, ctx: WriteForms, meta: Meta):
 @router.get("/responses/by-appointment/{appointment_id}", response_model=FormResponseRead | None)
 def response_for_appointment(appointment_id: str, db: DB, ctx: Annotated[TenantContext, Depends(require_permission("appointments:read"))], meta: Meta):
     appt = AppointmentService(db, ctx.organization, ctx.user, meta).get(appointment_id)
-    return FormService(db, ctx.organization, ctx.user, meta).response_for_appointment(appt)
+    return FormService(db, ctx.organization, ctx.user, meta).response_for_appointment(appt, show_sensitive=ctx.has("customers:clinical_read"))

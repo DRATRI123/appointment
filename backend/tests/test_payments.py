@@ -18,7 +18,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 def _storage(tmp_path):
     from app.core import storage as storage_module
 
-    storage_module._storage = storage_module.LocalStorage(tmp_path)
+    storage_module._storage = storage_module.EncryptingStorage(storage_module.LocalStorage(tmp_path))
     return storage_module
 
 

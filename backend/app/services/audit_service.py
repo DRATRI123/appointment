@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.ids import new_public_id
 from app.core.time import utcnow
 from app.models import AuditLog, User
 
@@ -33,6 +34,7 @@ def record_audit(
 ) -> AuditLog:
     meta = meta or RequestMeta()
     log = AuditLog(
+        public_id=new_public_id(),
         organization_id=organization_id,
         actor_user_id=actor.id if actor else None,
         actor_type=actor_type if actor else "system",
@@ -48,6 +50,24 @@ def record_audit(
         purpose=purpose,
         created_at=utcnow(),
     )
+    log.signature = sign_audit_row(log)
     db.add(log)
     db.flush()
     return log
+
+
+SIGNED_FIELDS = ("public_id", "organization_id", "actor_user_id", "actor_type", "actor_label", "action", "entity_type", "entity_id",
+                 "before", "after", "ip_address", "request_id", "purpose", "created_at")
+
+
+def sign_audit_row(log: AuditLog) -> str:
+    """HMAC over the row's content with the audit purpose key. Someone who can edit the database but does not have the
+    server's DATA_ENCRYPTION_KEY cannot change a row (or invent one) without the signature failing verification."""
+    import json
+
+    from app.security.crypto import keyed_hash
+
+    created = log.created_at
+    payload = {f: getattr(log, f) for f in SIGNED_FIELDS}
+    payload["created_at"] = created.replace(tzinfo=None).isoformat(timespec="microseconds") if created else None
+    return keyed_hash(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")), "audit")

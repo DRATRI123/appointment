@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import DB, Meta, TenantContext, get_tenant_context, require_permission
+from app.api.deps import DB, Meta, TenantContext, get_tenant_context, recent_auth, require_permission
 from app.core.exceptions import PermissionDenied
 from app.core.pagination import Page, PageMeta, PageParams, page_params
 from app.schemas.common import APIModel, Message
@@ -54,7 +54,7 @@ def list_accounts(db: DB, ctx: ReadUPI, meta: Meta, include_inactive: bool = Tru
     return [svc.to_read(a) for a in svc.list(include_inactive)]
 
 
-@upi_router.post("", response_model=UPIAccountRead, status_code=status.HTTP_201_CREATED)
+@upi_router.post("", response_model=UPIAccountRead, status_code=status.HTTP_201_CREATED, dependencies=[recent_auth("payment_accounts")])
 def create_account(payload: UPIAccountCreate, db: DB, ctx: WriteUPI, meta: Meta):
     svc = UPIAccountService(db, ctx.organization, ctx.user, meta)
     return svc.to_read(svc.create(payload))
@@ -74,13 +74,13 @@ def get_account(account_id: str, db: DB, ctx: ReadUPI, meta: Meta):
     return svc.to_read(svc.get(account_id))
 
 
-@upi_router.patch("/{account_id}", response_model=UPIAccountRead)
+@upi_router.patch("/{account_id}", response_model=UPIAccountRead, dependencies=[recent_auth("payment_accounts")])
 def update_account(account_id: str, payload: UPIAccountUpdate, db: DB, ctx: WriteUPI, meta: Meta):
     svc = UPIAccountService(db, ctx.organization, ctx.user, meta)
     return svc.to_read(svc.update(svc.get(account_id), payload))
 
 
-@upi_router.delete("/{account_id}", response_model=Message)
+@upi_router.delete("/{account_id}", response_model=Message, dependencies=[recent_auth("payment_accounts")])
 def delete_account(account_id: str, db: DB, ctx: WriteUPI, meta: Meta):
     svc = UPIAccountService(db, ctx.organization, ctx.user, meta)
     svc.delete(svc.get(account_id))

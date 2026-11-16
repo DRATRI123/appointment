@@ -31,6 +31,7 @@ from app.schemas.appointment import (
 from app.schemas.common import Message
 from app.services.appointment_service import AppointmentService
 from app.services.catalog_service import ids_to_public
+from app.services.privacy_service import view_email, view_mobile
 
 router = APIRouter(tags=["appointments"])
 ReadAppts = Annotated[TenantContext, Depends(require_permission("appointments:read"))]
@@ -78,7 +79,7 @@ def appointment_read(db: Session, appt: Appointment, *, include_internal: bool =
         id=appt.public_id, reference=appt.reference, status=appt.status, source=appt.source, organization_id=org.public_id, organization_name=org.name,
         organization_slug=org.slug, branch_id=branch.public_id, branch_name=branch.name, professional_id=pro.public_id, professional_name=pro.display_name,
         service_id=svc.public_id, service_name=svc.name,
-        customer=CustomerSummary(id=cust.public_id, full_name=cust.full_name, mobile=cust.mobile, email=cust.email, is_guest=cust.is_guest),
+        customer=CustomerSummary(id=cust.public_id, full_name=cust.full_name, mobile=view_mobile(db, cust.mobile), email=view_email(db, cust.email), is_guest=cust.is_guest),
         dependent_id=dep, start_at=appt.start_at, end_at=appt.end_at, timezone=appt.timezone, consultation_mode=appt.consultation_mode, currency=appt.currency,
         subtotal_paise=appt.subtotal_paise, discount_paise=appt.discount_paise, tax_paise=appt.tax_paise, total_amount_paise=appt.total_amount_paise,
         advance_due_paise=appt.advance_due_paise, paid_amount_paise=appt.paid_amount_paise, payment_due_at=appt.payment_due_at, customer_notes=appt.customer_notes,
@@ -92,13 +93,15 @@ def appointment_read(db: Session, appt: Appointment, *, include_internal: bool =
 
 
 def appointment_detail(db: Session, appt: Appointment, **kwargs) -> AppointmentDetail:
+    # Sensitive booking-form answers (medical history, ...) only for staff with clinical access, or the patient themselves.
+    show_sensitive = bool(kwargs.pop("clinical", False) or kwargs.get("viewer_is_customer"))
     base = appointment_read(db, appt, **kwargs)
     users = ids_to_public(db, User, {h.changed_by_user_id for h in appt.status_history if h.changed_by_user_id})
     names = dict(db.execute(select(User.id, User.full_name).where(User.id.in_(list(users)))).all()) if users else {}
     history = [StatusHistoryRead(from_status=h.from_status, to_status=h.to_status, changed_at=h.changed_at, reason=h.reason, changed_by=names.get(h.changed_by_user_id)) for h in appt.status_history]
     from app.services.form_service import FormService
 
-    response = FormService(db, db.get(Organization, appt.organization_id)).response_for_appointment(appt)
+    response = FormService(db, db.get(Organization, appt.organization_id)).response_for_appointment(appt, show_sensitive=show_sensitive)
     return AppointmentDetail(**base.model_dump(), history=history, pricing_snapshot=appt.pricing_snapshot if kwargs.get("include_internal") else None,
                              form_answers=response.answers if response else None)
 
@@ -106,7 +109,7 @@ def appointment_detail(db: Session, appt: Appointment, **kwargs) -> AppointmentD
 def waitlist_read(db: Session, row: Waitlist) -> WaitlistRead:
     cust = db.get(Customer, row.customer_id)
     return WaitlistRead(
-        id=row.public_id, customer=CustomerSummary(id=cust.public_id, full_name=cust.full_name, mobile=cust.mobile, email=cust.email, is_guest=cust.is_guest),
+        id=row.public_id, customer=CustomerSummary(id=cust.public_id, full_name=cust.full_name, mobile=view_mobile(db, cust.mobile), email=view_email(db, cust.email), is_guest=cust.is_guest),
         branch_id=db.get(Branch, row.branch_id).public_id if row.branch_id else None,
         professional_id=db.get(Professional, row.professional_id).public_id if row.professional_id else None,
         service_id=db.get(Service, row.service_id).public_id if row.service_id else None,
@@ -179,7 +182,7 @@ def create_appointment(request: Request, payload: AppointmentCreate, db: DB, ctx
         return idem.replay
     service = AppointmentService(db, ctx.organization, ctx.user, meta)
     appt = service.create(payload, user=ctx.user, staff=True)
-    result = appointment_detail(db, service.get(appt.public_id), include_internal=True, service=service)
+    result = appointment_detail(db, service.get(appt.public_id), include_internal=True, service=service, clinical=ctx.has("customers:clinical_read"))
     return idem.finish(result, 201) if idem else result
 
 
@@ -197,7 +200,7 @@ def get_appointment(appointment_id: str, db: DB, meta: Meta, ctx: Annotated[Tena
     appt = service.get(appointment_id)
     if own is not None and appt.professional_id != own:
         raise PermissionDenied("Not your appointment.", code="permission_denied")
-    return appointment_detail(db, appt, include_internal=True, service=service)
+    return appointment_detail(db, appt, include_internal=True, service=service, clinical=ctx.has("customers:clinical_read"))
 
 
 @router.post("/appointments/{appointment_id}/status", response_model=AppointmentDetail, summary="confirm | check_in | start | complete | no_show | cancel | expire")
@@ -210,14 +213,14 @@ def change_status(appointment_id: str, payload: StatusAction, db: DB, meta: Meta
     if own is not None and appt.professional_id != own:
         raise PermissionDenied("Not your appointment.", code="permission_denied")
     service.transition(appt, payload.action, reason=payload.reason)
-    return appointment_detail(db, service.get(appt.public_id), include_internal=True, service=service)
+    return appointment_detail(db, service.get(appt.public_id), include_internal=True, service=service, clinical=ctx.has("customers:clinical_read"))
 
 
 @router.post("/appointments/{appointment_id}/reschedule", response_model=AppointmentDetail)
 def reschedule(appointment_id: str, payload: RescheduleRequest, db: DB, ctx: WriteAppts, meta: Meta):
     service = AppointmentService(db, ctx.organization, ctx.user, meta)
     appt = service.reschedule(service.get(appointment_id), payload)
-    return appointment_detail(db, service.get(appt.public_id), include_internal=True, service=service)
+    return appointment_detail(db, service.get(appt.public_id), include_internal=True, service=service, clinical=ctx.has("customers:clinical_read"))
 
 
 # --------------------------------------------------------------- waitlist

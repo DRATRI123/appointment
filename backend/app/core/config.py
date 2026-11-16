@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
+    session_idle_minutes: int = Field(default=720, ge=5, le=43200)  # signed out after this long without any use
+    upload_scanner: Literal["none", "clamav"] = "none"
+    clamav_host: str = "clamav"
+    clamav_port: int = 3310
     otp_expire_seconds: int = 300
     otp_resend_cooldown_seconds: int = 60
     otp_max_attempts: int = 5

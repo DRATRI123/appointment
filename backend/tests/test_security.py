@@ -87,6 +87,8 @@ def _seed_everything(client, db, c: Clinic) -> dict[str, str]:
     ids["endpoint_id"] = endpoint["id"]
     c.staff_book(_slot(c, 10), customer={"full_name": "Hook Trigger", "mobile": "9711111112"})
     ids["delivery_id"] = db.scalars(select(WebhookEvent.public_id).order_by(WebhookEvent.id.desc())).first()
+    ids["membership_id"] = c.post(f"/organizations/{c.org['id']}/members", {"identifier": "9711111113", "full_name": "Sweep Staff",
+                                                                          "role_code": "receptionist"})["id"]
     assert all(ids.values()), {k: v for k, v in ids.items() if not v}
     return ids
 

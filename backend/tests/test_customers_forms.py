@@ -15,7 +15,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 def _storage(tmp_path):
     from app.core import storage as storage_module
 
-    storage_module._storage = storage_module.LocalStorage(tmp_path)
+    storage_module._storage = storage_module.EncryptingStorage(storage_module.LocalStorage(tmp_path))
     return storage_module
 
 
@@ -25,7 +25,10 @@ def test_customer_crud_search_segments_and_export(client):
     r = client.post("/api/v1/customers", json={"full_name": "Asha Patel", "mobile": "9811111111", "email": "ASHA@example.com", "gender": "female", "tags": ["VIP", "diabetic"]}, headers=c.h)
     assert r.status_code == 201, r.text
     asha = r.json()
-    assert asha["mobile"] == "+919811111111" and asha["email"] == "asha@example.com" and asha["tags"] == ["diabetic", "vip"]
+    # Staff screens get masked contact details; the full ones need an explicit, audit-logged reveal.
+    assert asha["mobile"] == "+9198111XXXXX" and asha["email"] == "ash***@example.com" and asha["tags"] == ["diabetic", "vip"]
+    full = client.post(f"/api/v1/customers/{asha['id']}/reveal", json={"purpose": "call back"}, headers=c.h).json()
+    assert full["mobile"] == "+919811111111" and full["email"] == "asha@example.com"
     assert asha["customer_code"].endswith("-00001") and asha["is_guest"] is False
     assert client.post("/api/v1/customers", json={"full_name": "Dup", "mobile": "9811111111"}, headers=c.h).status_code == 409
     assert client.post("/api/v1/customers", json={"full_name": "Nobody"}, headers=c.h).status_code == 422
@@ -94,6 +97,15 @@ def test_clinical_notes_are_encrypted_and_permissioned(client, db):
     doc = otp_login(client, "9866666666")
     client.cookies.clear()
     hd = {**bearer(doc), "X-Organization-Id": c.org["id"]}
+    # Doctors see only their own patients: not this one yet (no appointment with them), and no hint that it exists.
+    from app.models import Professional, User
+
+    db.get(Professional, db.scalar(select(Professional.id).where(Professional.public_id == c.pro["id"]))).user_id = \
+        db.scalar(select(User.id).where(User.public_id == doc["user"]["id"]))
+    db.flush()
+    assert client.get(f"/api/v1/customers/{cust['id']}/notes", headers=hd).status_code == 404
+    assert cust["id"] not in str(client.get("/api/v1/customers", headers=hd).json())
+    c.staff_book(ist(c.monday, 10), customer={"full_name": "Patient P", "mobile": "9844444444"})
     assert client.get(f"/api/v1/customers/{cust['id']}/notes", headers=hd).status_code == 200
     assert client.delete(f"/api/v1/customers/{cust['id']}/notes/{note['id']}", headers=hd).status_code == 200
 

@@ -61,6 +61,10 @@ class UserSession(PKMixin, PublicIdMixin, TimestampMixin, Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     revoked_reason: Mapped[str | None] = mapped_column(String(64))
+    # Last time the person proved it was them (sign-in, or password / code again): sensitive actions need it recent.
+    reauthenticated_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # Screen locked after inactivity: the API refuses everything but unlocking and signing out until then.
+    locked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 
     user: Mapped[User] = relationship(back_populates="sessions")
 

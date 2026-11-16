@@ -50,6 +50,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             headers.setdefault("Cache-Control", "public, max-age=86400")
         else:
             headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+            if request.url.path.startswith("/api/"):
+                # API answers hold personal data: never kept by the browser or a shared proxy unless an endpoint says
+                # otherwise (public clinic pages set their own short cache).
+                headers.setdefault("Cache-Control", "no-store")
+                headers.setdefault("Pragma", "no-cache")
         if settings.cookie_secure:
             headers.setdefault("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
         return response

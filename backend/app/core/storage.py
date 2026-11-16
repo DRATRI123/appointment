@@ -124,6 +124,66 @@ class S3Storage:
         self.client.delete_object(Bucket=self.bucket, Key=self._key(key))
 
 
+class EncryptingStorage:
+    """Private files are encrypted before they reach the disk or the bucket (AES-256-GCM with the "files" purpose key)
+    and decrypted when the app reads them. Public files (logos, website images) are stored as they are.
+    ``StoredFile`` reports the size and SHA-256 of the original file, so checksums keep meaning the document itself."""
+
+    def __init__(self, inner: Storage):
+        self.inner = inner
+
+    def save(self, *, scope: str, visibility: str, data: bytes, mime_type: str) -> StoredFile:
+        if visibility != "private":
+            return self.inner.save(scope=scope, visibility=visibility, data=data, mime_type=mime_type)
+        from app.security.crypto import encrypt_bytes
+
+        stored = self.inner.save(scope=scope, visibility=visibility, data=encrypt_bytes(data), mime_type=mime_type)
+        return StoredFile(key=stored.key, url=None, mime_type=mime_type, size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+
+    def open(self, key: str) -> BinaryIO:
+        fh = self.inner.open(key)
+        if not key.startswith("private/"):
+            return fh
+        from app.security.crypto import decrypt_bytes
+
+        with fh:
+            return io.BytesIO(decrypt_bytes(fh.read()))
+
+    def read_raw(self, key: str) -> bytes:
+        with self.inner.open(key) as fh:
+            return fh.read()
+
+    def write_raw(self, key: str, data: bytes) -> None:
+        """Replace a stored file in place (key rotation / first-time encryption). Same key, same location."""
+        if isinstance(self.inner, LocalStorage):
+            path = self.inner._path(key)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_bytes(data)
+            tmp.replace(path)
+        else:
+            self.inner.client.put_object(Bucket=self.inner.bucket, Key=self.inner._key(key), Body=data, ServerSideEncryption="AES256")
+
+    def private_keys(self):
+        """Every stored private file key (for rotation)."""
+        if isinstance(self.inner, LocalStorage):
+            root = self.inner.root
+            for path in sorted((root / "private").rglob("*")):
+                if path.is_file() and not path.name.endswith(".tmp"):
+                    yield str(path.relative_to(root)).replace("\\", "/")
+        else:
+            paginator = self.inner.client.get_paginator("list_objects_v2")
+            prefix = self.inner._key("private/")
+            for page in paginator.paginate(Bucket=self.inner.bucket, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    yield obj["Key"][len(self.inner._key("")):]
+
+    def delete(self, key: str) -> None:
+        self.inner.delete(key)
+
+    def __getattr__(self, name):  # public_url_prefix, root, ... of the wrapped backend
+        return getattr(self.inner, name)
+
+
 _storage: Storage | None = None
 
 
@@ -132,13 +192,14 @@ def get_storage() -> Storage:
     if _storage is None:
         settings = get_settings()
         if settings.storage_backend == "local":
-            _storage = LocalStorage(Path(settings.storage_local_path))
+            inner: Storage = LocalStorage(Path(settings.storage_local_path))
         else:
             import boto3
 
             client = boto3.client("s3", region_name=settings.s3_region, endpoint_url=settings.s3_endpoint_url,
                                   aws_access_key_id=settings.s3_access_key_id, aws_secret_access_key=settings.s3_secret_access_key)
-            _storage = S3Storage(client, settings.s3_bucket or "", settings.s3_prefix)
+            inner = S3Storage(client, settings.s3_bucket or "", settings.s3_prefix)
+        _storage = EncryptingStorage(inner)
     return _storage
 
 
@@ -150,6 +211,9 @@ def validate_upload(data: bytes, *, allowed: set[str], max_mb: int) -> str:
     mime = sniff_mime(data[:16])
     if mime is None or mime not in allowed:
         raise ValidationFailed("Unsupported file type. Allowed: " + ", ".join(sorted(allowed)), code="unsupported_file")
+    from app.core.virus_scan import scan_upload
+
+    scan_upload(data)  # optional ClamAV check (UPLOAD_SCANNER=clamav); fails closed
     return mime
 
 

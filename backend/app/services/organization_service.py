@@ -14,6 +14,8 @@ from app.models import Organization, OrganizationDomain, OrganizationMembership,
 from app.repositories.organizations import MembershipRepository, OrganizationRepository, RoleRepository
 from app.schemas.organization import DomainCreate, OrganizationCreate, OrganizationUpdate
 from app.services.audit_service import RequestMeta, record_audit
+from app.services.privacy_service import DEFAULTS as PRIVACY_DEFAULTS
+from app.services.privacy_service import validate_privacy_values
 
 SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed", "otp", "security"}
 
@@ -129,6 +131,8 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
         "consent_text": "I agree to the clinic storing my details to manage my appointments.",
         "require_consent_at_booking": False,
         "allow_customer_self_update": True,
+        # Masking, reveal, re-authentication, screen lock, watermark, print and export limits (app/services/privacy_service.py)
+        **PRIVACY_DEFAULTS,
     },
 }
 
@@ -288,6 +292,8 @@ class OrganizationService:
                 raise ValidationFailed("Only require_admin_mfa (true or false) can be set here.", code="invalid_setting")
             if values.get("require_admin_mfa") and actor.mfa_enabled_at is None:
                 raise ValidationFailed("Turn on two-step sign-in for your own account first, so you are not locked out.", code="mfa_not_enabled")
+        if namespace == "privacy":
+            values = validate_privacy_values(values)
         if namespace == "otp":
             values = validate_otp_values(values)
             merged = {**before, **values}

@@ -49,6 +49,36 @@ DEFAULT_TEMPLATES: list[dict[str, Any]] = [
 ]
 
 
+HIDDEN_ANSWER = "Hidden: clinical access needed"
+
+
+def seal_answers(form: BookingForm, answers: dict[str, Any]) -> dict[str, Any]:
+    """Answers to fields marked sensitive (medical history, medicines, ...) are encrypted at rest (AES-256-GCM)."""
+    import json
+
+    from app.security.crypto import encrypt_text
+
+    sensitive = {f.key for f in form.fields if f.is_sensitive}
+    return {k: ({"enc": encrypt_text(json.dumps(v))} if k in sensitive and v not in (None, "", []) else v) for k, v in answers.items()}
+
+
+def open_answers(answers: dict[str, Any] | None, show_sensitive: bool) -> dict[str, Any] | None:
+    """Decrypt sensitive answers for people allowed to see them; everyone else gets a placeholder, never the value."""
+    import json
+
+    from app.security.crypto import decrypt_text
+
+    if answers is None:
+        return None
+    out: dict[str, Any] = {}
+    for k, v in answers.items():
+        if isinstance(v, dict) and set(v) == {"enc"}:
+            out[k] = json.loads(decrypt_text(v["enc"])) if show_sensitive else HIDDEN_ANSWER
+        else:
+            out[k] = v
+    return out
+
+
 class FormService:
     def __init__(self, db: Session, org: Organization, actor: User | None = None, meta: RequestMeta | None = None):
         self.db = db
@@ -350,19 +380,19 @@ class FormService:
     def record_response(self, form: BookingForm, answers: dict[str, Any], *, appointment: Appointment | None, customer: Customer | None) -> BookingFormResponse:
         attachments = [x for f in form.fields if f.field_type == "file" for x in (answers.get(f.key) or [])]
         row = BookingFormResponse(organization_id=self.org.id, form_id=form.id, appointment_id=appointment.id if appointment else None, customer_id=customer.id if customer else None,
-                                  answers=answers, attachments=attachments or None, submitted_by_user_id=self.actor.id if self.actor else None)
+                                  answers=seal_answers(form, answers), attachments=attachments or None, submitted_by_user_id=self.actor.id if self.actor else None)
         self.db.add(row)
         self.db.flush()
         return row
 
-    def response_for_appointment(self, appointment: Appointment) -> FormResponseRead | None:
+    def response_for_appointment(self, appointment: Appointment, *, show_sensitive: bool = False) -> FormResponseRead | None:
         row = self.db.scalar(select(BookingFormResponse).where(BookingFormResponse.appointment_id == appointment.id).order_by(BookingFormResponse.id.desc()))
         if row is None:
             return None
         form = self.db.get(BookingForm, row.form_id)
         cust = ids_to_public(self.db, Customer, {row.customer_id}).get(row.customer_id) if row.customer_id else None
         return FormResponseRead(id=row.public_id, form_id=form.public_id, form_name=form.name, form_version=form.version, appointment_id=appointment.public_id, customer_id=cust,
-                                answers=row.answers, attachments=row.attachments, created_at=row.created_at)
+                                answers=open_answers(row.answers, show_sensitive), attachments=row.attachments, created_at=row.created_at)
 
     # --------------------------------------------------------- serialize
     def to_read(self, form: BookingForm) -> BookingFormRead:

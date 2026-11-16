@@ -35,6 +35,7 @@ PERMISSIONS: dict[str, str] = {
     "customers:clinical_read": "Read clinical notes and documents",
     "customers:clinical_write": "Write clinical notes and upload documents",
     "customers:export": "Export customer data",
+    "customers:reveal": "Show a patient's full mobile number and email (each time is audit-logged)",
     "customers:erase": "Permanently erase a customer's personal data on request",
     # appointments
     "appointments:read": "View appointments",
@@ -86,20 +87,20 @@ ROLE_PERMISSIONS: dict[SystemRole, tuple[str, ...]] = {
         "branches:write", "professionals:write", "professionals:schedule", "services:write",
         "customers:write", "appointments:write", "appointments:checkin", "payments:record",
         "payments:verify", "upi_accounts:read", "refunds:request", "staff:read",
-        "booking_forms:read", "notifications:read", "reports:export",
+        "booking_forms:read", "notifications:read", "reports:export", "customers:reveal",
     ),
     SystemRole.DOCTOR: (
         "organization:read", "branches:read", "professionals:read", "services:read",
-        "customers:read", "customers:clinical_read", "customers:clinical_write",
+        "customers:read", "customers:reveal", "customers:clinical_read", "customers:clinical_write",
         "appointments:read_own", "appointments:checkin", "appointments:write", "reports:read",
     ),
     SystemRole.PROFESSIONAL: (
         "organization:read", "branches:read", "professionals:read", "services:read",
-        "customers:read", "appointments:read_own", "appointments:checkin", "appointments:write",
+        "customers:read", "customers:reveal", "appointments:read_own", "appointments:checkin", "appointments:write",
     ),
     SystemRole.RECEPTIONIST: (
         "organization:read", "branches:read", "professionals:read", "services:read",
-        "customers:read", "customers:write", "appointments:read", "appointments:write",
+        "customers:read", "customers:write", "customers:reveal", "appointments:read", "appointments:write",
         "appointments:checkin", "payments:read", "payments:record", "upi_accounts:read",
         "booking_forms:read", "refunds:request",
     ),

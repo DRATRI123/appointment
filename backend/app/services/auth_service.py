@@ -326,6 +326,13 @@ class AuthService:
             session.revoked_reason = "expired"
             self.db.flush()
             raise AuthenticationError("Session expired. Please sign in again.", code="refresh_expired")
+        idle = timedelta(minutes=self.settings.session_idle_minutes)
+        if session.last_seen_at is not None and now - session.last_seen_at > idle:
+            # Nobody used this device for longer than allowed (closed laptop, forgotten tab): sign in again.
+            session.revoked_at = now
+            session.revoked_reason = "idle_timeout"
+            self.db.flush()
+            raise AuthenticationError("You were signed out after a period without use. Please sign in again.", code="session_idle", persist=True)
         user = self.users.get(session.user_id)
         if user is None:
             raise AuthenticationError("Invalid refresh token.", code="refresh_invalid")
@@ -343,10 +350,62 @@ class AuthService:
             device_label=session.device_label,
             expires_at=session.expires_at,
             last_seen_at=now,
+            reauthenticated_at=session.reauthenticated_at,  # refreshing the token is not proving it is them
+            locked_at=session.locked_at,                    # nor does it unlock a locked screen
         )
         self.sessions.add(new_session)
         access = create_access_token(user_public_id=user.public_id, session_public_id=new_session.public_id)
         return AuthResult(user=user, session=new_session, access_token=access, refresh_token=new_token)
+
+    # ------------------------------------------------------- re-authentication and screen lock
+    def send_reauth_code(self, user: User) -> str | None:
+        """For accounts that sign in with a one-time code (no password): a new code to the same mobile / email."""
+        identifier = user.mobile or user.email
+        if not identifier:
+            raise ValidationFailed("This account has no mobile number or email for a code.", code="no_contact")
+        _, debug = self.request_otp(identifier, OTPPurpose.LOGIN, user=user)
+        return debug
+
+    def reauthenticate(self, user: User, session: UserSession, *, password: str | None, code: str | None, otp_code: str | None) -> None:
+        """Confirm it is still the same person: password, authenticator code, or a fresh one-time code. Unlocks the
+        screen and starts a new window for sensitive actions."""
+        from app.core.observability import security_event
+
+        ok = False
+        if password and user.password_hash:
+            ok = verify_password(password, user.password_hash)
+        elif code and user.mfa_enabled_at is not None:
+            from app.services.mfa_service import MFAService
+
+            ok = MFAService(self.db, self.meta)._check_code(user, code, allow_recovery=False)
+        elif otp_code:
+            ok = self._check_reauth_otp(user, otp_code)
+        if not ok:
+            security_event("reauth_failed")
+            record_audit(self.db, action="auth.reauth_failed", actor=user, entity_type="user", entity_id=user.public_id, meta=self.meta)
+            raise AuthenticationError("That did not match. Please try again.", code="reauth_failed", persist=True)
+        now = utcnow()
+        session.reauthenticated_at = now
+        session.locked_at = None
+        session.last_seen_at = now
+        record_audit(self.db, action="auth.reauthenticated", actor=user, entity_type="user", entity_id=user.public_id, meta=self.meta)
+
+    def _check_reauth_otp(self, user: User, code: str) -> bool:
+        ident = user.mobile or user.email or ""
+        record = self.otps.latest_unconsumed(ident, OTPPurpose.LOGIN)
+        if record is None or record.expires_at < utcnow() or record.attempts >= record.max_attempts:
+            return False
+        if not verify_otp_hash(ident, code.strip(), record.code_hash):
+            record.attempts += 1
+            self.db.flush()
+            return False
+        record.verified_at = record.consumed_at = utcnow()
+        return True
+
+    def lock(self, user: User, session: UserSession) -> None:
+        if session.locked_at is None:
+            session.locked_at = utcnow()
+            record_audit(self.db, action="auth.screen_locked", actor=user, entity_type="user", entity_id=user.public_id, meta=self.meta)
 
     def logout(self, session_public_id: str | None, refresh_token: str | None = None) -> None:
         session = None
@@ -413,6 +472,7 @@ class AuthService:
             device_label=device_label,
             expires_at=now + timedelta(days=self.settings.refresh_token_expire_days),
             last_seen_at=now,
+            reauthenticated_at=now,  # signing in proves it is them; sensitive actions accept this for a few minutes
         )
         self.sessions.add(session)
         user.last_login_at = now

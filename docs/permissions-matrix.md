@@ -65,6 +65,7 @@ The browser only hides menu items; it is never what protects data.
 | `customers:clinical_read` | Read clinical notes and documents | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  |  |
 | `customers:clinical_write` | Write clinical notes and upload documents | ✓ | ✓ | ✓ |  | ✓ |  |  |  |  |  |
 | `customers:export` | Export customer data | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |
+| `customers:reveal` | Show a patient's full mobile number and email (each time is audit-logged) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |
 | `customers:erase` | Permanently erase a customer's personal data on request | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |
 | `appointments:read` | View appointments | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ | ✓ |  |
 | `appointments:write` | Create, reschedule and cancel appointments | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |

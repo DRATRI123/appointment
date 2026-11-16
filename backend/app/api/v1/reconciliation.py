@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import Response
 
 from app.api.deps import DB, Meta, TenantContext, require_permission
+from app.core.database import writes_on_read
 from app.core.exceptions import ValidationFailed
 from app.core.pagination import Page, PageMeta, PageParams, page_params
 from app.schemas.common import APIModel, Message
@@ -135,7 +136,14 @@ def report(db: DB, ctx: Manage, meta: Meta, from_date: date | None = None, to_da
     return _svc(db, ctx, meta).report(from_date, to_date)
 
 
-@router.get("/report.csv", summary="Unmatched report as CSV")
+@router.get("/report.csv", summary="Unmatched report as CSV (daily export limit, audit-logged)")
+@writes_on_read  # audit-logged
 def report_csv(db: DB, ctx: Manage, meta: Meta, from_date: date | None = None, to_date: date | None = None):
+    from app.services.audit_service import record_audit
+    from app.services.privacy_service import check_export_allowed
+
+    check_export_allowed(db, ctx.organization, ctx.user.id)
     body = _svc(db, ctx, meta).report_csv(from_date, to_date)
+    record_audit(db, action="reconciliation.exported", actor=ctx.user, organization_id=ctx.organization.id, entity_type="report",
+                 entity_id="unmatched", after={"from": str(from_date or ""), "to": str(to_date or "")}, meta=meta)
     return Response(content="﻿" + body, media_type="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="unmatched-report.csv"', "Cache-Control": "no-store"})

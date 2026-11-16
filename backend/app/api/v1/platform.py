@@ -4,11 +4,11 @@ from __future__ import annotations
 from datetime import date as _date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 
-from app.api.deps import DB, Meta, PlatformAdmin
+from app.api.deps import DB, Meta, PlatformAdmin, recent_auth
 from app.core.database import writes_on_read
 from app.core.enums import UserStatus
 from app.core.exceptions import NotFoundError, PermissionDenied
@@ -69,7 +69,7 @@ def get_organization(organization_id: str, db: DB, _: PlatformAdmin) -> Organiza
     return OrganizationRead.model_validate(OrganizationService(db).get_or_404(organization_id))
 
 
-@router.post("/organizations/{organization_id}/status", response_model=OrganizationRead)
+@router.post("/organizations/{organization_id}/status", response_model=OrganizationRead, dependencies=[recent_auth("platform")])
 def set_organization_status(organization_id: str, payload: OrganizationStatusUpdate, db: DB, admin: PlatformAdmin, meta: Meta) -> OrganizationRead:
     service = OrganizationService(db, meta)
     org = service.get_or_404(organization_id)
@@ -92,7 +92,20 @@ def list_users(
     return Page(data=[UserRead.model_validate(u) for u in rows], meta=PageMeta(page=params.page, page_size=params.page_size, total=int(total)))
 
 
-@router.post("/users/{user_id}/status", response_model=UserRead)
+@router.post("/users/{user_id}/sessions/revoke", response_model=dict, dependencies=[recent_auth("platform")],
+             summary="Sign an account out on every device now")
+def revoke_user_sessions(user_id: str, db: DB, admin: PlatformAdmin, meta: Meta) -> dict:
+    from app.services.auth_service import AuthService
+
+    user = db.scalar(select(User).where(User.public_id == user_id))
+    if user is None:
+        raise NotFoundError("User not found.")
+    count = AuthService(db, meta).revoke_all_sessions(user, reason="revoked_by_platform")
+    record_audit(db, action="platform.sessions_revoked", actor=admin, entity_type="user", entity_id=user.public_id, after={"sessions": count}, meta=meta)
+    return {"detail": f"Signed out of {count} device(s).", "sessions": count}
+
+
+@router.post("/users/{user_id}/status", response_model=UserRead, dependencies=[recent_auth("platform")])
 def set_user_status(user_id: str, payload: UserStatusUpdate, db: DB, admin: PlatformAdmin, meta: Meta) -> UserRead:
     if payload.status not in {s.value for s in UserStatus}:
         raise NotFoundError("Unknown status.")
@@ -134,7 +147,7 @@ def get_platform_settings(db: DB, _: PlatformAdmin):
     return platform_settings(db)
 
 
-@router.put("/settings", response_model=PlatformSettings)
+@router.put("/settings", response_model=PlatformSettings, dependencies=[recent_auth("platform")])
 def put_platform_settings(payload: PlatformSettings, db: DB, admin: PlatformAdmin, meta: Meta):
     return PlatformService(db, admin, meta).save_settings(payload)
 
@@ -144,7 +157,7 @@ def get_plans(db: DB, _: PlatformAdmin):
     return plans(db)
 
 
-@router.put("/plans", response_model=list[Plan], summary="Replace the plan catalogue")
+@router.put("/plans", response_model=list[Plan], dependencies=[recent_auth("platform")], summary="Replace the plan catalogue")
 def put_plans(payload: list[Plan], db: DB, admin: PlatformAdmin, meta: Meta):
     return PlatformService(db, admin, meta).save_plans(payload)
 
@@ -177,8 +190,12 @@ def set_subscription(organization_id: str, payload: SubscriptionUpdate, db: DB, 
 
 @router.get("/exports/organizations", summary="Organizations with plan and usage as CSV or Excel")
 @writes_on_read  # access is audit-logged
-def export_organizations(db: DB, admin: PlatformAdmin, meta: Meta, format: Annotated[str, Query(pattern=r"^(csv|xlsx)$")] = "csv"):  # noqa: A002
+def export_organizations(request: Request, db: DB, admin: PlatformAdmin, meta: Meta, format: Annotated[str, Query(pattern=r"^(csv|xlsx)$")] = "csv"):  # noqa: A002
+    from app.services.privacy_service import check_export_allowed, require_recent_auth
     from app.services.report_service import Column, ReportDef, to_csv, to_xlsx
+
+    require_recent_auth(db, request, None, action="export")
+    check_export_allowed(db, None, admin.id)
 
     rows = []
     for s in PlatformService(db, admin).summaries(search=None, plan=None, status=None, over_limit=False):

@@ -56,6 +56,7 @@ from app.schemas.payment import (
 )
 from app.services.audit_service import RequestMeta, record_audit
 from app.services.organization_service import OrganizationService
+from app.services.privacy_service import view_mobile
 from app.services.upi_account_service import UPIAccountService
 
 OPEN_STATUSES = (PaymentStatus.INITIATED, PaymentStatus.AWAITING_PAYMENT, PaymentStatus.REJECTED)
@@ -414,7 +415,7 @@ class PaymentService:
             rejection_reason=p.rejection_reason, appointment_id=appt.public_id if appt else None, appointment_reference=appt.reference if appt else None,
             appointment_start_at=appt.start_at if appt else None, appointment_timezone=appt.timezone if appt else None, appointment_status=appt.status if appt else None, service_name=svc.name if svc else None,
             branch_name=branch.name if branch else None, customer_id=cust.public_id if cust else None, customer_name=cust.full_name if cust else None,
-            customer_mobile=cust.mobile if cust else None, upi_account_id=acct.public_id if acct else None, upi_account_name=acct.display_name if acct else None,
+            customer_mobile=view_mobile(self.db, cust.mobile) if cust else None, upi_account_id=acct.public_id if acct else None, upi_account_name=acct.display_name if acct else None,
             upi_id=acct.upi_id if acct else None, latest_utr=latest, duplicate_utr_flag=dup > 0, created_at=p.created_at,
         )
 

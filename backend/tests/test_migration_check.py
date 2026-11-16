@@ -19,6 +19,10 @@ def test_data_removing_changes_are_flagged():
     assert destructive_reasons('def upgrade():\n    op.drop_table("payments")') == ["drops a table"]
     assert destructive_reasons('def upgrade():\n    with op.batch_alter_table("t") as batch_op:\n        batch_op.drop_column("c")') == ["drops a column"]
     assert destructive_reasons('def upgrade():\n    op.alter_column("t", "c", type_=sa.Integer())') == ["changes a column type"]
+    # existing_type before type_ (the usual autogenerate order) used to slip through
+    assert destructive_reasons('def upgrade():\n    batch_op.alter_column("c", existing_type=sa.VARCHAR(length=120), type_=sa.Integer())') == ["changes a column type"]
+    # widening to TEXT cannot lose data
+    assert destructive_reasons('def upgrade():\n    batch_op.alter_column("c", existing_type=sa.VARCHAR(length=120), type_=sa.Text(), existing_nullable=True)') == []
     assert destructive_reasons('def upgrade():\n    op.execute("DELETE FROM sessions")') == ["runs DELETE/TRUNCATE/DROP SQL"]
     assert destructive_reasons("def upgrade():\n    op.execute('truncate audit_logs')") == ["runs DELETE/TRUNCATE/DROP SQL"]
 
