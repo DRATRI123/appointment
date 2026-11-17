@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { isFramed, panelLoginPath, panelSlug } from "@/lib/panel-session";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -22,7 +23,8 @@ export function RequireAuth({ children, requirePlatformAdmin, requireMembership,
   useEffect(() => {
     if (isLoading) return;
     if (!user) {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      // Inside the clinic's app: back to the panel's own sign-in, never the ordinary one.
+      router.replace(isFramed() && panelSlug() ? panelLoginPath(pathname) : `/login?next=${encodeURIComponent(pathname)}`);
       return;
     }
     if (requireMembership && !isPlatformAdmin && memberships.length === 0) {

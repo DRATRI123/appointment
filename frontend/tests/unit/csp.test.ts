@@ -82,3 +82,28 @@ describe("Google sign-in and analytics", () => {
     expect(directive(signIn, "script-src")).not.toContain("accounts.google.com");
   });
 });
+
+import { panelOrigins, panelReturnPath } from "@/proxy";
+
+describe("embedded admin panel", () => {
+  it("lists the clinic app only while the panel is on, from its own policy (separate from the booking page's)", async () => {
+    clearEmbedPolicyCache();
+    const calls: string[] = [];
+    expect(await panelOrigins("akshar-clinic", fakeFetch(200, { allowed_origins: ["https://app.aksharclinic.com", "https://x.com; frame-ancestors *"] }, calls), 0))
+      .toEqual(["https://app.aksharclinic.com"]);
+    expect(calls[0]).toContain("/api/v1/panel/akshar-clinic/policy");
+    // The booking-page list of the same clinic is cached separately.
+    expect(await embedOrigins("akshar-clinic", fakeFetch(200, { allowed_origins: ["https://shop.example.com"] }), 0)).toEqual(["https://shop.example.com"]);
+    expect(await panelOrigins("nope", fakeFetch(404, {}), 0)).toEqual([]);
+  });
+
+  it("sends a reloaded admin screen inside the frame back through /panel/<clinic>, and nothing else", () => {
+    expect(panelReturnPath("/admin/appointments", "?status=booked", "iframe", "akshar-clinic")).toBe("/panel/akshar-clinic?next=%2Fadmin%2Fappointments%3Fstatus%3Dbooked");
+    expect(panelReturnPath("/professional", "", "iframe", "akshar-clinic")).toBe("/panel/akshar-clinic?next=%2Fprofessional");
+    expect(panelReturnPath("/admin", "", "document", "akshar-clinic")).toBeNull(); // opened normally: unchanged
+    expect(panelReturnPath("/admin", "", "iframe", undefined)).toBeNull(); // no panel: stays refused
+    expect(panelReturnPath("/super-admin", "", "iframe", "akshar-clinic")).toBeNull(); // never the super admin
+    expect(panelReturnPath("/customer", "", "iframe", "akshar-clinic")).toBeNull();
+    expect(panelReturnPath("/admin", "", "iframe", "x/../../evil")).toBeNull(); // the hint must be a clinic address
+  });
+});

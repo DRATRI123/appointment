@@ -65,6 +65,9 @@ class UserSession(PKMixin, PublicIdMixin, TimestampMixin, Base):
     reauthenticated_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     # Screen locked after inactivity: the API refuses everything but unlocking and signing out until then.
     locked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # Signed in through the clinic's embedded panel (its own app shows the admin panel in an iframe): this session works
+    # only inside that one clinic, and only while the clinic keeps the panel on and the person keeps "panel:use".
+    panel_organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
 
     user: Mapped[User] = relationship(back_populates="sessions")
 

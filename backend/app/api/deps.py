@@ -152,6 +152,8 @@ def get_optional_user(request: Request, db: DB, _usage: Annotated[None, Depends(
         # The screen locked after inactivity: nothing else answers until the person confirms it is them.
         raise PermissionDenied("The screen is locked. Confirm it is you to continue.", code="session_locked")
     request.state.session_public_id = session.public_id
+    # Signed in inside a clinic's embedded panel: limited to that clinic (checked in resolve_tenant).
+    request.state.panel_organization_id = session.panel_organization_id
     request.state.user = user
     return user
 
@@ -182,7 +184,7 @@ def check_platform_admin_access(request: Request, user: User) -> None:
 
 
 def require_platform_admin(request: Request, user: CurrentUser) -> User:
-    if not user.is_platform_admin:
+    if not user.is_platform_admin or getattr(request.state, "panel_organization_id", None) is not None:
         raise PermissionDenied("Platform administrator access required.", code="platform_admin_required")
     check_platform_admin_access(request, user)
     return user
@@ -230,8 +232,13 @@ def resolve_tenant(
     if api_key is not None:
         return _resolve_api_key_tenant(request, db, user, api_key, organization_public_id)
     org: Organization | None = None
+    panel_org_id = getattr(request.state, "panel_organization_id", None)
     if organization_public_id:
         org = orgs.get_by_public_id(organization_public_id)
+        if org is None or org.deleted_at is not None:
+            raise NotFoundError("Organization not found.")
+    elif panel_org_id is not None:
+        org = db.get(Organization, panel_org_id)
         if org is None or org.deleted_at is not None:
             raise NotFoundError("Organization not found.")
     else:
@@ -245,6 +252,12 @@ def resolve_tenant(
                 f"Select an organization: send the {ORG_HEADER} header.", code="organization_required"
             )
 
+    if panel_org_id is not None:
+        # Embedded-panel sign-in: this one clinic only, while its panel is on and the person keeps "panel:use"
+        # (never super admin powers, even for a super admin account).
+        from app.services import panel_service
+
+        panel_service.check_session(db, org, user, panel_org_id)
     membership = memberships.get_for_user_in_org(user.id, org.id)
     if membership is None:
         if not user.is_platform_admin:
@@ -254,7 +267,8 @@ def resolve_tenant(
             db, action="platform.impersonate", actor=user, organization_id=org.id, entity_type="organization",
             entity_id=org.public_id, purpose=f"{request.method} {request.url.path}", meta=get_request_meta(request),
         )
-    if org.status != OrganizationStatus.ACTIVE and not user.is_platform_admin and not allow_inactive_org:
+    is_platform_admin = user.is_platform_admin and panel_org_id is None
+    if org.status != OrganizationStatus.ACTIVE and not is_platform_admin and not allow_inactive_org:
         raise PermissionDenied("This organization is not active.", code="organization_inactive")
 
     if membership is not None and user.mfa_enabled_at is None and membership.role is not None:
@@ -265,9 +279,9 @@ def resolve_tenant(
             if row is not None and (row.value or {}).get("v") is True:
                 raise PermissionDenied("This clinic requires two-step sign-in for administrators. Turn it on under Profile & security.",
                                        code="mfa_setup_required")
-    permissions = set(PERMISSIONS) if user.is_platform_admin else {p.code for p in membership.role.permissions}  # type: ignore[union-attr]
+    permissions = set(PERMISSIONS) if is_platform_admin else {p.code for p in membership.role.permissions}  # type: ignore[union-attr]
     ctx = TenantContext(
-        user=user, organization=org, membership=membership, permissions=permissions, is_platform_admin=user.is_platform_admin
+        user=user, organization=org, membership=membership, permissions=permissions, is_platform_admin=is_platform_admin
     )
     from app.core.branch_scope import set_branch_scope
 

@@ -17,7 +17,7 @@ from app.services.audit_service import RequestMeta, record_audit
 from app.services.privacy_service import DEFAULTS as PRIVACY_DEFAULTS
 from app.services.privacy_service import validate_privacy_values
 
-SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed", "otp", "security"}
+SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed", "otp", "security", "panel"}
 
 # One-time-code policy for public bookings: (default, min, max) for numbers.
 OTP_LIMITS = {
@@ -51,7 +51,7 @@ def validate_otp_values(values: dict[str, Any]) -> dict[str, Any]:
 RESERVED_SLUGS = frozenset({
     "about", "admin", "api", "app", "auth", "book", "booking", "contact", "customer", "docs", "embed", "favicon-ico",
     "forgot-password", "health", "help", "login", "logout", "media", "metrics", "o", "onboarding", "pricing", "privacy",
-    "professional", "redoc", "refund-policy", "register", "reset-password", "robots-txt", "settings", "signup", "sitemap-xml",
+    "panel", "professional", "redoc", "refund-policy", "register", "reset-password", "robots-txt", "settings", "signup", "sitemap-xml",
     "static", "super-admin", "support", "terms", "verify-email", "www",
 })
 EMBED_ORIGIN_RE = re.compile(r"^https://[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+(?::\d{1,5})?$")
@@ -70,12 +70,29 @@ def validate_embed_origins(value: Any) -> list[str]:
     for raw in value:
         origin = str(raw).strip().lower().rstrip("/")
         if not (EMBED_ORIGIN_RE.fullmatch(origin) or (dev and DEV_EMBED_ORIGIN_RE.fullmatch(origin))):
-            raise ValidationFailed(f"{raw!r} is not an allowed origin. Use the exact https:// address of your shop, e.g. "
+            raise ValidationFailed(f"{raw!r} is not an allowed origin. Use the exact https:// address of your shop or app, e.g. "
                                    "https://www.yourclinic.com or https://your-store.myshopify.com (no paths, no wildcards).",
                                    code="invalid_embed_origin")
         if origin not in out:
             out.append(origin)
     return out
+
+PANEL_MAX_ORIGINS = 5
+
+
+def validate_panel_values(values: dict[str, Any]) -> dict[str, Any]:
+    unknown = set(values) - {"enabled", "allowed_origins"}
+    if unknown:
+        raise ValidationFailed(f"Unknown setting: {', '.join(sorted(unknown))}", code="invalid_setting")
+    out = dict(values)
+    if "enabled" in out and not isinstance(out["enabled"], bool):
+        raise ValidationFailed("enabled must be true or false.", code="invalid_setting")
+    if "allowed_origins" in out:
+        if not isinstance(out["allowed_origins"], list) or len(out["allowed_origins"]) > PANEL_MAX_ORIGINS:
+            raise ValidationFailed(f"Add at most {PANEL_MAX_ORIGINS} app addresses.", code="invalid_panel_origins")
+        out["allowed_origins"] = validate_embed_origins(out["allowed_origins"])
+    return out
+
 
 DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     "booking": {
@@ -91,6 +108,9 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     },
     # Websites (e.g. a Shopify store) allowed to show the booking page inside an iframe.
     "embed": {"allowed_origins": []},
+    # The clinic's own app (e.g. its clinic software) may show this admin panel inside an iframe: only these exact web
+    # addresses, and only people with the "panel:use" permission can sign in there (docs/integrations/embedded-admin.md).
+    "panel": {"enabled": False, "allowed_origins": []},
     # Owners and administrators must use two-step sign-in (authenticator app) to manage the clinic.
     "security": {"require_admin_mfa": False},
     # One-time codes before an online booking is accepted (see app/services/otp).
@@ -286,6 +306,8 @@ class OrganizationService:
         before = self.get_settings(org, namespace)[namespace]
         if namespace == "embed" and "allowed_origins" in values:
             values = {**values, "allowed_origins": validate_embed_origins(values["allowed_origins"])}
+        if namespace == "panel":
+            values = validate_panel_values(values)
         if namespace == "security":
             unknown = set(values) - {"require_admin_mfa"}
             if unknown or not isinstance(values.get("require_admin_mfa", False), bool):

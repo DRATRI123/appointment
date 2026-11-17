@@ -7,6 +7,7 @@
  */
 import { apiBase } from "@/lib/env";
 import { askReauth, notifyLocked } from "@/lib/privacy-bus";
+import { credentialsMode, panelSession, refreshPanelSession } from "@/lib/panel-session";
 import type { ApiErrorBody } from "@/types/api";
 
 export class ApiError extends Error {
@@ -68,7 +69,10 @@ function readCookie(name: string): string | undefined {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}, _retried = false): Promise<T> {
-  const { method = "GET", body, organizationId = defaultOrganizationId, searchParams, headers, ...rest } = options;
+  const { method = "GET", body, searchParams, headers, ...rest } = options;
+  // Inside the clinic's app (embedded panel): the panel's own sign-in and always its clinic, never the cookies.
+  const panel = panelSession();
+  const organizationId = panel ? panel.organizationId : (options.organizationId ?? defaultOrganizationId);
   const origin =
     typeof window !== "undefined" ? window.location.origin : process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000";
   const url = new URL(`${apiBase}${path.startsWith("/") ? path : `/${path}`}`, origin);
@@ -83,6 +87,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
   const isForm = typeof FormData !== "undefined" && body instanceof FormData;
   if (body !== undefined && !isForm) finalHeaders.set("Content-Type", "application/json");
   if (organizationId) finalHeaders.set("X-Organization-Id", organizationId);
+  if (panel) finalHeaders.set("Authorization", `Bearer ${panel.access}`);
   if (method !== "GET") {
     const csrf = readCookie("csrf_token");
     if (csrf) finalHeaders.set("X-CSRF-Token", csrf);
@@ -92,7 +97,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
     ...rest,
     method,
     headers: finalHeaders,
-    credentials: "include",
+    credentials: credentialsMode(),
     body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
   });
 
@@ -104,7 +109,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
     const error = new ApiError(response.status, json as ApiErrorBody | null, response.statusText);
     const isAuthRoute = path.startsWith("/auth/");
     if (response.status === 401 && !isAuthRoute && !_retried && error.code === "token_expired") {
-      if (await tryRefresh()) return apiRequest<T>(path, options, true);
+      if (await (panel ? refreshPanelSession() : tryRefresh())) return apiRequest<T>(path, options, true);
     }
     // Sensitive action (reveal, export, document, settings): confirm it is still the same person, then try again.
     if (response.status === 403 && error.code === "reauth_required" && !_retried) {
@@ -112,7 +117,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
     }
     if (response.status === 403 && error.code === "session_locked") notifyLocked();
     // The clinic requires two-step sign-in for administrators and this account has not set it up yet.
-    if (response.status === 403 && error.code === "mfa_setup_required" && typeof window !== "undefined" && !window.location.pathname.startsWith("/customer/profile")) {
+    if (response.status === 403 && error.code === "mfa_setup_required" && !panel && typeof window !== "undefined" && !window.location.pathname.startsWith("/customer/profile")) {
       // Outside React (no router here); a full page load is fine for this one-off redirect.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.assign("/customer/profile?mfa=required#two-step");

@@ -39,11 +39,14 @@ class MFARequired(AuthenticationError):
                          data={"mfa_token": token, "mfa_token_expires_in": MFA_TOKEN_MINUTES * 60})
 
 
-def issue_mfa_token(user: User, device_label: str | None) -> str:
+def issue_mfa_token(user: User, device_label: str | None, panel_organization: str | None = None) -> str:
+    """``panel_organization``: public id of the clinic whose embedded panel the person is signing in to (or None)."""
     s = get_settings()
     now = utcnow()
     payload = {"sub": user.public_id, "typ": MFA_TOKEN_TYPE, "dev": device_label, "iat": int(now.timestamp()),
                "exp": int((now + timedelta(minutes=MFA_TOKEN_MINUTES)).timestamp()), "jti": secrets.token_hex(8)}
+    if panel_organization:
+        payload["pnl"] = panel_organization
     return jwt.encode(payload, s.secret_key, algorithm=s.jwt_algorithm)
 
 
@@ -138,10 +141,14 @@ class MFAService:
         return codes
 
     # ------------------------------------------------------------------ sign-in
-    def complete_sign_in(self, mfa_token: str, code: str):
+    def complete_sign_in(self, mfa_token: str, code: str, *, panel_organization=None):
+        """``panel_organization``: the clinic whose embedded panel this sign-in is for. A token started there finishes
+        only there (and an ordinary sign-in only at the ordinary endpoint)."""
         from app.services.auth_service import LOCKOUT_MINUTES, MAX_FAILED_LOGINS, AuthService
 
         payload = _decode_mfa_token(mfa_token)
+        if payload.get("pnl") != (panel_organization.public_id if panel_organization is not None else None):
+            raise AuthenticationError("Please sign in again.", code="mfa_token_invalid")
         user = self.db.query(User).filter(User.public_id == payload["sub"]).one_or_none()
         now = utcnow()
         if user is None or user.mfa_enabled_at is None:
@@ -160,7 +167,8 @@ class MFAService:
         user.failed_login_attempts = 0
         user.locked_until = None
         self._audit(user, "auth.login_mfa")
-        return AuthService(self.db, self.meta or RequestMeta())._issue_session(user, payload.get("dev"), mfa_passed=True)
+        return AuthService(self.db, self.meta or RequestMeta())._issue_session(user, payload.get("dev"), mfa_passed=True,
+                                                                                 panel_organization=panel_organization)
 
     # ------------------------------------------------------------------ helpers
     def _check_code(self, user: User, code: str, *, allow_recovery: bool = True) -> bool:

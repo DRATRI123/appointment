@@ -170,6 +170,12 @@ class AuthService:
         return self._issue_session(user, device_label, is_new_user=True)
 
     def login_with_password(self, *, email: str, password: str, device_label: str | None) -> AuthResult:
+        user = self.check_password_login(email=email, password=password)
+        record_audit(self.db, action="auth.login_password", actor=user, entity_type="user", entity_id=user.public_id, meta=self.meta)
+        return self._issue_session(user, device_label)
+
+    def check_password_login(self, *, email: str, password: str) -> User:
+        """Email and password are right (with the same lockout as every sign-in); no session is created yet."""
         email_n = normalize_email(email)
         user = self.users.get_by_email(email_n)
         now = utcnow()
@@ -190,8 +196,7 @@ class AuthService:
         user.failed_login_attempts = 0
         user.locked_until = None
         self._activate_invited_memberships(user)
-        record_audit(self.db, action="auth.login_password", actor=user, entity_type="user", entity_id=user.public_id, meta=self.meta)
-        return self._issue_session(user, device_label)
+        return user
 
     def change_password(self, user: User, *, current_password: str | None, new_password: str) -> None:
         if user.password_hash and not verify_password(current_password or "", user.password_hash):
@@ -312,11 +317,13 @@ class AuthService:
         return self._issue_session(user, device_label, is_new_user=is_new)
 
     # ------------------------------------------------------------- sessions
-    def refresh(self, refresh_token: str) -> AuthResult:
+    def refresh(self, refresh_token: str, *, panel_organization_id: int | None = None) -> AuthResult:
+        """``panel_organization_id``: refreshing inside that clinic's embedded panel. Panel sessions refresh only there,
+        and ordinary sessions only at the ordinary endpoint."""
         token_hash = hash_token(refresh_token)
         session = self.sessions.get_by_token_hash(token_hash)
         now = utcnow()
-        if session is None:
+        if session is None or session.panel_organization_id != panel_organization_id:
             raise AuthenticationError("Invalid refresh token.", code="refresh_invalid")
         if session.revoked_at is not None:
             # Reuse of a rotated token: assume theft and revoke the whole family.
@@ -358,6 +365,7 @@ class AuthService:
             last_seen_at=now,
             reauthenticated_at=session.reauthenticated_at,  # refreshing the token is not proving it is them
             locked_at=session.locked_at,                    # nor does it unlock a locked screen
+            panel_organization_id=session.panel_organization_id,  # an embedded-panel sign-in stays one
         )
         self.sessions.add(new_session)
         access = create_access_token(user_public_id=user.public_id, session_public_id=new_session.public_id)
@@ -460,13 +468,21 @@ class AuthService:
         self.db.flush()
         return count
 
+    def issue_panel_session(self, user: User, organization) -> AuthResult:
+        """Signed in inside that clinic's embedded admin panel (app/services/panel_service.py)."""
+        from app.services.panel_service import DEVICE_LABEL
+
+        return self._issue_session(user, DEVICE_LABEL, panel_organization=organization)
+
     # -------------------------------------------------------------- helpers
-    def _issue_session(self, user: User, device_label: str | None, *, is_new_user: bool = False, mfa_passed: bool = False) -> AuthResult:
+    def _issue_session(self, user: User, device_label: str | None, *, is_new_user: bool = False, mfa_passed: bool = False,
+                       panel_organization=None) -> AuthResult:
+        """``panel_organization``: signed in inside that clinic's embedded panel; the session works only there."""
         if user.mfa_enabled_at is not None and not mfa_passed:
             # Password, mobile code or Google was right; the authenticator code comes next (POST /auth/mfa/verify).
             from app.services.mfa_service import MFARequired, issue_mfa_token
 
-            raise MFARequired(issue_mfa_token(user, device_label))
+            raise MFARequired(issue_mfa_token(user, device_label, panel_organization.public_id if panel_organization is not None else None))
         now = utcnow()
         refresh_token = generate_refresh_token()
         session = UserSession(
@@ -479,6 +495,7 @@ class AuthService:
             expires_at=now + timedelta(days=self.settings.refresh_token_expire_days),
             last_seen_at=now,
             reauthenticated_at=now,  # signing in proves it is them; sensitive actions accept this for a few minutes
+            panel_organization_id=panel_organization.id if panel_organization is not None else None,
         )
         self.sessions.add(session)
         user.last_login_at = now

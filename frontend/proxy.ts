@@ -25,7 +25,8 @@ export function buildCsp(
     "font-src 'self' data:",
     `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}${googleSignIn ? ` ${GOOGLE_SIGN_IN}` : ""}${analytics ? ` ${ANALYTICS}` : ""}${dev ? " ws:" : ""}`,
     `frame-src 'self'${googleSignIn ? ` ${GOOGLE_SIGN_IN}` : ""}`,
-    // Only /embed/<clinic> pages may be framed, and only by the websites that clinic listed (plus this site itself).
+    // Only /embed/<clinic> (booking) and /panel/<clinic> (admin panel) pages may be framed, and only by the websites
+    // that clinic listed (plus this site itself).
     frameAncestors.length ? `frame-ancestors 'self' ${frameAncestors.join(" ")}` : selfFrame ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -34,7 +35,7 @@ export function buildCsp(
 }
 
 const SIGN_IN_PATH = /^\/(login|register)(\/|$)/;
-const STAFF_PATH = /^\/(admin|super-admin|professional|customer|onboarding|website-preview)(\/|$)/;
+const STAFF_PATH = /^\/(admin|super-admin|professional|customer|onboarding|website-preview|panel)(\/|$)/;
 
 function apiOrigin() {
   try {
@@ -45,27 +46,31 @@ function apiOrigin() {
 }
 
 const ORIGIN = /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/;
-const EMBED_PATH = /^\/embed\/([a-z0-9][a-z0-9-]{0,79})(?:\/|$)/;
+const SLUG = "[a-z0-9][a-z0-9-]{0,79}";
+const EMBED_PATH = new RegExp(`^/embed/(${SLUG})(?:/|$)`);
+// The clinic's own app shows the admin panel in an iframe: /panel/<clinic> is the only staff page that may be framed.
+const PANEL_PATH = new RegExp(`^/panel/(${SLUG})/?$`);
+const PANEL_AREAS = /^\/(admin|professional)(\/|$)/;
+const PANEL_HINT = new RegExp(`^${SLUG}$`);
 const policyCache = new Map<string, { origins: string[]; at: number }>();
 const FRESH_MS = 60_000;
 const STALE_MS = 10 * 60_000;
 
-/** Websites this clinic allows to show its booking page in an iframe (fail closed: none if unknown). */
-export async function embedOrigins(slug: string, fetcher: typeof fetch = fetch, now = Date.now()): Promise<string[]> {
-  const cached = policyCache.get(slug);
+async function allowedOrigins(cacheKey: string, path: string, fetcher: typeof fetch, now: number): Promise<string[]> {
+  const cached = policyCache.get(cacheKey);
   if (cached && now - cached.at < FRESH_MS) return cached.origins;
   const api = (process.env.API_INTERNAL_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
   try {
-    const r = await fetcher(`${api}/api/v1/public/organizations/${slug}/embed-policy`, { signal: AbortSignal.timeout(2000), cache: "no-store" });
+    const r = await fetcher(`${api}/api/v1${path}`, { signal: AbortSignal.timeout(2000), cache: "no-store" });
     if (r.status === 404) {
-      policyCache.set(slug, { origins: [], at: now });
+      policyCache.set(cacheKey, { origins: [], at: now });
       return [];
     }
-    if (!r.ok) throw new Error(`embed policy ${r.status}`);
+    if (!r.ok) throw new Error(`frame policy ${r.status}`);
     const body = (await r.json()) as { allowed_origins?: unknown };
     // Re-validate: anything that is not a bare origin must never reach the header.
     const origins = Array.isArray(body.allowed_origins) ? body.allowed_origins.filter((o): o is string => typeof o === "string" && ORIGIN.test(o)) : [];
-    policyCache.set(slug, { origins, at: now });
+    policyCache.set(cacheKey, { origins, at: now });
     return origins;
   } catch {
     // API briefly unreachable: keep the last known list for a while, otherwise refuse framing.
@@ -73,14 +78,39 @@ export async function embedOrigins(slug: string, fetcher: typeof fetch = fetch, 
   }
 }
 
+/** Websites this clinic allows to show its booking page in an iframe (fail closed: none if unknown). */
+export function embedOrigins(slug: string, fetcher: typeof fetch = fetch, now = Date.now()): Promise<string[]> {
+  return allowedOrigins(`embed:${slug}`, `/public/organizations/${slug}/embed-policy`, fetcher, now);
+}
+
+/** The clinic's own apps allowed to show its admin panel in an iframe (none while the panel is off). */
+export function panelOrigins(slug: string, fetcher: typeof fetch = fetch, now = Date.now()): Promise<string[]> {
+  return allowedOrigins(`panel:${slug}`, `/panel/${slug}/policy`, fetcher, now);
+}
+
+/**
+ * Inside the clinic's app the panel moves between admin screens without reloading. If the frame does reload an admin
+ * screen (the browser marks it ``Sec-Fetch-Dest: iframe``), send it back through /panel/<clinic>, the one framable
+ * page, which then opens that screen again. ``panel_slug`` is only a hint set by the panel page; it grants nothing
+ * (the sign-in, the clinic and the allowed apps are all checked again there and on the server).
+ */
+export function panelReturnPath(pathname: string, search: string, fetchDest: string | null, hint: string | undefined): string | null {
+  if (fetchDest !== "iframe" || !PANEL_AREAS.test(pathname) || !hint || !PANEL_HINT.test(hint)) return null;
+  return `/panel/${hint}?next=${encodeURIComponent(pathname + search)}`;
+}
+
 export function clearEmbedPolicyCache() {
   policyCache.clear();
 }
 
 export async function proxy(request: NextRequest) {
+  const back = panelReturnPath(request.nextUrl.pathname, request.nextUrl.search, request.headers.get("sec-fetch-dest"), request.cookies.get("panel_slug")?.value);
+  if (back) return NextResponse.redirect(new URL(back, request.url), 307);
   const nonce = btoa(crypto.randomUUID());
-  const embed = EMBED_PATH.exec(request.nextUrl.pathname);
-  const frameAncestors = embed ? await embedOrigins(embed[1]) : [];
+  const embedMatch = EMBED_PATH.exec(request.nextUrl.pathname);
+  const panelMatch = PANEL_PATH.exec(request.nextUrl.pathname);
+  const embed = embedMatch ?? panelMatch;
+  const frameAncestors = embedMatch ? await embedOrigins(embedMatch[1]) : panelMatch ? await panelOrigins(panelMatch[1]) : [];
   // The admin's live website preview frames /website-preview from this same site, and nothing else may.
   const preview = request.nextUrl.pathname === "/website-preview";
   const path = request.nextUrl.pathname;

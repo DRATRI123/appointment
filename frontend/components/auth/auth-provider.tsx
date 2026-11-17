@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, setDefaultOrganizationId } from "@/lib/api-client";
+import { panelSession, panelSignOut } from "@/lib/panel-session";
+import { usePanelMode } from "@/hooks/use-panel-mode";
 import { authService } from "@/services/auth";
 import { usersService } from "@/services/users";
 import type { MeResponse, MembershipSummary, User } from "@/types/auth";
@@ -51,10 +53,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   const memberships = useMemo(() => meQuery.data?.memberships ?? [], [meQuery.data]);
+  // Inside the clinic's app (embedded panel) the clinic is fixed: the panel's own.
+  const panel = usePanelMode();
+  const wanted = panel ? panelSession()?.organizationId ?? null : storedOrg;
   const currentMembership = useMemo(() => {
     if (!memberships.length) return null;
-    return memberships.find((m) => m.organization.id === storedOrg) ?? memberships[0];
-  }, [memberships, storedOrg]);
+    return memberships.find((m) => m.organization.id === wanted) ?? memberships[0];
+  }, [memberships, wanted]);
   const currentOrganizationId = currentMembership?.organization.id ?? null;
 
   useEffect(() => {
@@ -81,7 +86,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await authService.logout();
+      // The panel signs out of the panel only; the ordinary sign-in in this browser stays.
+      await (panelSession() ? panelSignOut() : authService.logout());
     } finally {
       queryClient.setQueryData(ME_QUERY_KEY, null);
       queryClient.clear();

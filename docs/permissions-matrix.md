@@ -50,6 +50,7 @@ The browser only hides menu items; it is never what protects data.
 | `organization:read` | View organization profile and settings | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |
 | `organization:write` | Edit organization profile, branding and settings | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |
 | `organization:billing` | View and manage subscription | ✓ | ✓ |  |  |  |  |  |  |  |  |
+| `panel:use` | Open the admin panel inside the clinic's own app (embedded panel; sign-in there) | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |
 | `branches:read` | View branches | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |
 | `branches:write` | Create and edit branches | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |
 | `staff:read` | View staff and roles | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |

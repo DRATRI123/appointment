@@ -15,8 +15,8 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("/me", response_model=MeResponse, summary="Current user, memberships and permissions")
-def me(db: DB, user: CurrentUser) -> MeResponse:
-    return build_me_response(db, user)
+def me(request: Request, db: DB, user: CurrentUser) -> MeResponse:
+    return build_me_response(db, user, panel_organization_id=getattr(request.state, "panel_organization_id", None))
 
 
 @router.patch("/me", response_model=UserRead, summary="Update own profile")

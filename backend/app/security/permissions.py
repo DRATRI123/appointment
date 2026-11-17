@@ -15,6 +15,7 @@ PERMISSIONS: dict[str, str] = {
     "organization:read": "View organization profile and settings",
     "organization:write": "Edit organization profile, branding and settings",
     "organization:billing": "View and manage subscription",
+    "panel:use": "Open the admin panel inside the clinic's own app (embedded panel; sign-in there)",
     # branches
     "branches:read": "View branches",
     "branches:write": "Create and edit branches",

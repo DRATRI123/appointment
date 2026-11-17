@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Building2, Check, ChevronsUpDown, LogOut, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/components/auth/auth-provider";
+import { usePanelMode } from "@/hooks/use-panel-mode";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ function initials(name: string) {
 export function HeaderUser({ showOrgSwitcher = true }: { showOrgSwitcher?: boolean }) {
   const { user, memberships, currentMembership, setCurrentOrganizationId, logout } = useAuth();
   const router = useRouter();
+  const panel = usePanelMode();
   if (!user) return null;
 
   const staffMemberships = memberships.filter((m) => m.role_code !== "customer");
@@ -34,7 +36,7 @@ export function HeaderUser({ showOrgSwitcher = true }: { showOrgSwitcher?: boole
   return (
     <div className="flex min-w-0 shrink items-center gap-1.5 sm:gap-2">
       <NotificationBell />
-      {showOrgSwitcher && staffMemberships.length > 0 ? (
+      {showOrgSwitcher && !panel && staffMemberships.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="max-w-32 min-w-0 justify-between gap-2 sm:max-w-56">
@@ -70,13 +72,18 @@ export function HeaderUser({ showOrgSwitcher = true }: { showOrgSwitcher?: boole
             <p className="truncate text-xs font-normal text-muted-foreground">{user.email ?? user.mobile}</p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => router.push("/customer/profile")}>Profile &amp; security</DropdownMenuItem>
-          <DropdownMenuSeparator />
+          {panel ? null : (
+            <>
+              <DropdownMenuItem onSelect={() => router.push("/customer/profile")}>Profile &amp; security</DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuItem
             onSelect={async () => {
               await logout();
               toast.success("Signed out");
-              router.push("/login");
+              // Inside the clinic's app: back to the panel's own sign-in.
+              router.push(panel ? `/panel/${panel}` : "/login");
             }}
           >
             <LogOut className="size-4" /> Sign out

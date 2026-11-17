@@ -26,3 +26,4 @@ sent, with Retry.
 | "On a server, 'console' would only write messages to the log" | Choose a real provider or `disabled` |
 | Panel value ignored | A panel value always wins; check the field label (saved here / from .env) |
 | Sentry not reporting | Restart the API and worker after saving |
+| Admin panel inside the clinic app is blank or asks to sign in again | See [embedded-admin.md](embedded-admin.md#troubleshooting) |

@@ -46,7 +46,9 @@ def list_my_organizations(db: DB, user: CurrentUser) -> list[OrganizationRead]:
 
 
 @router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED, summary="Create an organization (you become its owner)")
-def create_organization(payload: OrganizationCreate, db: DB, user: CurrentUser, meta: Meta) -> OrganizationRead:
+def create_organization(request: Request, payload: OrganizationCreate, db: DB, user: CurrentUser, meta: Meta) -> OrganizationRead:
+    if getattr(request.state, "panel_organization_id", None) is not None:
+        raise PermissionDenied("Create organizations in the appointment app itself, not inside a clinic's app.", code="panel_scope")
     return OrganizationRead.model_validate(OrganizationService(db, meta).create(payload, user))
 
 
@@ -88,7 +90,7 @@ def put_settings_namespace(
     namespace: str, payload: OrganizationSettingsUpdate, request: Request, db: DB, meta: Meta,
     ctx: Annotated[TenantContext, Depends(require_permission("organization:write"))],
 ) -> OrganizationSettingsRead:
-    if namespace in {"privacy", "security"}:  # weakening these protects less: confirm it is the administrator
+    if namespace in {"privacy", "security", "panel"}:  # these change who can see what: confirm it is the administrator
         from app.services.privacy_service import require_recent_auth
 
         require_recent_auth(db, request, ctx.organization, action="privacy_settings")

@@ -13,6 +13,7 @@ bookings, payments or permissions work.
 | Email / SMS / WhatsApp | Default providers for clinics without their own account | Own SMTP / MSG91 / Twilio / Meta WhatsApp account (Settings → OTP & verification) and Gmail: they send **all** the clinic's messages; the platform's provider is the fallback |
 | Error tracking | Sentry | – |
 | n8n, HubSpot, Zoho CRM, Zoho Books, Tally, GA4 / Tag Manager, Zoom, webhooks, API keys, Shopify / website | – | Each clinic its own |
+| Admin panel inside the clinic's own app | – | **Panel in your app**: the clinic's app shows the admin panel in an iframe, with its own sign-in ([embedded-admin.md](embedded-admin.md)) |
 
 Rule of thumb: the super admin sets what the platform itself needs; everything that acts for one clinic, with that
 clinic's own accounts and data, is set by that clinic.
