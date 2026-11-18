@@ -12,7 +12,7 @@ from app.api.deps import DB, CurrentUser, Meta, OptionalUser, TenantContext, get
 from app.core.config import get_settings
 from app.core.database import writes_on_read
 from app.core.exceptions import NotFoundError, PermissionDenied
-from app.models import Appointment, Customer, Professional
+from app.models import Appointment, Professional
 from app.schemas.common import Message
 from app.schemas.integration import (
     AuthorizationURL,
@@ -203,7 +203,9 @@ def staff_ics(appointment_id: str, db: DB, ctx: Tenant):
 
 @appointments_router.get("/customer/appointments/{appointment_id}/calendar.ics", summary="Add to calendar (signed-in customer)")
 def customer_ics(appointment_id: str, db: DB, user: CurrentUser):
-    appt = db.scalar(select(Appointment).join(Customer, Customer.id == Appointment.customer_id).where(Appointment.public_id == appointment_id, Customer.user_id == user.id))
+    from app.services.customer_link import owned_customer_ids
+
+    appt = db.scalar(select(Appointment).where(Appointment.public_id == appointment_id, Appointment.customer_id.in_(owned_customer_ids(db, user))))
     if appt is None:
         raise NotFoundError("Appointment not found.")
     return Response(appointment_ics(db, appt), media_type=ICS, headers={"Content-Disposition": f'attachment; filename="{appt.reference}.ics"'})

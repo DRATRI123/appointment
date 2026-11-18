@@ -24,6 +24,9 @@ class Customer(PKMixin, PublicIdMixin, TenantMixin, TimestampMixin, SoftDeleteMi
         UniqueConstraint("organization_id", "customer_code"),
         Index("ix_customers_org_mobile", "organization_id", "mobile"),
         Index("ix_customers_org_email", "organization_id", "email"),
+        # A patient signing in finds their records at every clinic by verified mobile number / email.
+        Index("ix_customers_mobile", "mobile"),
+        Index("ix_customers_email", "email"),
     )
 
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))

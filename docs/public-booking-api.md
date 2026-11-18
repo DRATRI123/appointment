@@ -30,6 +30,23 @@ POST /appointments/{ref}/payment/submit   customer's UTR (+ optional screenshot)
 GET  /appointments/{ref}       status page (reference + access token)
 ```
 
+## Patients see their bookings without keeping the link
+
+A patient who booked without signing in can see every booking, its status and payment later, on any device:
+**My bookings** on the clinic's website → **Sign in with code** → a one-time code to the mobile number or email they
+booked with. Their account then shows every booking made with that number or email, at every clinic
+(`GET /customer/appointments`, `/customer/payments`, `/customer/refunds`), and each booking page opens without the
+private link (`GET /public/organizations/{slug}/appointments/{reference}` with the session instead of `access_token`).
+
+* Only contacts the account has proved count: a one-time code to that number or email, Google with a verified email,
+  or the email verification link. A number typed at registration but never verified shows nothing.
+* At sign-in the clinic's patient record is linked to the account (audit log `customer.linked_to_account`); booking
+  again while signed in reuses that record, so the clinic's patient list gets no duplicate.
+* If a clinic already has another record for the same person, it is not merged automatically (staff decide), but its
+  bookings are still visible to the patient.
+* Code: `backend/app/services/customer_link.py`; tests: `backend/tests/test_my_bookings.py`,
+  `frontend/e2e/my-bookings.spec.ts`.
+
 ## Security rules the server enforces
 
 | Rule | How |

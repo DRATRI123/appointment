@@ -26,6 +26,18 @@ class CustomerService:
     def for_user(self, user: User, full_name: str | None = None) -> Customer:
         c = self.db.scalar(select(Customer).where(Customer.organization_id == self.org.id, Customer.user_id == user.id, Customer.deleted_at.is_(None)))
         if c is None:
+            # Booked here before without signing in, with a mobile number / email this account has verified: same person.
+            from app.services.customer_link import verified_contacts
+
+            mobile, email = verified_contacts(user)
+            for field, value in (("mobile", mobile), ("email", email)):
+                if c is None and value:
+                    c = self.db.scalar(select(Customer).where(Customer.organization_id == self.org.id, Customer.user_id.is_(None),
+                                                              getattr(Customer, field) == value, Customer.deleted_at.is_(None)).order_by(Customer.id))
+            if c is not None:
+                c.user_id = user.id
+                self.db.flush()
+        if c is None:
             c = Customer(
                 organization_id=self.org.id, user_id=user.id, full_name=(full_name or user.full_name).strip(),
                 mobile=user.mobile, email=user.email, is_guest=False, registered_at=utcnow(), source="online",

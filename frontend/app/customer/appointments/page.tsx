@@ -35,8 +35,8 @@ export default function CustomerAppointmentsPage() {
   const past = (appts.data ?? []).filter((a) => !upcoming.includes(a));
   return (
     <div className="mx-auto max-w-4xl space-y-8">
-      <PageHeader title="My appointments" description="Upcoming and past bookings across every clinic you use." />
-      {appts.isLoading ? <Skeleton className="h-48" /> : appts.data?.length === 0 ? <EmptyState icon={CalendarDays} title="No appointments yet" body="Book from any organization's booking page and it will show up here." /> : (
+      <PageHeader title="My appointments" description="Upcoming and past bookings across every clinic you use, with their status and payment. Open one to pay, reschedule or cancel." />
+      {appts.isLoading ? <Skeleton className="h-48" /> : appts.data?.length === 0 ? <EmptyState icon={CalendarDays} title="No appointments yet" body="Bookings made with the mobile number or email you signed in with show up here, from any clinic, even if you booked without signing in." /> : (
         <>
           <section className="space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Upcoming</h3>

@@ -455,5 +455,7 @@ def delete_my_dependent(organization_id: str, dependent_id: str, db: DB, user: C
 def my_organizations(db: DB, user: CurrentUser):
     from sqlalchemy import select
 
-    rows = db.execute(select(Organization.public_id, Organization.name, Organization.slug).join(Customer, Customer.organization_id == Organization.id).where(Customer.user_id == user.id, Customer.deleted_at.is_(None), Organization.deleted_at.is_(None))).all()
+    from app.services.customer_link import owned_customer_ids
+
+    rows = db.execute(select(Organization.public_id, Organization.name, Organization.slug).join(Customer, Customer.organization_id == Organization.id).where(Customer.id.in_(owned_customer_ids(db, user)), Organization.deleted_at.is_(None)).distinct()).all()
     return [{"id": r[0], "name": r[1], "slug": r[2]} for r in rows]

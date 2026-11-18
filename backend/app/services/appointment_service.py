@@ -48,6 +48,7 @@ from app.schemas.appointment import (
 from app.services.audit_service import RequestMeta, record_audit
 from app.services.availability_service import AvailabilityService, appointment_length, branch_tz
 from app.services.catalog_service import CatalogService
+from app.services.customer_link import owned_customer_ids
 from app.services.customer_service import CustomerService
 from app.services.organization_service import OrganizationService
 from app.services.pricing_service import quote
@@ -295,7 +296,7 @@ class AppointmentService:
             raise NotFoundError("Appointment not found.")
         token = (appt.metadata_ or {}).get("access_token")
         customer = self.db.get(Customer, appt.customer_id)
-        if user is not None and customer and customer.user_id == user.id:
+        if user is not None and customer and customer.id in owned_customer_ids(self.db, user):
             return appt
         if access_token and token and secrets.compare_digest(access_token, token):
             return appt
@@ -492,8 +493,7 @@ class AppointmentService:
 
     def list_for_user(self, user: User) -> list[Appointment]:
         stmt = (
-            select(Appointment).join(Customer, Customer.id == Appointment.customer_id)
-            .where(Customer.user_id == user.id).order_by(Appointment.start_at.desc())
+            select(Appointment).where(Appointment.customer_id.in_(owned_customer_ids(self.db, user))).order_by(Appointment.start_at.desc())
         )
         return list(self.db.scalars(stmt).all())
 

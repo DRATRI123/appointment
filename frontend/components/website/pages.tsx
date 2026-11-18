@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarCheck2, CalendarOff, ChevronRight, MapPin, Phone } from "lucide-react";
+import { CalendarCheck2, CalendarOff, ChevronRight, MapPin, Phone, Smartphone } from "lucide-react";
+import { useAuth } from "@/components/auth/auth-provider";
 import { BottomNav } from "./bottom-nav";
 import { useDeviceBookings, type DeviceBooking } from "@/lib/device-bookings";
 import { BookingFlow } from "@/components/public-booking/booking-flow";
@@ -111,17 +112,19 @@ function BranchPage({ branchId }: { branchId: string }) {
   );
 }
 
-/** /{clinic}/bookings: appointments booked in this browser, upcoming first. */
+/** /{clinic}/bookings: the patient's appointments at this clinic, upcoming first: booked in this browser, and (signed in
+ * with a one-time code) every booking made with their mobile number or email. */
 export function DeviceBookingsPage() {
   const { slug, base } = useSite();
-  const q = useDeviceBookings(slug);
+  const { user, isLoading: authLoading, logout } = useAuth();
+  const q = useDeviceBookings(slug, !!user);
   const tzFmt = (iso: string, tz: string) => new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz }).format(new Date(iso));
   const Item = ({ b }: { b: DeviceBooking }) => {
     const a = b.appointment;
     const tone = STATUS_TONE[a.status] ?? "bg-gray-100 text-gray-700";
     return (
       <li>
-        <Link href={`${base}/appointments/${a.reference}?t=${encodeURIComponent(b.token)}`} data-testid="device-booking"
+        <Link href={b.token ? `${base}/appointments/${a.reference}?t=${encodeURIComponent(b.token)}` : `${base}/appointments/${a.reference}`} data-testid="device-booking"
           className="flex items-center gap-4 rounded-3xl bg-white p-4 shadow-[0_8px_30px_-14px_rgb(0_0_0/0.2)] ring-1 ring-black/5 transition-shadow hover:shadow-lg">
           <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[color-mix(in_oklab,var(--primary)_12%,#fff)] text-[var(--primary)]"><CalendarCheck2 className="size-6" aria-hidden /></span>
           <span className="min-w-0 flex-1">
@@ -139,14 +142,27 @@ export function DeviceBookingsPage() {
       <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:py-12">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight [font-family:var(--site-heading-font)] sm:text-3xl">My bookings</h1>
-          <p className="mt-1 text-sm text-gray-600">Appointments booked on this device. Signed-in patients see every booking in their account.</p>
+          <p className="mt-1 text-sm text-gray-600">
+            {user ? <>All your bookings here, with their status and payment. Signed in as <span className="font-medium">{user.mobile ?? user.email}</span>.</>
+              : "Appointments booked on this device."}
+          </p>
         </div>
+        {!authLoading && !user ? (
+          <div className="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-[0_8px_30px_-14px_rgb(0_0_0/0.2)] ring-1 ring-black/5 sm:flex-row sm:items-center" data-testid="bookings-sign-in">
+            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[color-mix(in_oklab,var(--primary)_12%,#fff)] text-[var(--primary)]"><Smartphone className="size-6" aria-hidden /></span>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900">See all your bookings</p>
+              <p className="text-sm text-gray-600">Booked on another phone, or lost the link? Sign in with a one-time code sent to the mobile number or email you booked with.</p>
+            </div>
+            <Link href={`/login?next=${encodeURIComponent(`${base}/bookings`)}`} className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)]">Sign in with code</Link>
+          </div>
+        ) : null}
         {q.isLoading ? <div className="space-y-3">{[0, 1].map((i) => <div key={i} className="h-24 animate-pulse rounded-3xl bg-white" />)}</div> : (
           <>
             <section aria-labelledby="upcoming-h" className="space-y-3">
               <h2 id="upcoming-h" className="text-lg font-semibold">Upcoming</h2>
               {q.data?.upcoming.length ? <ul className="space-y-3">{q.data.upcoming.map((b) => <Item key={b.appointment.reference} b={b} />)}</ul>
-                : <div className="rounded-3xl border border-dashed bg-white p-8 text-center"><p className="text-sm text-gray-600">No upcoming appointments on this device.</p>
+                : <div className="rounded-3xl border border-dashed bg-white p-8 text-center"><p className="text-sm text-gray-600">{user ? "No upcoming appointments." : "No upcoming appointments on this device."}</p>
                   <Link href={`${base}/book`} className="mt-4 inline-flex h-11 items-center rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)]">Book an appointment</Link></div>}
             </section>
             {q.data?.past.length ? (
@@ -155,7 +171,11 @@ export function DeviceBookingsPage() {
                 <ul className="space-y-3">{q.data.past.map((b) => <Item key={b.appointment.reference} b={b} />)}</ul>
               </section>
             ) : null}
-            <p className="text-center text-sm"><Link href="/login" className="font-medium text-gray-700 underline underline-offset-4">Sign in to see all your bookings</Link></p>
+            {user ? (
+              <p className="text-center text-sm text-gray-600">
+                Not you? <button type="button" className="font-medium text-gray-700 underline underline-offset-4" onClick={() => void logout()}>Sign out</button>
+              </p>
+            ) : null}
           </>
         )}
       </div>

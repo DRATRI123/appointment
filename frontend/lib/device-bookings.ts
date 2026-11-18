@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * Bookings made in this browser. The booking page keeps each appointment's private access token in localStorage
- * (key `ap.appt.<reference>`) so the patient can reopen it; here we list them for one clinic. Nothing is shared with
- * other devices; signed-in patients see all their bookings in their account.
+ * A patient's bookings at one clinic. Bookings made in this browser: the booking page keeps each appointment's
+ * private access token in localStorage (key `ap.appt.<reference>`). Signed in (one-time code to their mobile number or
+ * email): every booking made with that number or email, on any device, without the private links.
  */
 import { useQuery } from "@tanstack/react-query";
-import { publicBooking } from "@/services/booking";
-import type { AppointmentDetail } from "@/types/booking";
+import { customerBooking, publicBooking } from "@/services/booking";
+import type { Appointment } from "@/types/booking";
 
-export interface DeviceBooking { appointment: AppointmentDetail; token: string }
+/** ``token`` is empty for bookings shown through the patient's account (the page opens them without a link). */
+export interface DeviceBooking { appointment: Appointment; token: string }
 
 function stored(): { reference: string; token: string }[] {
   try {
@@ -29,11 +30,14 @@ function stored(): { reference: string; token: string }[] {
 
 const OPEN = new Set(["pending_payment", "pending_verification", "confirmed", "checked_in", "in_progress"]);
 
-export function useDeviceBookings(slug: string) {
+export function useDeviceBookings(slug: string, signedIn = false) {
   return useQuery({
-    queryKey: ["device-bookings", slug],
+    queryKey: ["device-bookings", slug, signedIn],
     queryFn: async (): Promise<{ upcoming: DeviceBooking[]; past: DeviceBooking[] }> => {
-      const results = await Promise.all(stored().map(async ({ reference, token }) => {
+      const account: DeviceBooking[] = signedIn
+        ? await customerBooking.mine().then((rows) => rows.filter((a) => a.organization_slug === slug).map((appointment) => ({ appointment, token: "" }))).catch(() => [])
+        : [];
+      const results = await Promise.all(stored().map(async ({ reference, token }): Promise<DeviceBooking | null> => {
         try {
           const appointment = await publicBooking.status(slug, reference, token);
           return appointment.organization_slug === slug ? { appointment, token } : null;
@@ -41,7 +45,9 @@ export function useDeviceBookings(slug: string) {
           return null; // another clinic's booking, or no longer available
         }
       }));
-      const list = results.filter((x): x is DeviceBooking => !!x);
+      const device = results.filter((x): x is DeviceBooking => !!x);
+      const seen = new Set(device.map((b) => b.appointment.reference));
+      const list = [...device, ...account.filter((b) => !seen.has(b.appointment.reference))];
       const now = Date.now();
       const upcoming = list.filter((b) => OPEN.has(b.appointment.status) && new Date(b.appointment.end_at).getTime() > now)
         .sort((a, b) => a.appointment.start_at.localeCompare(b.appointment.start_at));

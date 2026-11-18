@@ -276,6 +276,9 @@ class AuthService:
         if user is None:
             raise AuthenticationError("Verification link is invalid or has expired.", code="verify_token_invalid")
         user.email_verified_at = utcnow()
+        from app.services.customer_link import link_verified_customers
+
+        link_verified_customers(self.db, user)
         if user.status == UserStatus.PENDING_VERIFICATION:
             user.status = UserStatus.ACTIVE
         record.consumed_at = record.verified_at = utcnow()
@@ -500,6 +503,10 @@ class AuthService:
         self.sessions.add(session)
         user.last_login_at = now
         self.db.flush()
+        # Bookings made without signing in, with this account's verified mobile number or email, become visible.
+        from app.services.customer_link import link_verified_customers
+
+        link_verified_customers(self.db, user)
         access = create_access_token(user_public_id=user.public_id, session_public_id=session.public_id)
         return AuthResult(user=user, session=session, access_token=access, refresh_token=refresh_token, is_new_user=is_new_user)
 

@@ -31,6 +31,7 @@ from app.schemas.appointment import (
 from app.schemas.common import Message
 from app.services.appointment_service import AppointmentService
 from app.services.catalog_service import ids_to_public
+from app.services.customer_link import owned_customer_ids
 from app.services.privacy_service import view_email, view_mobile
 
 router = APIRouter(tags=["appointments"])
@@ -245,12 +246,13 @@ def remove_waitlist(entry_id: str, db: DB, ctx: WriteAppts, meta: Meta):
 
 # ------------------------------------------------------ customer's own view
 customer_router = APIRouter(prefix="/customer", tags=["customer"])
+# The patient's records: linked to the account, or carrying its verified mobile number / email (owned_customer_ids).
 
 
 @customer_router.get("/appointments", response_model=list[AppointmentRead], summary="All appointments of the signed-in customer across organizations")
 def my_appointments(db: DB, user: CurrentUser):
     rows = db.scalars(
-        select(Appointment).join(Customer, Customer.id == Appointment.customer_id).where(Customer.user_id == user.id).order_by(Appointment.start_at.desc())
+        select(Appointment).where(Appointment.customer_id.in_(owned_customer_ids(db, user))).order_by(Appointment.start_at.desc())
     ).all()
     services: dict[int, AppointmentService] = {}  # one per clinic, so its settings are read once
     counts: dict[int, int] | None = None
@@ -264,7 +266,7 @@ def my_appointments(db: DB, user: CurrentUser):
 
 
 def _own_appointment(db: Session, user: User, appointment_id: str) -> tuple[Appointment, AppointmentService]:
-    appt = db.scalar(select(Appointment).join(Customer, Customer.id == Appointment.customer_id).where(Appointment.public_id == appointment_id, Customer.user_id == user.id))
+    appt = db.scalar(select(Appointment).where(Appointment.public_id == appointment_id, Appointment.customer_id.in_(owned_customer_ids(db, user))))
     if appt is None:
         raise PermissionDenied("Appointment not found.", code="not_found")
     org = db.get(Organization, appt.organization_id)
@@ -297,7 +299,7 @@ def my_payments(db: DB, user: CurrentUser) -> list[dict]:
     from app.models import Payment
     from app.services.payment_service import PaymentService
 
-    rows = db.scalars(select(Payment).join(Customer, Customer.id == Payment.customer_id).where(Customer.user_id == user.id).order_by(Payment.created_at.desc())).all()
+    rows = db.scalars(select(Payment).where(Payment.customer_id.in_(owned_customer_ids(db, user))).order_by(Payment.created_at.desc())).all()
     out = []
     for p in rows:
         org = db.get(Organization, p.organization_id)
@@ -311,8 +313,8 @@ def my_payments(db: DB, user: CurrentUser) -> list[dict]:
 def my_refunds(db: DB, user: CurrentUser) -> list[dict]:
     from app.models import Payment, PaymentRefund
 
-    rows = db.scalars(select(PaymentRefund).join(Payment, Payment.id == PaymentRefund.payment_id).join(Customer, Customer.id == Payment.customer_id)
-                      .where(Customer.user_id == user.id).order_by(PaymentRefund.created_at.desc())).all()
+    rows = db.scalars(select(PaymentRefund).join(Payment, Payment.id == PaymentRefund.payment_id)
+                      .where(Payment.customer_id.in_(owned_customer_ids(db, user))).order_by(PaymentRefund.created_at.desc())).all()
     out = []
     for r in rows:
         org = db.get(Organization, r.organization_id)

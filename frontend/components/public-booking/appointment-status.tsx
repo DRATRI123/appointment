@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useAuth } from "@/components/auth/auth-provider";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, CalendarClock, CalendarDays, CheckCircle2, Clock, Hourglass, Link2Off, MapPin, Phone, RotateCcw, Stethoscope, UserRound, XCircle } from "lucide-react";
@@ -48,6 +49,8 @@ export function screenFor(a: AppointmentDetail, checkout: Checkout | null | unde
 export function AppointmentStatus({ reference }: { reference: string }) {
   const { slug, data, bookPath } = useBooking();
   const params = useSearchParams();
+  const pathname = usePathname();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const token = useMemo(() => {
     const fromQuery = params.get("t");
@@ -87,8 +90,14 @@ export function AppointmentStatus({ reference }: { reference: string }) {
       <div className="pb-enter mx-auto max-w-lg space-y-4 rounded-3xl border bg-card p-8 text-center shadow-sm" role="alert">
         <span className="mx-auto grid size-14 place-items-center rounded-full bg-muted"><Link2Off className="size-7 text-muted-foreground" aria-hidden /></span>
         <h1 className="text-2xl font-semibold tracking-tight" data-testid="booking-heading">We couldn&apos;t open this booking</h1>
-        <p className="text-muted-foreground">The link may be incomplete or out of date. Use the full link from your confirmation message, or contact {data.organization.name}{data.organization.phone ? ` on ${data.organization.phone}` : ""}.</p>
-        <Button asChild><Link href={bookPath}>Book an appointment</Link></Button>
+        <p className="text-muted-foreground">
+          {user ? "This booking was not made with your signed-in mobile number or email." : "The link may be incomplete or out of date."} Sign in with a one-time code
+          sent to the mobile number or email you booked with to see all your bookings, or contact {data.organization.name}{data.organization.phone ? ` on ${data.organization.phone}` : ""}.
+        </p>
+        <div className="flex flex-col justify-center gap-2 sm:flex-row">
+          {!user ? <Button asChild data-testid="status-sign-in"><Link href={`/login?next=${encodeURIComponent(pathname)}`}>Sign in with code</Link></Button> : null}
+          <Button asChild variant={user ? "default" : "outline"}><Link href={bookPath}>Book an appointment</Link></Button>
+        </div>
       </div>
     );
   }

@@ -151,7 +151,9 @@ class OrgPreferences(Preferences):
 
 
 def _customers(db, user) -> list[Customer]:
-    return list(db.scalars(select(Customer).where(Customer.user_id == user.id, Customer.deleted_at.is_(None))).all())
+    from app.services.customer_link import owned_customer_ids
+
+    return list(db.scalars(select(Customer).where(Customer.id.in_(owned_customer_ids(db, user)))).all())
 
 
 @me_router.get("/customer/notification-preferences", response_model=list[OrgPreferences], summary="Message preferences per clinic")
