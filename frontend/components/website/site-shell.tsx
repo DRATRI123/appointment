@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Building2, Mail, MapPin, Menu, Phone } from "lucide-react";
+import { Building2, CalendarCheck2, Mail, MapPin, Menu, Phone } from "lucide-react";
 import { publicCatalog, mediaUrl } from "@/services/catalog";
 import { publicWebsite } from "@/services/website";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -142,6 +142,11 @@ function SiteHeader() {
           {nav.map((item, i) => <NavLink key={i} item={item} className="rounded-full px-3 py-2 text-sm font-medium text-foreground/75 transition-colors hover:bg-black/5 hover:text-foreground" />)}
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          {/* Patients check their bookings, status and payment here (signed in with a one-time code: every booking). */}
+          <Link href={`${base}/bookings`} data-testid="header-my-bookings"
+            className="hidden items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-foreground/75 transition-colors hover:bg-black/5 hover:text-foreground md:inline-flex">
+            <CalendarCheck2 className="size-4" aria-hidden />My bookings
+          </Link>
           {doc.header.show_phone && phone ? (
             <a href={`tel:${phoneDigits(phone)}`} className="hidden items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-foreground/75 hover:text-foreground md:inline-flex">
               <Phone className="size-4" aria-hidden />{phone}
@@ -155,6 +160,7 @@ function SiteHeader() {
               <SheetDescription className="sr-only">Site menu</SheetDescription>
               <nav className="flex flex-col" aria-label="Mobile">
                 <Link href={base} onClick={() => setOpen(false)} className="border-b py-3 text-base font-medium">Home</Link>
+                <Link href={`${base}/bookings`} onClick={() => setOpen(false)} className="border-b py-3 text-base font-medium" data-testid="menu-my-bookings">My bookings</Link>
                 {nav.map((item, i) => <NavLink key={i} item={item} onClick={() => setOpen(false)} className="border-b py-3 text-base font-medium" />)}
               </nav>
               <ButtonsAt position="header" size="lg" className="flex-col items-stretch" buttonClassName="w-full" />

@@ -66,3 +66,24 @@ test("a guest booking shows up after signing in with a code to the same mobile, 
   await expect(p.getByTestId("my-appointment")).toHaveCount(1);
   await otherPhone.close();
 });
+
+test("'My bookings' is in the website header on a computer and in the menu on a phone", async ({ page, browser }) => {
+  const { slug } = await seedClinic(page);
+  const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const d = await desktop.newPage();
+  await d.goto(`/${slug}`);
+  await d.getByTestId("header-my-bookings").click();
+  await d.waitForURL(new RegExp(`/${slug}/bookings$`));
+  await expect(d.getByTestId("bookings-sign-in")).toBeVisible();
+  await desktop.close();
+
+  const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const m = await phone.newPage();
+  await m.goto(`/${slug}/book`);
+  await expect(m.getByTestId("header-my-bookings")).toBeHidden(); // the bottom bar has it on phones
+  await m.getByRole("button", { name: "Open menu" }).click();
+  await m.getByTestId("menu-my-bookings").click();
+  await m.waitForURL(new RegExp(`/${slug}/bookings$`));
+  await expect(m.getByTestId("bookings-sign-in")).toBeVisible();
+  await phone.close();
+});
