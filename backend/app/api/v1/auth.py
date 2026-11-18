@@ -50,7 +50,11 @@ def _cookie_kwargs(settings: Settings) -> dict:
 
 def set_auth_cookies(response: Response, result: AuthResult, settings: Settings) -> None:
     base = _cookie_kwargs(settings)
-    response.set_cookie(ACCESS_COOKIE, result.access_token, max_age=result.expires_in, httponly=True, **base)
+    # The token inside expires after a few minutes, but the cookie is kept as long as the sign-in: an expired token
+    # is answered with "token_expired" and the website renews it with the refresh cookie. If the cookie itself
+    # disappeared with the token, the next click after a pause looked like "not signed in" and sent people back to
+    # the sign-in page although their sign-in was still valid.
+    response.set_cookie(ACCESS_COOKIE, result.access_token, max_age=settings.refresh_token_expire_days * 86400, httponly=True, **base)
     response.set_cookie(
         REFRESH_COOKIE,
         result.refresh_token,

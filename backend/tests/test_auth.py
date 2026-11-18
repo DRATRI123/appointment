@@ -180,3 +180,35 @@ def test_email_verification_flow(client):
     assert client.post("/api/v1/auth/email/verify/confirm", json={"token": token}).status_code == 200
     me = client.get("/api/v1/users/me", headers=bearer(tokens)).json()
     assert me["user"]["email_verified_at"] is not None
+
+
+def test_signed_in_cookie_outlives_its_short_token_so_a_pause_never_signs_people_out(client):
+    """The browser keeps the access cookie as long as the sign-in. After a pause the server sees an *expired* token
+    ("token_expired") and the website renews it with the refresh cookie, instead of "not signed in" and the sign-in page."""
+    import time as _time
+    from http.cookies import SimpleCookie
+
+    import jwt
+
+    from app.core.config import get_settings
+
+    s = get_settings()
+    client.cookies.clear()
+    r = client.post("/api/v1/auth/register", json={"full_name": "Pause", "email": "pause@example.com", "password": "Str0ngPass123"})
+    assert r.status_code == 201
+    jar = SimpleCookie()
+    for header in r.headers.get_list("set-cookie"):
+        jar.load(header)
+    assert int(jar["access_token"]["max-age"]) == s.refresh_token_expire_days * 86400
+    assert int(jar["refresh_token"]["max-age"]) == s.refresh_token_expire_days * 86400
+
+    # 20 minutes later: the token inside the cookie has expired.
+    claims = jwt.decode(client.cookies.get("access_token"), s.secret_key, algorithms=[s.jwt_algorithm])
+    claims["exp"] = int(_time.time()) - 60
+    old = next(c for c in client.cookies.jar if c.name == "access_token")
+    client.cookies.set("access_token", jwt.encode(claims, s.secret_key, algorithm=s.jwt_algorithm), domain=old.domain, path=old.path)
+    r = client.get("/api/v1/users/me")
+    assert r.status_code == 401 and r.json()["code"] == "token_expired"
+    r = client.post("/api/v1/auth/refresh", headers={"X-CSRF-Token": client.cookies.get("csrf_token")})
+    assert r.status_code == 200, r.text
+    assert client.get("/api/v1/users/me").status_code == 200

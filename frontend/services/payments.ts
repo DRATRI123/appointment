@@ -1,6 +1,5 @@
-import { api } from "@/lib/api-client";
+import { api, sessionFetch } from "@/lib/api-client";
 import { apiBase } from "@/lib/env";
-import { credentialsMode, panelHeaders } from "@/lib/panel-session";
 import type { ApiErrorBody, Page } from "@/types/api";
 import type { Checkout, Coupon, Payment, PaymentDetail, PaymentStats, QRPreview, UPIAccount } from "@/types/payment";
 
@@ -58,7 +57,7 @@ export const publicPayments = {
 
 /** Fetch a private file with the session (and organization header) and return an object URL for <img>. */
 export async function fetchPrivateObjectUrl(url: string, organizationId?: string | null): Promise<string> {
-  const res = await fetch(url, { credentials: credentialsMode(), headers: { ...(organizationId ? { "X-Organization-Id": organizationId } : {}), ...panelHeaders() } });
+  const res = await sessionFetch(url, organizationId);
   if (!res.ok) throw new Error(`Could not load file (${res.status})`);
   return URL.createObjectURL(await res.blob());
 }

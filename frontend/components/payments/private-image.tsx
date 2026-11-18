@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { credentialsMode, panelHeaders } from "@/lib/panel-session";
+import { sessionFetch } from "@/lib/api-client";
 
 /** Loads an authenticated file (screenshot, document) with the session and organization header. */
 export function PrivateImage({ url, organizationId, alt }: { url: string; organizationId: string | null; alt: string }) {
@@ -11,7 +11,7 @@ export function PrivateImage({ url, organizationId, alt }: { url: string; organi
   useEffect(() => {
     let revoked: string | undefined;
     let cancelled = false;
-    fetch(url, { credentials: credentialsMode(), headers: { ...(organizationId ? { "X-Organization-Id": organizationId } : {}), ...panelHeaders() } })
+    sessionFetch(url, organizationId)
       .then(async (res) => {
         if (!res.ok) throw new Error(`Could not load (${res.status})`);
         const type = res.headers.get("content-type") ?? "";

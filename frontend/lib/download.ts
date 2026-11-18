@@ -1,11 +1,8 @@
 import { askReauth, notifyLocked } from "@/lib/privacy-bus";
-import { credentialsMode, panelHeaders } from "@/lib/panel-session";
+import { sessionFetch } from "@/lib/api-client";
 /** Download an authenticated file (CSV export, etc.) with the session and organization header. */
 export async function downloadPrivateFile(url: string, filename: string, organizationId?: string | null, retried = false): Promise<void> {
-  const res = await fetch(url, {
-    credentials: credentialsMode(),
-    headers: { ...(organizationId ? { "X-Organization-Id": organizationId } : {}), ...panelHeaders() },
-  });
+  const res = await sessionFetch(url, organizationId);
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { code?: string; detail?: string } | null;
     // Exports need a recent "confirm it is you": ask, then try once more.

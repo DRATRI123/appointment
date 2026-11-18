@@ -7,7 +7,7 @@
  */
 import { apiBase } from "@/lib/env";
 import { askReauth, notifyLocked } from "@/lib/privacy-bus";
-import { credentialsMode, panelSession, refreshPanelSession } from "@/lib/panel-session";
+import { credentialsMode, panelHeaders, panelSession, refreshPanelSession } from "@/lib/panel-session";
 import type { ApiErrorBody } from "@/types/api";
 
 export class ApiError extends Error {
@@ -62,6 +62,36 @@ async function tryRefresh(): Promise<boolean> {
   return refreshPromise;
 }
 
+/**
+ * May a 401 be fixed by renewing the sign-in? "token_expired": the short-lived token ran out. "unauthenticated" with
+ * the CSRF cookie still present: the browser dropped the short-lived cookie (older sign-ins, or a browser cleaning
+ * up) while the long sign-in is still valid. Visitors who never signed in have no CSRF cookie, so they cost nothing.
+ */
+function renewable(code: string | undefined, panel: boolean): boolean {
+  if (code === "token_expired") return true;
+  return code === "unauthenticated" && !panel && Boolean(readCookie("csrf_token"));
+}
+
+/** Renew the sign-in in use: the embedded panel's own, or the ordinary one (cookies). */
+export function renewSession(): Promise<boolean> {
+  return panelSession() ? refreshPanelSession() : tryRefresh();
+}
+
+/**
+ * GET a private file (screenshot, document, export) with the session and organization header, renewing an expired
+ * sign-in once, like every other request.
+ */
+export async function sessionFetch(url: string, organizationId?: string | null): Promise<Response> {
+  const send = () => fetch(url, {
+    credentials: credentialsMode(),
+    headers: { ...(organizationId ? { "X-Organization-Id": organizationId } : {}), ...panelHeaders() },
+  });
+  const res = await send();
+  if (res.status !== 401) return res;
+  const body = (await res.clone().json().catch(() => null)) as { code?: string } | null;
+  return renewable(body?.code, Boolean(panelSession())) && (await renewSession()) ? send() : res;
+}
+
 function readCookie(name: string): string | undefined {
   if (typeof document === "undefined") return undefined;
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -108,7 +138,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
   if (!response.ok) {
     const error = new ApiError(response.status, json as ApiErrorBody | null, response.statusText);
     const isAuthRoute = path.startsWith("/auth/");
-    if (response.status === 401 && !isAuthRoute && !_retried && error.code === "token_expired") {
+    if (response.status === 401 && !isAuthRoute && !_retried && renewable(error.code, Boolean(panel))) {
       if (await (panel ? refreshPanelSession() : tryRefresh())) return apiRequest<T>(path, options, true);
     }
     // Sensitive action (reveal, export, document, settings): confirm it is still the same person, then try again.
