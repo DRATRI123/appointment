@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarCheck2, CalendarOff, ChevronRight, MapPin, Phone, Smartphone } from "lucide-react";
+import { CalendarCheck2, CalendarOff, ChevronRight, MapPin, Phone } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { PatientSignIn } from "./patient-sign-in";
 import { BottomNav } from "./bottom-nav";
 import { useDeviceBookings, type DeviceBooking } from "@/lib/device-bookings";
 import { BookingFlow } from "@/components/public-booking/booking-flow";
@@ -148,14 +149,7 @@ export function DeviceBookingsPage() {
           </p>
         </div>
         {!authLoading && !user ? (
-          <div className="flex flex-col gap-4 rounded-3xl bg-white p-5 shadow-[0_8px_30px_-14px_rgb(0_0_0/0.2)] ring-1 ring-black/5 sm:flex-row sm:items-center" data-testid="bookings-sign-in">
-            <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[color-mix(in_oklab,var(--primary)_12%,#fff)] text-[var(--primary)]"><Smartphone className="size-6" aria-hidden /></span>
-            <div className="flex-1">
-              <p className="font-semibold text-gray-900">See all your bookings</p>
-              <p className="text-sm text-gray-600">Booked on another phone, or lost the link? Sign in with a one-time code sent to the mobile number or email you booked with.</p>
-            </div>
-            <Link href={`/login?next=${encodeURIComponent(`${base}/bookings`)}`} className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)]">Sign in with code</Link>
-          </div>
+          <PatientSignIn next={`${base}/bookings`} />
         ) : null}
         {q.isLoading ? <div className="space-y-3">{[0, 1].map((i) => <div key={i} className="h-24 animate-pulse rounded-3xl bg-white" />)}</div> : (
           <>

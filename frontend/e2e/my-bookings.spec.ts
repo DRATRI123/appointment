@@ -44,17 +44,16 @@ test("a guest booking shows up after signing in with a code to the same mobile, 
   await p.goto(`/${slug}/bookings`);
   await expect(p.getByTestId("bookings-sign-in")).toBeVisible();
   await expect(p.getByTestId("device-booking")).toHaveCount(0);
-  await p.getByTestId("bookings-sign-in").getByRole("link", { name: "Sign in with code" }).click();
-  await p.waitForURL(/\/login/);
+  await expect(p.locator("input[type=password]")).toHaveCount(0); // patients never see a password field
+  // Sign in right here: mobile number → one-time code. No password, no staff sign-in page.
+  await p.getByTestId("patient-sign-in-start").click();
   await p.getByLabel("Mobile number or email").fill(mobile);
   await p.getByRole("button", { name: "Send code" }).click();
-  const debug = p.getByTestId("debug-code"); // development and test only
-  await expect(debug).toBeVisible();
-  await p.getByLabel("One-time code").fill((await debug.locator("strong").textContent())!.trim());
-  await p.getByRole("button", { name: /Verify/ }).click();
+  await p.getByLabel("One-time code").fill((await p.getByTestId("patient-debug-code").locator("strong").textContent())!.trim()); // development and test only
+  await p.getByRole("button", { name: "Verify" }).click();
 
   // Back on the clinic's "My bookings", with the booking, its status, and its page opening without the link.
-  await p.waitForURL(new RegExp(`/${slug}/bookings$`));
+  expect(p.url()).toMatch(new RegExp(`/${slug}/bookings$`)); // stayed on the clinic's page
   const item = p.getByTestId("device-booking").filter({ hasText: "Dr. E2E" });
   await expect(item).toHaveCount(1);
   await expect(p.getByTestId("bookings-sign-in")).toHaveCount(0);

@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarClock, CalendarDays, CheckCircle2, Clock, Hourglass, Link2Off, MapPin, Phone, RotateCcw, Stethoscope, UserRound, XCircle } from "lucide-react";
+import { CalendarCheck2, CalendarClock, CalendarDays, CheckCircle2, Clock, Hourglass, Link2Off, MapPin, Phone, RotateCcw, Stethoscope, UserRound, XCircle } from "lucide-react";
 import { bookingSessionKey, publicBooking } from "@/services/booking";
 import { publicPayments } from "@/services/payments";
 import { UpiCheckout } from "@/components/payments/upi-checkout";
@@ -47,9 +47,8 @@ export function screenFor(a: AppointmentDetail, checkout: Checkout | null | unde
 }
 
 export function AppointmentStatus({ reference }: { reference: string }) {
-  const { slug, data, bookPath } = useBooking();
+  const { slug, data, bookPath, base } = useBooking();
   const params = useSearchParams();
-  const pathname = usePathname();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const token = useMemo(() => {
@@ -95,7 +94,7 @@ export function AppointmentStatus({ reference }: { reference: string }) {
           sent to the mobile number or email you booked with to see all your bookings, or contact {data.organization.name}{data.organization.phone ? ` on ${data.organization.phone}` : ""}.
         </p>
         <div className="flex flex-col justify-center gap-2 sm:flex-row">
-          {!user ? <Button asChild data-testid="status-sign-in"><Link href={`/login?next=${encodeURIComponent(pathname)}`}>Sign in with code</Link></Button> : null}
+          {!user ? <Button asChild data-testid="status-sign-in"><Link href={`${base}/bookings`}>Sign in with code</Link></Button> : null}
           <Button asChild variant={user ? "default" : "outline"}><Link href={bookPath}>Book an appointment</Link></Button>
         </div>
       </div>
@@ -154,7 +153,8 @@ export function AppointmentStatus({ reference }: { reference: string }) {
       {closed ? <Button asChild size="lg" className="w-full"><Link href={bookPath}>Book again</Link></Button> : null}
 
       <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-sm text-muted-foreground">
-        <AlertTriangle className="size-4" aria-hidden /> Keep this page&apos;s link to manage your booking.
+        <CalendarCheck2 className="size-4" aria-hidden /> Find this booking any time in{" "}
+        <Link href={`${base}/bookings`} className="font-medium text-foreground underline underline-offset-4">My bookings</Link>, with a code sent to your mobile.
         {data.organization.phone ? <a href={`tel:${data.organization.phone}`} className="inline-flex items-center gap-1 font-medium text-foreground hover:underline"><Phone className="size-3.5" aria-hidden />{data.organization.phone}</a> : null}
       </p>
 
