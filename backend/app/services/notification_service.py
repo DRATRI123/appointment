@@ -203,15 +203,18 @@ class NotificationService:
 
     # ------------------------------------------------------------ emit
     def emit(self, code: str, *, appointment: Appointment | None = None, payment: Payment | None = None, refund: PaymentRefund | None = None,
-             extra: dict[str, str] | None = None, scheduled_for: datetime | None = None, dedupe: str | None = None) -> list[Notification]:
+             extra: dict[str, str] | None = None, scheduled_for: datetime | None = None, dedupe: str | None = None,
+             customer: Customer | None = None, staff: list[User] | None = None, link: str | None = None) -> list[Notification]:
+        """``customer`` / ``staff`` / ``link``: for messages not about a booking or payment (e.g. help desk requests)."""
         try:
             with self.db.begin_nested():
-                return self._emit(code, appointment=appointment, payment=payment, refund=refund, extra=extra or {}, scheduled_for=scheduled_for, dedupe=dedupe)
+                return self._emit(code, appointment=appointment, payment=payment, refund=refund, extra=extra or {}, scheduled_for=scheduled_for, dedupe=dedupe,
+                                  customer=customer, staff=staff, link=link)
         except Exception:  # noqa: BLE001 - notifications must never break the business transaction
             log.exception("notification.emit_failed", event=code, organization=self.org.id)
             return []
 
-    def _emit(self, code: str, *, appointment, payment, refund, extra, scheduled_for, dedupe) -> list[Notification]:
+    def _emit(self, code: str, *, appointment, payment, refund, extra, scheduled_for, dedupe, customer=None, staff=None, link=None) -> list[Notification]:
         event = EVENTS[code]
         cfg = self.settings()
         enabled, channels = self.event_channels(event, cfg)
@@ -232,14 +235,14 @@ class NotificationService:
         values.update({k: v for k, v in extra.items() if v is not None})
         created: list[Notification] = []
         if event.audience == CUSTOMER:
-            cust = self.db.get(Customer, appointment.customer_id) if appointment is not None else (self.db.get(Customer, payment.customer_id) if payment is not None and payment.customer_id else None)
+            cust = customer or (self.db.get(Customer, appointment.customer_id) if appointment is not None else (self.db.get(Customer, payment.customer_id) if payment is not None and payment.customer_id else None))
             if cust is None:
                 return []
             for ch in channels:
                 if ch == "in_app":
                     if cust.user_id and self.channel_enabled("in_app", cfg):
                         _add(created, self._create(event, ch, values, user_id=cust.user_id, customer=cust, address=None, appointment=appointment, payment=payment,
-                                                    scheduled_for=scheduled_for, dedupe=dedupe, link="/customer/appointments"))
+                                                    scheduled_for=scheduled_for, dedupe=dedupe, link=link or "/customer/appointments"))
                     continue
                 if not self.channel_enabled(ch, cfg):
                     continue
@@ -248,8 +251,8 @@ class NotificationService:
                     _add(created, self._create(event, ch, values, user_id=None, customer=cust, address=address, appointment=appointment, payment=payment,
                                                 scheduled_for=scheduled_for, dedupe=dedupe))
         else:
-            link = {"staff.payment_to_verify": "/admin/payments/verification", "staff.refund_requested": "/admin/refunds"}.get(code, "/admin/appointments")
-            for user in self.staff_recipients(code, appointment):
+            link = link or {"staff.payment_to_verify": "/admin/payments/verification", "staff.refund_requested": "/admin/refunds"}.get(code, "/admin/appointments")
+            for user in (staff if staff is not None else self.staff_recipients(code, appointment)):
                 for ch in channels:
                     if ch == "in_app":
                         if self.channel_enabled("in_app", cfg):

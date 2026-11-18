@@ -23,6 +23,7 @@ from app.models.booking_form import BookingForm, BookingFormField, BookingFormRe
 from app.models.branch import Branch, BranchSetting
 from app.models.coupon import Coupon
 from app.models.customer import Customer, CustomerDependent, CustomerDocument, CustomerNote
+from app.models.helpdesk import SupportMessage, SupportTicket
 from app.models.idempotency import IdempotencyKey
 from app.models.integration import (
     ApiAccessLog,
@@ -68,6 +69,7 @@ from app.models.website import Website, WebsiteVersion
 
 __all__ = [
     "IdempotencyKey",
+    "SupportTicket", "SupportMessage",
     "Base",
     "Organization", "OrganizationSetting", "OrganizationDomain", "OrganizationSubscription",
     "Branch", "BranchSetting",

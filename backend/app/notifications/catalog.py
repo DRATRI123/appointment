@@ -108,6 +108,20 @@ EVENTS: dict[str, Event] = {e.code: e for e in [
              "Hello {{customer_name}},\n\n{{organization_name}} has sent you a refund of {{refund_amount}} by {{refund_method}}. Transfer reference: {{refund_reference}}.\n\n"
              "It can take a little while to appear in your account. Contact us at {{organization_phone}} if it has not arrived within 3 working days.\n\n{{organization_name}}",
              "{{organization_name}}: refund of {{refund_amount}} sent by {{refund_method}}, ref {{refund_reference}}.")),
+    Event("helpdesk.reply", "Help desk reply", CUSTOMER,
+          "Tells the patient the clinic answered their request. The answer itself is shown only after signing in (it can carry health details).",
+          ["customer_name", "organization_name", "organization_phone", "ticket_number", "ticket_subject", "help_link"], ("email", "in_app"),
+          _t("Reply to your request #{{ticket_number}}: {{ticket_subject}}",
+             "Hello {{customer_name}},\n\n{{organization_name}} replied to your request #{{ticket_number}} ({{ticket_subject}}).\n\n"
+             "Read the reply and answer here (sign in with a one-time code):\n{{help_link}}\n\n{{organization_name}} {{organization_phone}}",
+             "{{organization_name}} replied to your request #{{ticket_number}}. Read it: {{help_link}}",
+             "Reply to your request #{{ticket_number}}: {{ticket_subject}}")),
+    Event("staff.helpdesk_message", "Patient request or reply (staff)", STAFF,
+          "Tells the help desk about a new patient request, or a patient's answer (to the assigned person, otherwise to everyone who answers requests).",
+          ["customer_name", "organization_name", "ticket_number", "ticket_subject", "category"], ("in_app",),
+          _t("Patient request #{{ticket_number}}: {{ticket_subject}}",
+             "{{customer_name}} wrote about request #{{ticket_number}} ({{category}}): {{ticket_subject}}",
+             "{{customer_name}}: request #{{ticket_number}}, {{ticket_subject}}")),
     Event("staff.new_booking", "New booking (staff)", STAFF, "Tells staff about new bookings. Goes to members who can manage appointments.",
           [*COMMON, "customer_mobile", "status"], ("in_app", "email"),
           _t("New booking: {{customer_name}}, {{appointment_date}} {{appointment_time}}",
@@ -136,6 +150,7 @@ STAFF_RECIPIENT_PERMISSION = {
     "staff.payment_to_verify": "payments:verify",
     "staff.appointment_cancelled": "appointments:write",
     "staff.refund_requested": "refunds:approve",
+    "staff.helpdesk_message": "helpdesk:write",
 }
 
 SAMPLE_VALUES = {
@@ -145,5 +160,6 @@ SAMPLE_VALUES = {
     "amount_due": "₹500.00", "amount_paid": "₹500.00", "payment_deadline": "Mon, 16 Nov 2026, 9:45 am", "payment_link": "https://example.com/sunrise/appointments/APT-SUNRISE-01JD8Q",
     "utr": "412345678901", "reason": "No credit found for this UTR", "payment_reference": "PAY-SUNRISE-01JD8R", "refund_amount": "₹500.00",
     "refund_reference": "412399998888", "refund_method": "UPI", "refund_note": "A refund of ₹500.00 has been requested; you will be told when it is sent.",
+    "ticket_number": "12", "ticket_subject": "Question about my payment", "help_link": "https://example.com/sunrise/bookings?tab=help", "category": "payment",
     "previous_date": "Sun, 15 Nov 2026", "previous_time": "4:00 pm", "hours_before": "24", "meeting_link": "", "status": "pending payment",
 }

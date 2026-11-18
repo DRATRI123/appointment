@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarCheck2, CalendarClock, CalendarDays, CheckCircle2, Clock, Hourglass, Link2Off, MapPin, Phone, RotateCcw, Stethoscope, UserRound, XCircle } from "lucide-react";
+import { CalendarCheck2, ChevronRight, LifeBuoy, CalendarClock, CalendarDays, CheckCircle2, Clock, Hourglass, Link2Off, MapPin, Phone, RotateCcw, Stethoscope, UserRound, XCircle } from "lucide-react";
 import { bookingSessionKey, publicBooking } from "@/services/booking";
 import { publicPayments } from "@/services/payments";
 import { UpiCheckout } from "@/components/payments/upi-checkout";
@@ -151,6 +151,13 @@ export function AppointmentStatus({ reference }: { reference: string }) {
       ) : null}
 
       {closed ? <Button asChild size="lg" className="w-full"><Link href={bookPath}>Book again</Link></Button> : null}
+
+      <Link href={`${base}/bookings?tab=help&booking=${encodeURIComponent(a.reference)}`} data-testid="booking-help"
+        className="flex items-center justify-between gap-3 rounded-3xl border bg-card p-4 text-sm shadow-sm transition-shadow hover:shadow-md">
+        <span className="flex items-center gap-3"><LifeBuoy className="size-5 text-primary" aria-hidden /><span><span className="block font-medium">Need help with this booking?</span>
+          <span className="text-muted-foreground">Ask the clinic about payment, changes or anything else.</span></span></span>
+        <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
+      </Link>
 
       <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-sm text-muted-foreground">
         <CalendarCheck2 className="size-4" aria-hidden /> Find this booking any time in{" "}

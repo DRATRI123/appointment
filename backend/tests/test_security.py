@@ -89,6 +89,17 @@ def _seed_everything(client, db, c: Clinic) -> dict[str, str]:
     ids["delivery_id"] = db.scalars(select(WebhookEvent.public_id).order_by(WebhookEvent.id.desc())).first()
     ids["membership_id"] = c.post(f"/organizations/{c.org['id']}/members", {"identifier": "9711111113", "full_name": "Sweep Staff",
                                                                           "role_code": "receptionist"})["id"]
+    # Help desk: the patient of the first booking asks a question with a photo.
+    from tests.helpers import otp_login
+
+    patient = bearer(otp_login(client, "9711111111"))
+    client.cookies.clear()
+    r = client.post(f"/api/v1/customer/organizations/{c.org['id']}/requests", headers=patient,
+                    data={"category": "payment", "subject": "Sweep", "body": "Sweep"}, files={"file": ("p.png", PNG, "image/png")})
+    assert r.status_code == 201, r.text
+    ids["org_id"] = c.org["id"]
+    ids["ticket_id"] = r.json()["id"]
+    ids["message_id"] = r.json()["messages"][0]["id"]
     assert all(ids.values()), {k: v for k, v in ids.items() if not v}
     return ids
 

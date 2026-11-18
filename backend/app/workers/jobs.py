@@ -91,6 +91,15 @@ def purge_idempotency_keys() -> int:
         return purge_expired(db)
 
 
+@job("close_stale_requests")
+def close_stale_requests() -> int:
+    """Help desk: resolve requests left waiting for the patient, close resolved ones (each clinic's auto_close_days)."""
+    from app.services.helpdesk_service import close_stale
+
+    with session_scope() as db:
+        return close_stale(db)
+
+
 @job("deliver_webhooks")
 def deliver_webhooks() -> dict:
     from app.services.developer_service import deliver_due, purge_old_deliveries
@@ -138,4 +147,5 @@ def storage_switch() -> dict | None:
 
 
 PERIODIC_JOBS = ("expire_holds", "expire_unpaid_appointments", "purge_expired_documents", "pull_calendar_busy", "sync_external",
-                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks", "purge_idempotency_keys", "sync_integrations", "storage_switch")
+                 "schedule_reminders", "dispatch_notifications", "deliver_webhooks", "purge_idempotency_keys", "sync_integrations", "storage_switch",
+                 "close_stale_requests")

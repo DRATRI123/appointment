@@ -200,7 +200,8 @@ class CustomerManagementService:
 
         Removed: name, contact details, date of birth, address and other profile fields; family members; clinical notes;
         uploaded documents (files deleted from storage); booking-form answers; free-text appointment notes; the copies
-        of their details held in notification records; and the link to their login account.
+        of their details held in notification records; help desk requests and their attachments; and the link to their
+        login account.
         Kept, because the clinic must be able to account for money: appointments (date, service, amount, status),
         payments, UTRs, verification logs and refunds - now attached to an anonymous record. The audit log records
         that an erasure happened, by whom and why, but not the erased values."""
@@ -236,6 +237,16 @@ class CustomerManagementService:
             appt.customer_notes = None
         for n in self.db.scalars(select(Notification).where(Notification.recipient_customer_id == customer.id)).all():
             n.recipient_address, n.subject, n.body, n.payload = None, None, "[erased]", None
+        # Help desk requests: the conversation and its attachments go (they are about the person, not about money).
+        from app.models import SupportMessage, SupportTicket
+
+        for ticket in self.db.scalars(select(SupportTicket).where(SupportTicket.customer_id == customer.id)).all():
+            for msg in self.db.scalars(select(SupportMessage).where(SupportMessage.ticket_id == ticket.id, SupportMessage.attachment_key.is_not(None))).all():
+                try:
+                    storage.delete(msg.attachment_key)
+                except Exception as exc:  # pragma: no cover - the row goes even if the file is already gone
+                    log.warning("customer.erase_file_failed", message_id=msg.public_id, error=type(exc).__name__)
+            self.db.delete(ticket)  # its messages follow (ON DELETE CASCADE)
 
         customer.full_name = "Erased customer"
         customer.mobile = customer.email = customer.date_of_birth = customer.gender = customer.address = None

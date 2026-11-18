@@ -8,6 +8,7 @@ from app.api.v1 import (
     customers,
     developers,
     health,
+    helpdesk,
     integration_hub,
     integrations,
     meta,
@@ -46,6 +47,9 @@ api_router.include_router(appointments.customer_router)
 api_router.include_router(customers.router)
 api_router.include_router(customers.self_router)
 api_router.include_router(customers.files_router)
+api_router.include_router(helpdesk.patient_router)
+api_router.include_router(helpdesk.public_router)
+api_router.include_router(helpdesk.router)
 api_router.include_router(booking_forms.router)
 api_router.include_router(payments.upi_router)
 api_router.include_router(payments.payments_router)

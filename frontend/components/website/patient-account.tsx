@@ -4,15 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarCheck2, ChevronRight, CreditCard, LogOut, MapPin, Plus, Trash2, UserRound, Users, Video } from "lucide-react";
+import { CalendarCheck2, ChevronRight, CreditCard, LifeBuoy, LogOut, MapPin, Plus, Trash2, UserRound, Users, Video } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { errorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { customerBooking } from "@/services/booking";
 import { customerSelfService } from "@/services/customers";
+import { patientHelp } from "@/services/helpdesk";
 import { paymentsService } from "@/services/payments";
 import type { Appointment } from "@/types/booking";
 import type { Payment } from "@/types/payment";
+import { PatientHelp } from "./patient-help";
 import { useSite } from "./site-context";
 
 const OPEN = new Set(["pending_payment", "pending_verification", "confirmed", "checked_in", "in_progress"]);
@@ -65,15 +68,21 @@ function paymentLine(a: Appointment): { text: string; due: boolean } | null {
   return { text: `${money(a.total_amount_paise, a.currency)} · pay at the clinic`, due: false };
 }
 
-type Tab = "bookings" | "payments" | "family" | "preferences";
+type Tab = "bookings" | "payments" | "help" | "family" | "preferences";
+const TABS: Tab[] = ["bookings", "payments", "help", "family", "preferences"];
 
 /** The patient's own area on the clinic's website: bookings, payments, family members and message preferences. */
 export function PatientAccount() {
   const { base, slug, org } = useSite();
   const { user, logout } = useAuth();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>("bookings");
+  // ?tab=help&request=… (link in the "the clinic replied" message) or ?tab=help&booking=APT-… (from a booking page).
+  const params = useSearchParams();
+  const wanted = params.get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(wanted && TABS.includes(wanted) ? wanted : "bookings");
   const orgId = org.organization.id;
+  const help = useQuery({ queryKey: ["help-requests", orgId], queryFn: () => patientHelp.list(orgId) });
+  const unreadHelp = (help.data ?? []).filter((t) => t.unread).length;
   const appts = useQuery({ queryKey: ["my-appointments"], queryFn: customerBooking.mine });
   const mine = (appts.data ?? []).filter((a) => a.organization_slug === slug);
   const [now] = useState(() => Date.now());
@@ -85,6 +94,7 @@ export function PatientAccount() {
   const tabs: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "bookings", label: "Bookings", icon: <CalendarCheck2 className="size-4" aria-hidden />, badge: toPay || undefined },
     { id: "payments", label: "Payments", icon: <CreditCard className="size-4" aria-hidden /> },
+    { id: "help", label: "Help", icon: <LifeBuoy className="size-4" aria-hidden />, badge: unreadHelp || undefined },
     { id: "family", label: "Family", icon: <Users className="size-4" aria-hidden /> },
     { id: "preferences", label: "Messages", icon: <UserRound className="size-4" aria-hidden /> },
   ];
@@ -103,13 +113,16 @@ export function PatientAccount() {
         </button>
       </div>
 
-      <div role="tablist" aria-label="My account" className="grid grid-cols-4 gap-1 rounded-3xl bg-white p-1 shadow-sm ring-1 ring-black/5 sm:rounded-full">
+      <div role="tablist" aria-label="My account" className="grid grid-cols-5 gap-1 rounded-3xl bg-white p-1 shadow-sm ring-1 ring-black/5 sm:rounded-full">
         {tabs.map((t) => (
-          <button key={t.id} role="tab" type="button" aria-selected={tab === t.id} aria-controls={`panel-${t.id}`} id={`tab-${t.id}`} onClick={() => setTab(t.id)}
+          <button key={t.id} role="tab" type="button" aria-selected={tab === t.id} aria-controls={`panel-${t.id}`} id={`tab-${t.id}`} onClick={() => {
+              setTab(t.id);
+              try { window.history.replaceState(window.history.state, "", `${window.location.pathname}${t.id === "bookings" ? "" : `?tab=${t.id}`}`); } catch { /* ignore */ }
+            }}
             className={cn("relative flex flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-2 text-xs font-semibold transition sm:flex-row sm:gap-1.5 sm:rounded-full sm:py-2.5 sm:text-sm",
               tab === t.id ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm" : "text-gray-600 hover:bg-black/5")}>
             {t.icon}<span>{t.label}</span>
-            {t.badge ? <span className="absolute -right-0.5 -top-0.5 grid size-5 place-items-center rounded-full bg-amber-500 text-[11px] text-white" aria-label={`${t.badge} to pay`}>{t.badge}</span> : null}
+            {t.badge ? <span className="absolute -right-0.5 -top-0.5 grid size-5 place-items-center rounded-full bg-amber-500 text-[11px] text-white" aria-label={t.id === "help" ? `${t.badge} new replies` : `${t.badge} to pay`}>{t.badge}</span> : null}
           </button>
         ))}
       </div>
@@ -135,7 +148,9 @@ export function PatientAccount() {
               ) : null}
             </div>
           )
-        ) : tab === "payments" ? <Payments slug={slug} base={base} /> : tab === "family" ? <Family orgId={orgId} /> : <Preferences orgId={orgId} />}
+        ) : tab === "payments" ? <Payments slug={slug} base={base} /> : tab === "help" ? (
+          <PatientHelp orgId={orgId} slug={slug} appointments={[...upcoming, ...past]} initialRequest={params.get("request")} initialBooking={params.get("booking")} />
+        ) : tab === "family" ? <Family orgId={orgId} /> : <Preferences orgId={orgId} />}
       </div>
     </div>
   );

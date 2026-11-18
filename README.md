@@ -23,6 +23,7 @@ appointment is confirmed.
 * [API overview](docs/api.md)
 * [Developer guide: API keys, webhooks, code samples, go-live checklist](docs/developer-guide.md) (also in the admin under **Developer docs**)
 * [Public booking API with example requests](docs/public-booking-api.md)
+* [Patient help desk (questions, answers, internal notes, response targets)](docs/helpdesk.md)
 * [Integration Hub: Google, Gmail, WhatsApp, SMS, n8n, CRM, accounting, S3, analytics](docs/integrations/integration-architecture.md) · [Shopify and website integration (no app needed)](docs/integrations/shopify-integration.md) · [Admin panel inside your clinic app](docs/integrations/embedded-admin.md)
 * [Clinic website, website builder, OTP & verification, analytics](docs/website-and-verification.md)
 * [Local development on Windows](docs/local-development.md) and [with Docker](docs/docker-development.md)

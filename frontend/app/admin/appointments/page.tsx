@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, Plus } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -22,11 +23,13 @@ import { STATUS_LABEL } from "@/types/booking";
 
 export default function AppointmentsPage() {
   const { hasPermission, currentOrganizationId: orgId } = useAuth();
-  const [from, setFrom] = useState(toISODate(new Date()));
-  const [to, setTo] = useState(toISODate(addDays(new Date(), 7)));
+  // ?search=APT-… (from a help desk request): that booking, whenever it is.
+  const linked = useSearchParams().get("search");
+  const [from, setFrom] = useState(toISODate(linked ? addDays(new Date(), -365) : new Date()));
+  const [to, setTo] = useState(toISODate(addDays(new Date(), linked ? 365 : 7)));
   const [status, setStatus] = useState("");
   const [professionalId, setProfessionalId] = useState("");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(linked ?? "");
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const professionals = useQuery({ queryKey: ["professionals"], queryFn: () => catalogService.professionals(), enabled: !!orgId });

@@ -17,7 +17,7 @@ from app.services.audit_service import RequestMeta, record_audit
 from app.services.privacy_service import DEFAULTS as PRIVACY_DEFAULTS
 from app.services.privacy_service import validate_privacy_values
 
-SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed", "otp", "security", "panel"}
+SETTING_NAMESPACES = {"branding", "booking", "cancellation", "payment", "notification", "legal", "general", "privacy", "embed", "otp", "security", "panel", "helpdesk"}
 
 # One-time-code policy for public bookings: (default, min, max) for numbers.
 OTP_LIMITS = {
@@ -77,6 +77,21 @@ def validate_embed_origins(value: Any) -> list[str]:
             out.append(origin)
     return out
 
+HELPDESK_LIMITS = {"first_response_hours": (1, 168), "auto_close_days": (1, 60)}
+
+
+def validate_helpdesk_values(values: dict[str, Any]) -> dict[str, Any]:
+    unknown = set(values) - {"enabled", *HELPDESK_LIMITS}
+    if unknown:
+        raise ValidationFailed(f"Unknown setting: {', '.join(sorted(unknown))}", code="invalid_setting")
+    if "enabled" in values and not isinstance(values["enabled"], bool):
+        raise ValidationFailed("enabled must be true or false.", code="invalid_setting")
+    for key, (low, high) in HELPDESK_LIMITS.items():
+        if key in values and (isinstance(values[key], bool) or not isinstance(values[key], int) or not low <= values[key] <= high):
+            raise ValidationFailed(f"{key} must be a whole number from {low} to {high}.", code="invalid_setting")
+    return dict(values)
+
+
 PANEL_MAX_ORIGINS = 5
 
 
@@ -111,6 +126,8 @@ DEFAULT_SETTINGS: dict[str, dict[str, Any]] = {
     # The clinic's own app (e.g. its clinic software) may show this admin panel inside an iframe: only these exact web
     # addresses, and only people with the "panel:use" permission can sign in there (docs/integrations/embedded-admin.md).
     "panel": {"enabled": False, "allowed_origins": []},
+    # Patients' questions to the clinic (app/services/helpdesk_service.py).
+    "helpdesk": {"enabled": True, "first_response_hours": 24, "auto_close_days": 7},
     # Owners and administrators must use two-step sign-in (authenticator app) to manage the clinic.
     "security": {"require_admin_mfa": False},
     # One-time codes before an online booking is accepted (see app/services/otp).
@@ -308,6 +325,8 @@ class OrganizationService:
             values = {**values, "allowed_origins": validate_embed_origins(values["allowed_origins"])}
         if namespace == "panel":
             values = validate_panel_values(values)
+        if namespace == "helpdesk":
+            values = validate_helpdesk_values(values)
         if namespace == "security":
             unknown = set(values) - {"require_admin_mfa"}
             if unknown or not isinstance(values.get("require_admin_mfa", False), bool):

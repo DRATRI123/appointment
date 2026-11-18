@@ -58,6 +58,9 @@ PERMISSIONS: dict[str, str] = {
     # notifications
     "notifications:read": "View notification logs",
     "notifications:write": "Edit templates and reminder rules",
+    # patient help desk
+    "helpdesk:read": "See patients' help desk requests",
+    "helpdesk:write": "Answer, assign and close patients' help desk requests",
     # integrations
     "integrations:read": "View integrations",
     "integrations:write": "Connect and configure integrations",
@@ -89,6 +92,7 @@ ROLE_PERMISSIONS: dict[SystemRole, tuple[str, ...]] = {
         "customers:write", "appointments:write", "appointments:checkin", "payments:record",
         "payments:verify", "upi_accounts:read", "refunds:request", "staff:read",
         "booking_forms:read", "notifications:read", "reports:export", "customers:reveal",
+        "helpdesk:read", "helpdesk:write",
     ),
     SystemRole.DOCTOR: (
         "organization:read", "branches:read", "professionals:read", "services:read",
@@ -103,13 +107,13 @@ ROLE_PERMISSIONS: dict[SystemRole, tuple[str, ...]] = {
         "organization:read", "branches:read", "professionals:read", "services:read",
         "customers:read", "customers:write", "customers:reveal", "appointments:read", "appointments:write",
         "appointments:checkin", "payments:read", "payments:record", "upi_accounts:read",
-        "booking_forms:read", "refunds:request",
+        "booking_forms:read", "refunds:request", "helpdesk:read", "helpdesk:write",
     ),
     SystemRole.ACCOUNTANT: (
         "organization:read", "branches:read", "appointments:read", "payments:read",
         "payments:verify", "payments:record", "upi_accounts:read", "upi_accounts:write",
         "refunds:approve", "refunds:request", "reconciliation:manage", "reports:read",
-        "reports:export", "audit_logs:read",
+        "reports:export", "audit_logs:read", "helpdesk:read", "helpdesk:write",
     ),
     SystemRole.STAFF: (
         "organization:read", "branches:read", "professionals:read", "services:read",

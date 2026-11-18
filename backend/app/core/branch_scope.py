@@ -10,6 +10,7 @@ of another branch simply does not exist for them (404), the same as a record of 
   booking forms, waitlist entries, branch prices. Branch staff see the ones for all branches and their own.
 * Patients have no branch. Branch staff see patients with a visit at their branch, or none yet (just registered at
   the desk); patients who only visit other branches are hidden. Their notes and documents follow the patient.
+* Help desk requests follow the booking they are about; general questions (no booking) are visible to all branches.
 * Owners and administrators (no branch on their membership) and the platform super admin are not filtered.
 
 This is in addition to, not instead of, the organization isolation every query already has.
@@ -51,6 +52,7 @@ def _only_this_branch(state: ORMExecuteState) -> None:
         Schedule,
         ScheduleException,
         ServicePricing,
+        SupportTicket,
         UPIAccount,
         Waitlist,
     )
@@ -78,6 +80,8 @@ def _only_this_branch(state: ORMExecuteState) -> None:
         with_loader_criteria(UPIAccount, own_or_all(UPIAccount), include_aliases=True),
         with_loader_criteria(BookingForm, own_or_all(BookingForm), include_aliases=True),
         with_loader_criteria(Waitlist, own_or_all(Waitlist), include_aliases=True),
+        # Help desk: requests about this branch's bookings, and general ones (no branch).
+        with_loader_criteria(SupportTicket, own_or_all(SupportTicket), include_aliases=True),
         with_loader_criteria(Payment, lambda c: or_(c.branch_id == bid, c.appointment_id.in_(in_branch)), include_aliases=True),
         with_loader_criteria(PaymentRefund, lambda c: c.payment_id.in_(
             select(pays.id).where(or_(pays.branch_id == bid, pays.appointment_id.in_(in_branch)))), include_aliases=True),

@@ -84,6 +84,8 @@ The browser only hides menu items; it is never what protects data.
 | `reconciliation:manage` | Import bank statements and match transactions | ✓ | ✓ | ✓ |  |  |  |  | ✓ |  |  |
 | `notifications:read` | View notification logs | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |
 | `notifications:write` | Edit templates and reminder rules | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |
+| `helpdesk:read` | See patients' help desk requests | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |  |  |
+| `helpdesk:write` | Answer, assign and close patients' help desk requests | ✓ | ✓ | ✓ | ✓ |  |  | ✓ | ✓ |  |  |
 | `integrations:read` | View integrations | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |
 | `integrations:write` | Connect and configure integrations | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |
 | `api_keys:manage` | Create and revoke API keys and webhooks | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |
