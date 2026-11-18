@@ -1,5 +1,9 @@
 """Start, resend and verify one-time codes for public bookings, and check the resulting token at booking time.
 
+The same clinic channels (its own SMS / WhatsApp / email account, the platform's as fallback), limits, expiry and audit
+also sign patients in on the clinic's website (``start_sign_in`` / ``verify_sign_in``, purpose ``patient_login``): they
+see their bookings without a password and without keeping each booking's link.
+
 A challenge belongs to one clinic, one browser session (``session_key``) and one held slot. Verifying it returns a
 signed token naming the channel and the exact destination (mobile number or email). The booking API accepts the
 booking only if the customer's own contact details for that channel are the verified destination, so nobody can
@@ -35,6 +39,8 @@ TOKEN_TYPE = "booking_contact"  # nosec B105
 TOKEN_MINUTES = 30
 SENDERS = {"sms": sms_provider.send_otp, "whatsapp": whatsapp_provider.send_otp, "email": email_provider.send_otp}
 CHANNEL_NAMES = {"sms": "SMS", "whatsapp": "WhatsApp", "email": "email"}
+BOOKING = "booking"
+SIGN_IN = "patient_login"
 
 
 class OTPDeliveryFailed(AppError):
@@ -177,7 +183,8 @@ class OTPService:
         ch = self._challenge(challenge_id, session_key)
         if ch.verified_at is not None or ch.invalidated_at is not None:
             raise ValidationFailed("This request is finished. Start again to get a new code.", code="otp_closed")
-        self._hold(ch.hold_public_id or "", session_key)
+        if ch.purpose == BOOKING:
+            self._hold(ch.hold_public_id or "", session_key)
         if ch.resend_count >= self.policy["max_resends"]:
             raise RateLimited("You have asked for the maximum number of codes. Try another method or try again later.", code="otp_resend_limit")
         otp_rate_limiter.check_cooldown(ch, self.policy)
@@ -186,13 +193,15 @@ class OTPService:
         ch.resend_count += 1
         code = self._issue(ch)
         self._deliver(ch, code)
-        record_audit(self.db, action="booking.otp_resent", actor=None, organization_id=self.org.id, entity_type="otp_challenge", entity_id=ch.public_id,
+        record_audit(self.db, action="booking.otp_resent" if ch.purpose == BOOKING else "patient.sign_in_code_resent", actor=None, organization_id=self.org.id, entity_type="otp_challenge", entity_id=ch.public_id,
                      after={"channel": ch.channel, "resend": ch.resend_count}, meta=self.meta)
         self.db.flush()
         return self.describe(ch)
 
     def verify(self, challenge_id: str, code: str, session_key: str) -> dict[str, Any]:
         ch = self._challenge(challenge_id, session_key)
+        if ch.purpose != BOOKING:
+            raise NotFoundError("This verification request was not found. Please request a new code.", code="otp_not_found")
         hold = self._hold(ch.hold_public_id or "", session_key)
         otp_verifier.verify(ch, code.strip())
         self.db.flush()
@@ -204,6 +213,37 @@ class OTPService:
         record_audit(self.db, action="booking.otp_verified", actor=None, organization_id=self.org.id, entity_type="otp_challenge", entity_id=ch.public_id,
                      after={"channel": ch.channel}, meta=self.meta)
         return {"verification_token": token, "channel": ch.channel, "destination": ch.destination, "expires_in_seconds": TOKEN_MINUTES * 60}
+
+    # ------------------------------------------------------------------------------------- patient sign-in
+    def start_sign_in(self, *, channel: str, destination: str, session_key: str) -> dict[str, Any]:
+        """A code to the patient's mobile number (SMS / WhatsApp) or email, through the clinic's channels."""
+        if channel not in available_channels(self.db, self.org, self.policy):
+            raise ValidationFailed(f"Sign-in by {CHANNEL_NAMES.get(channel, channel)} is not available. Please choose another method.", code="otp_channel_unavailable")
+        number = normalize_destination(channel, destination)
+        otp_rate_limiter.check_new_challenge(self.db, organization_id=self.org.id, destination=number, ip=self.meta.ip_address, session_key=session_key, policy=self.policy)
+        now = utcnow()
+        self.db.execute(update(OtpChallenge).where(
+            OtpChallenge.organization_id == self.org.id, OtpChallenge.session_key == session_key, OtpChallenge.purpose == SIGN_IN,
+            OtpChallenge.verified_at.is_(None), OtpChallenge.invalidated_at.is_(None)).values(invalidated_at=now))
+        ch = OtpChallenge(organization_id=self.org.id, purpose=SIGN_IN, channel=channel, destination=number, code_hash="-", max_attempts=self.policy["max_attempts"],
+                          expires_at=now, session_key=session_key, ip_address=self.meta.ip_address)
+        self.db.add(ch)
+        self.db.flush()
+        code = self._issue(ch)
+        self._deliver(ch, code)
+        record_audit(self.db, action="patient.sign_in_code_sent", actor=None, organization_id=self.org.id, entity_type="otp_challenge", entity_id=ch.public_id,
+                     after={"channel": channel, "destination": mask(channel, number), "provider": ch.provider}, meta=self.meta)
+        self.db.flush()
+        return self.describe(ch)
+
+    def verify_sign_in(self, challenge_id: str, code: str, session_key: str) -> OtpChallenge:
+        """The code is right: returns the challenge (its channel and the exact verified destination)."""
+        ch = self._challenge(challenge_id, session_key)
+        if ch.purpose != SIGN_IN:
+            raise NotFoundError("This verification request was not found. Please request a new code.", code="otp_not_found")
+        otp_verifier.verify(ch, code.strip())
+        self.db.flush()
+        return ch
 
 
 def check_booking_token(db: Session, org: Organization, *, hold_id: str | None, session_key: str | None, customer_mobile: str | None,

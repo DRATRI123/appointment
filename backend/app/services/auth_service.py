@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -197,6 +198,38 @@ class AuthService:
         user.locked_until = None
         self._activate_invited_memberships(user)
         return user
+
+    def sign_in_patient(self, org, channel: str, destination: str) -> AuthResult:
+        """A patient proved this mobile number / email with a code from the clinic's website: sign them in (creating
+        the account on first use, named after the clinic's patient record). Their bookings then show up."""
+        from app.models import Customer
+
+        now = utcnow()
+        user = self.users.get_by_email(destination) if channel == "email" else self.users.get_by_mobile(destination)
+        is_new = user is None
+        if user is None:
+            field = Customer.email if channel == "email" else Customer.mobile
+            name = self.db.scalar(select(Customer.full_name).where(Customer.organization_id == org.id, field == destination, Customer.deleted_at.is_(None))
+                                  .order_by(Customer.id)) or "Patient"
+            user = User(full_name=name.strip() or "Patient", status=UserStatus.ACTIVE)
+            if channel == "email":
+                user.email = destination
+            else:
+                user.mobile = destination
+            self.users.add(user)
+        else:
+            self._ensure_user_active(user)
+            if user.status == UserStatus.PENDING_VERIFICATION:
+                user.status = UserStatus.ACTIVE
+        if channel == "email":
+            user.email_verified_at = user.email_verified_at or now
+        else:
+            user.mobile_verified_at = user.mobile_verified_at or now
+        self.db.flush()
+        self._activate_invited_memberships(user)
+        record_audit(self.db, action="auth.login_patient_code", actor=user, organization_id=org.id, entity_type="user", entity_id=user.public_id,
+                     after={"channel": channel}, meta=self.meta)
+        return self._issue_session(user, "Patient sign-in", is_new_user=is_new)
 
     def change_password(self, user: User, *, current_password: str | None, new_password: str) -> None:
         if user.password_hash and not verify_password(current_password or "", user.password_hash):

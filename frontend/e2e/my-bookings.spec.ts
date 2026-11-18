@@ -45,24 +45,39 @@ test("a guest booking shows up after signing in with a code to the same mobile, 
   await expect(p.getByTestId("bookings-sign-in")).toBeVisible();
   await expect(p.getByTestId("device-booking")).toHaveCount(0);
   await expect(p.locator("input[type=password]")).toHaveCount(0); // patients never see a password field
-  // Sign in right here: mobile number → one-time code. No password, no staff sign-in page.
-  await p.getByTestId("patient-sign-in-start").click();
-  await p.getByLabel("Mobile number or email").fill(mobile);
-  await p.getByRole("button", { name: "Send code" }).click();
-  await p.getByLabel("One-time code").fill((await p.getByTestId("patient-debug-code").locator("strong").textContent())!.trim()); // development and test only
-  await p.getByRole("button", { name: "Verify" }).click();
+  await expect(p.getByText(/your code is/i)).toHaveCount(0); // no code on the screen
+  // Sign in right here: mobile number → one-time code (sent through the clinic's channels; never shown on the page).
+  await p.getByLabel("Mobile number").fill(mobile);
+  await p.getByTestId("patient-send-code").click();
+  await expect(p.getByTestId("patient-code-form")).toContainText(/\+91•+/); // masked number
+  const r = await p.request.get(`/api/v1/dev/outbox/latest-code?destination=${encodeURIComponent(`+91${mobile}`)}`); // development and test only
+  expect(r.status()).toBe(200);
+  await p.getByTestId("patient-code").fill((await r.json()).code); // all digits: checks by itself
 
-  // Back on the clinic's "My bookings", with the booking, its status, and its page opening without the link.
+  // The patient's area on the clinic's page: the booking with status and payment, payments, family, messages.
+  const account = p.getByTestId("patient-account");
+  await expect(account).toBeVisible();
   expect(p.url()).toMatch(new RegExp(`/${slug}/bookings$`)); // stayed on the clinic's page
-  const item = p.getByTestId("device-booking").filter({ hasText: "Dr. E2E" });
+  await expect(p.getByTestId("patient-name")).toHaveText("Asha Patel");
+  const item = account.getByTestId("device-booking").filter({ hasText: "Dr. E2E" });
   await expect(item).toHaveCount(1);
-  await expect(p.getByTestId("bookings-sign-in")).toHaveCount(0);
-  await item.click();
+  await expect(item.getByTestId("booking-status-chip")).toHaveText("Confirmed");
+  await expect(item.getByTestId("booking-payment")).toContainText("pay at the clinic");
+  await p.getByRole("tab", { name: "Family" }).click();
+  await p.getByLabel("Name").fill("Riya Patel");
+  await p.getByRole("button", { name: "Add" }).click();
+  await expect(p.getByTestId("family-member")).toContainText("Riya Patel");
+  await p.getByRole("tab", { name: "Messages" }).click();
+  await p.getByTestId("pref-marketing").click();
+  await expect(p.getByTestId("pref-marketing")).toHaveAttribute("aria-checked", "true");
+  await p.getByRole("tab", { name: "Bookings" }).click();
+  await item.getByTestId("booking-open").click();
   await p.waitForURL(new RegExp(`/appointments/${reference}$`));
   await expect(p.getByTestId("booking-status")).toBeVisible();
-  // Also in the patient's own area, across clinics.
-  await p.goto("/customer/appointments");
-  await expect(p.getByTestId("my-appointment")).toHaveCount(1);
+  // Sign out: back to the sign-in box.
+  await p.goto(`/${slug}/bookings`);
+  await p.getByTestId("patient-sign-out").click();
+  await expect(p.getByTestId("bookings-sign-in")).toBeVisible();
   await otherPhone.close();
 });
 

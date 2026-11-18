@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CalendarCheck2, CalendarOff, ChevronRight, MapPin, Phone } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { PatientAccount } from "./patient-account";
 import { PatientSignIn } from "./patient-sign-in";
 import { BottomNav } from "./bottom-nav";
 import { useDeviceBookings, type DeviceBooking } from "@/lib/device-bookings";
@@ -117,8 +118,8 @@ function BranchPage({ branchId }: { branchId: string }) {
  * with a one-time code) every booking made with their mobile number or email. */
 export function DeviceBookingsPage() {
   const { slug, base } = useSite();
-  const { user, isLoading: authLoading, logout } = useAuth();
-  const q = useDeviceBookings(slug, !!user);
+  const { user, isLoading: authLoading } = useAuth();
+  const q = useDeviceBookings(slug);
   const tzFmt = (iso: string, tz: string) => new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: tz }).format(new Date(iso));
   const Item = ({ b }: { b: DeviceBooking }) => {
     const a = b.appointment;
@@ -140,36 +141,37 @@ export function DeviceBookingsPage() {
   };
   return (
     <div className="bg-[color-mix(in_oklab,var(--primary)_5%,var(--site-bg))] pb-24 md:pb-0">
-      <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:py-12">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:py-12">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight [font-family:var(--site-heading-font)] sm:text-3xl">My bookings</h1>
           <p className="mt-1 text-sm text-gray-600">
-            {user ? <>All your bookings here, with their status and payment. Signed in as <span className="font-medium">{user.mobile ?? user.email}</span>.</>
-              : "Appointments booked on this device."}
+            {user ? "Your appointments, payments and family members at this clinic." : "Appointments booked on this device. Sign in to see all of them."}
           </p>
         </div>
-        {!authLoading && !user ? (
-          <PatientSignIn next={`${base}/bookings`} />
-        ) : null}
-        {q.isLoading ? <div className="space-y-3">{[0, 1].map((i) => <div key={i} className="h-24 animate-pulse rounded-3xl bg-white" />)}</div> : (
+        {authLoading ? <div className="h-40 animate-pulse rounded-3xl bg-white" /> : user ? <PatientAccount /> : (
           <>
-            <section aria-labelledby="upcoming-h" className="space-y-3">
-              <h2 id="upcoming-h" className="text-lg font-semibold">Upcoming</h2>
-              {q.data?.upcoming.length ? <ul className="space-y-3">{q.data.upcoming.map((b) => <Item key={b.appointment.reference} b={b} />)}</ul>
-                : <div className="rounded-3xl border border-dashed bg-white p-8 text-center"><p className="text-sm text-gray-600">{user ? "No upcoming appointments." : "No upcoming appointments on this device."}</p>
-                  <Link href={`${base}/book`} className="mt-4 inline-flex h-11 items-center rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)]">Book an appointment</Link></div>}
-            </section>
-            {q.data?.past.length ? (
-              <section aria-labelledby="past-h" className="space-y-3">
-                <h2 id="past-h" className="text-lg font-semibold">Past and cancelled</h2>
-                <ul className="space-y-3">{q.data.past.map((b) => <Item key={b.appointment.reference} b={b} />)}</ul>
-              </section>
-            ) : null}
-            {user ? (
-              <p className="text-center text-sm text-gray-600">
-                Not you? <button type="button" className="font-medium text-gray-700 underline underline-offset-4" onClick={() => void logout()}>Sign out</button>
-              </p>
-            ) : null}
+            <PatientSignIn slug={slug} next={`${base}/bookings`} />
+            {q.isLoading ? <div className="space-y-3">{[0, 1].map((i) => <div key={i} className="h-24 animate-pulse rounded-3xl bg-white" />)}</div> : q.data?.upcoming.length || q.data?.past.length ? (
+              <>
+                {q.data?.upcoming.length ? (
+                  <section aria-labelledby="upcoming-h" className="space-y-3">
+                    <h2 id="upcoming-h" className="text-lg font-semibold">On this device</h2>
+                    <ul className="space-y-3">{q.data.upcoming.map((b) => <Item key={b.appointment.reference} b={b} />)}</ul>
+                  </section>
+                ) : null}
+                {q.data?.past.length ? (
+                  <section aria-labelledby="past-h" className="space-y-3">
+                    <h2 id="past-h" className="text-lg font-semibold">Past and cancelled</h2>
+                    <ul className="space-y-3">{q.data.past.map((b) => <Item key={b.appointment.reference} b={b} />)}</ul>
+                  </section>
+                ) : null}
+              </>
+            ) : (
+              <div className="rounded-3xl border border-dashed bg-white p-8 text-center">
+                <p className="text-sm text-gray-600">New here? Book in a minute; no account needed.</p>
+                <Link href={`${base}/book`} className="mt-4 inline-flex h-11 items-center rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-[var(--primary-foreground)]">Book an appointment</Link>
+              </div>
+            )}
           </>
         )}
       </div>

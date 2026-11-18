@@ -33,8 +33,25 @@ GET  /appointments/{ref}       status page (reference + access token)
 ## Patients see their bookings without keeping the link
 
 A patient who booked without signing in can see every booking, its status and payment later, on any device:
-**My bookings** on the clinic's website → **Sign in with code** → a one-time code to the mobile number or email they
-booked with. Their account then shows every booking made with that number or email, at every clinic
+**My bookings** on the clinic's website (header on computers, bottom bar and menu on phones) → mobile number or email
+→ one-time code. No password and no account to create.
+
+Sign-in endpoints (public, rate-limited; the code is never returned by the API, in any environment):
+
+| Endpoint | Does |
+|---|---|
+| `GET /public/organizations/{slug}/patient-sign-in` | The clinic's channels that can deliver now (SMS / WhatsApp / email) and the code length |
+| `POST .../patient-sign-in/start` `{channel, destination, session_key}` | Sends the code through the clinic's own account (platform's as fallback), with the clinic's OTP limits |
+| `POST .../patient-sign-in/{challenge_id}/resend` | A new code (cooldown and resend limit apply) |
+| `POST .../patient-sign-in/{challenge_id}/verify` `{code, session_key}` | Right code: signs the patient in (cookies), creating the account on first use, named after the clinic's patient record |
+
+Sign-in codes and booking-verification codes are separate (one cannot be used for the other). Audit log:
+`patient.sign_in_code_sent`, `auth.login_patient_code`, `customer.linked_to_account`. Clinic staff accounts with
+two-step sign-in are sent to the staff sign-in page.
+
+The patient area on the clinic's site has **Bookings** (status, what is paid or still to pay, Pay now, details to
+change or cancel, join link for online visits), **Payments**, **Family** (people they book for) and **Messages** (SMS /
+WhatsApp / email reminders, offers). Their account then shows every booking made with that number or email, at every clinic
 (`GET /customer/appointments`, `/customer/payments`, `/customer/refunds`), and each booking page opens without the
 private link (`GET /public/organizations/{slug}/appointments/{reference}` with the session instead of `access_token`).
 

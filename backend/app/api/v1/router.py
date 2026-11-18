@@ -14,6 +14,7 @@ from app.api.v1 import (
     notifications,
     organizations,
     panel,
+    patient_auth,
     payments,
     platform,
     platform_database,
@@ -71,6 +72,7 @@ if get_settings().app_env in ("development", "test"):
     from app.api.v1 import dev
 
     api_router.include_router(dev.router)
+api_router.include_router(patient_auth.router)
 api_router.include_router(public.router)
 api_router.include_router(platform_database.router)
 api_router.include_router(platform_integrations.router)  # before /platform/{...} routes

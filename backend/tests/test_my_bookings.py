@@ -92,3 +92,55 @@ def test_a_second_record_at_the_same_clinic_stays_visible(client, db):
     db.commit()
     assert set(owned_customer_ids(db, user)) == {linked.id, extra.id}
     assert client.get("/api/v1/customer/appointments", headers=_me(client, tokens)).status_code == 200
+
+
+# ---------------------------------------------------------------- sign-in on the clinic's website (production path)
+def _latest_code(client, destination: str) -> str:
+    r = client.get("/api/v1/dev/outbox/latest-code", params={"destination": destination})
+    assert r.status_code == 200, r.text
+    return r.json()["code"]
+
+
+def test_patient_signs_in_on_the_clinic_site_through_the_clinics_own_channels(client, db):
+    clinic = Clinic(client, payment_mode="pay_at_clinic")
+    booked = _guest_booking(clinic, 9, {"full_name": "Leela Shah", "mobile": "9811100006"})
+    client.cookies.clear()
+    base = f"/api/v1/public/organizations/{clinic.org['slug']}/patient-sign-in"
+    opts = client.get(base).json()
+    assert "sms" in opts["channels"] and opts["code_length"] >= 4
+
+    r = client.post(f"{base}/start", json={"channel": "sms", "destination": "98111 00006", "session_key": "patient-sess-1"})
+    assert r.status_code == 200, r.text
+    ch = r.json()
+    assert "code" not in ch and "debug_code" not in ch and ch["destination"].startswith("+91") and "•" in ch["destination"]  # never the code
+    code = _latest_code(client, "+919811100006")
+    # Wrong code, wrong browser session: refused.
+    assert client.post(f"{base}/{ch['challenge_id']}/verify", json={"code": "000000" if code != "000000" else "111111", "session_key": "patient-sess-1"}).json()["code"] == "otp_incorrect"
+    assert client.post(f"{base}/{ch['challenge_id']}/verify", json={"code": code, "session_key": "someone-else"}).status_code == 404
+    # A booking-verification endpoint does not accept a sign-in code (and the other way round).
+    assert client.post(f"/api/v1/public/organizations/{clinic.org['slug']}/verification/{ch['challenge_id']}/verify",
+                       json={"code": code, "session_key": "patient-sess-1"}).status_code == 404
+
+    r = client.post(f"{base}/{ch['challenge_id']}/verify", json={"code": code, "session_key": "patient-sess-1"})
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["full_name"] == "Leela Shah" and r.json()["is_new_user"] is True  # named after the clinic's record
+    assert client.cookies.get("access_token")  # signed in with the usual cookies
+    mine = client.get("/api/v1/customer/appointments").json()
+    assert [a["reference"] for a in mine] == [booked["reference"]]
+    assert client.post(f"{base}/{ch['challenge_id']}/verify", json={"code": code, "session_key": "patient-sess-1"}).json()["code"] == "otp_used"
+    assert db.scalar(select(AuditLog).where(AuditLog.action == "auth.login_patient_code")) is not None
+
+
+def test_patient_sign_in_by_email_and_unavailable_channels(client):
+    clinic = Clinic(client, payment_mode="pay_at_clinic")
+    booked = _guest_booking(clinic, 9, {"full_name": "Om", "mobile": "9811100007", "email": "om@example.com"})
+    client.cookies.clear()
+    base = f"/api/v1/public/organizations/{clinic.org['slug']}/patient-sign-in"
+    r = client.put(f"/api/v1/organizations/{clinic.org['id']}/settings/otp", json={"values": {"channels": ["sms", "email"], "default_channel": "sms"}}, headers=clinic.h)
+    assert r.status_code == 200, r.text
+    client.cookies.clear()
+    assert client.post(f"{base}/start", json={"channel": "whatsapp", "destination": "9811100007", "session_key": "patient-sess-2"}).json()["code"] == "otp_channel_unavailable"
+    ch = client.post(f"{base}/start", json={"channel": "email", "destination": "OM@example.com", "session_key": "patient-sess-2"}).json()
+    code = _latest_code(client, "om@example.com")
+    assert client.post(f"{base}/{ch['challenge_id']}/verify", json={"code": code, "session_key": "patient-sess-2"}).status_code == 200
+    assert [a["reference"] for a in client.get("/api/v1/customer/appointments").json()] == [booked["reference"]]
